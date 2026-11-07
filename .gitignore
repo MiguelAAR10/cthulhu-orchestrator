@@ -1,0 +1,4 @@
+dist/
+/orq
+*.test
+.DS_Store

@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash|Agent|Task|Edit|Write|MultiEdit|NotebookEdit",
+       "hooks": [{"type": "command", "command": "$HOME/bin/orq gate", "timeout": 5, "onFailure": "block"}]}
+    ],
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "$HOME/bin/orq contexto", "timeout": 10}]}
+    ],
+    "PreCompact": [
+      {"hooks": [{"type": "command", "command": "$HOME/bin/orq relevo --auto", "timeout": 120}]}
+    ]
+  }
+}

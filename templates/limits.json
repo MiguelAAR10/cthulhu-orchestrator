@@ -1,0 +1,14 @@
+{
+  "min_free_gb": {"/": 60, "/mnt/c": 40},
+  "max_workers": 4,
+  "scratch": {
+    "paths": [
+      "~/.local/state/orq/scratch",
+      "~/worktrees"
+    ],
+    "quota_gb": 200,
+    "critical_free_gb": 30
+  },
+  "state_max_age_hours": 24,
+  "protected": ["tests/aceptacion/", "SLICES.md"]
+}

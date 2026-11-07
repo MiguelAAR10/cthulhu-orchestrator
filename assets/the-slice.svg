@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="300" viewBox="0 0 960 300" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <title>One slice: story, red test, workers, merge, verify, demo</title>
+  <rect width="960" height="300" fill="#f2f1ed"/>
+  <rect x="2" y="2" width="956" height="296" fill="none" stroke="#121212" stroke-width="4"/>
+  <text x="28" y="44" font-size="15" letter-spacing="2" fill="#6b6963">ONE SLICE · END TO END</text>
+  <g font-size="13" fill="#121212">
+    <!-- boxes -->
+    <g>
+      <rect x="28" y="80" width="130" height="120" fill="#f2f1ed" stroke="#121212" stroke-width="3"/>
+      <text x="40" y="106" font-size="22" font-weight="700">01</text><text x="40" y="132">STORY</text>
+      <text x="40" y="156" fill="#34332f">client</text><text x="40" y="174" fill="#34332f">approves</text>
+    </g>
+    <g>
+      <rect x="182" y="80" width="130" height="120" fill="#121212"/>
+      <text x="194" y="106" font-size="22" font-weight="700" fill="#f2f1ed">02</text><text x="194" y="132" fill="#f2f1ed">RED TEST</text>
+      <text x="194" y="156" fill="#c9c6be">sha256</text><text x="194" y="174" fill="#c9c6be">locked</text>
+    </g>
+    <g>
+      <rect x="336" y="80" width="130" height="120" fill="#f2f1ed" stroke="#121212" stroke-width="3"/>
+      <text x="348" y="106" font-size="22" font-weight="700">03</text><text x="348" y="132">WORKERS</text>
+      <text x="348" y="156" fill="#34332f">1–4 · own</text><text x="348" y="174" fill="#34332f">worktree</text>
+    </g>
+    <g>
+      <rect x="490" y="80" width="130" height="120" fill="#f2f1ed" stroke="#121212" stroke-width="3"/>
+      <text x="502" y="106" font-size="22" font-weight="700">04</text><text x="502" y="132">MERGE</text>
+      <text x="502" y="156" fill="#34332f">inside zone</text><text x="502" y="174" fill="#34332f">test untouched</text>
+    </g>
+    <g>
+      <rect x="644" y="80" width="130" height="120" fill="#f2f1ed" stroke="#121212" stroke-width="3"/>
+      <text x="656" y="106" font-size="22" font-weight="700">05</text><text x="656" y="132">VERIFY</text>
+      <text x="656" y="156" fill="#34332f">counted green</text><text x="656" y="174" fill="#34332f">+ receipt</text>
+    </g>
+    <g>
+      <rect x="798" y="80" width="134" height="120" fill="#121212"/>
+      <text x="810" y="106" font-size="22" font-weight="700" fill="#f2f1ed">06</text><text x="810" y="132" fill="#f2f1ed">DEMO</text>
+      <text x="810" y="156" fill="#c9c6be">human says</text><text x="810" y="174" fill="#c9c6be">ship it</text>
+    </g>
+    <!-- arrows -->
+    <g stroke="#121212" stroke-width="3" fill="none">
+      <path d="M158 140 H180"/><path d="M312 140 H334"/><path d="M466 140 H488"/><path d="M620 140 H642"/><path d="M774 140 H796"/>
+    </g>
+    <!-- gate rail -->
+    <rect x="182" y="226" width="592" height="34" fill="#121212"/>
+    <text x="198" y="248" fill="#f2f1ed" letter-spacing="1">orq gate — every agent action is checked against the rules</text>
+    <g stroke="#121212" stroke-width="2" stroke-dasharray="4 4"><path d="M247 200 V226"/><path d="M401 200 V226"/><path d="M555 200 V226"/><path d="M709 200 V226"/></g>
+  </g>
+</svg>
