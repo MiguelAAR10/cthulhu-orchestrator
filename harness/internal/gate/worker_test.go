@@ -95,3 +95,27 @@ func TestOrqPermitidoAWorker(t *testing.T) {
 		}
 	}
 }
+
+// Un worker no manda un cierre (ni historia ni plan), tampoco con flags de un guion o en inglés.
+func TestWorkerMsgSoloTiposDeWorker(t *testing.T) {
+	no := [][]string{
+		{"msg", "send", "-de", "worker-w1", "-tipo", "cierre", "x"},
+		{"msg", "send", "-tipo=cierre", "x"},
+		{"msg", "send", "--type", "closing", "x"},
+		{"msg", "send", "-type", "historia", "x"},
+		{"msg", "send", "--tipo", "plan", "x"},
+		{"mem", "add", "-source", "owner", "x"},
+		{"mem", "add", "-fuente=atena", "x"},
+		{"msg", "send", "-from", "orquestador", "--tipo", "estado", "x"},
+	}
+	for _, a := range no {
+		if OrqPermitidoAWorker(a) {
+			t.Errorf("permitió %v", a)
+		}
+	}
+	for _, a := range [][]string{{"msg", "send", "--tipo", "estado", "x"}, {"msg", "send", "-type", "question", "x"}, {"msg", "read"}} {
+		if !OrqPermitidoAWorker(a) {
+			t.Errorf("negó %v", a)
+		}
+	}
+}

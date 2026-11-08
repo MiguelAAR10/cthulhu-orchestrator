@@ -213,6 +213,19 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if fs.Parse(args[1:]) != nil {
 			return 1
 		}
+		// Un worker (por entorno, ancestro o worktree) solo pregunta, responde o informa estado,
+		// y firma como sí mismo: cierre, historia y plan son de los roles de sesión.
+		if r := p.rolStop(); strings.HasPrefix(r, "worker") {
+			if !slices.Contains([]string{"pregunta", "respuesta", "estado"}, *tipo) {
+				fmt.Fprintf(stderr, "orq msg: a worker (%s) only sends pregunta|respuesta|estado (question|answer|status), not %q\n", r, *tipo)
+				return 1
+			}
+			if id, ok := workerEfectivo(); ok && id != "worktree" && id != "shim" {
+				*de = id
+			} else {
+				*de = r
+			}
+		}
 		if *de == "" {
 			*de = os.Getenv("ORQ_ROL")
 		}

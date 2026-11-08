@@ -71,7 +71,7 @@ func OrqPermitidoAWorker(args []string) bool {
 		return false
 	}
 	for i := 1; i < len(args); i++ {
-		k, v, conIgual := strings.Cut(args[i], "=")
+		k, v, conIgual := strings.Cut(normalFlag(args[i]), "=")
 		if !conIgual && i+1 < len(args) {
 			v = args[i+1]
 		}
@@ -83,12 +83,24 @@ func OrqPermitidoAWorker(args []string) bool {
 		case "--de", "--from": // el remitente de un worker es su propio rol, nunca otro
 			return false
 		case "--tipo", "--type":
-			if cmd == "msg" && (v == "cierre" || v == "closing") {
+			if cmd == "msg" && !tiposDeWorker[v] {
 				return false
 			}
 		}
 	}
 	return true
+}
+
+// tiposDeWorker: lo único que un worker manda por el canal. cierre, historia y plan son del
+// Orquestador, de Atena o del Planificador.
+var tiposDeWorker = set("pregunta", "question", "respuesta", "answer", "estado", "status")
+
+// normalFlag: Go acepta -de igual que --de; la lista blanca compara en una sola forma.
+func normalFlag(a string) string {
+	if len(a) > 2 && a[0] == '-' && a[1] != '-' {
+		return "-" + a
+	}
+	return a
 }
 
 var (

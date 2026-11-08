@@ -110,3 +110,30 @@ func TestCwdEnWorktreeDeSliceEsWorker(t *testing.T) {
 		t.Fatalf("worktree de slice: %q %v", id, w)
 	}
 }
+
+// msg send: un worker (aquí, por estar en un worktree enlazado) no manda un cierre aunque pase
+// la lista blanca; sí manda estado, firmado como worker.
+func TestWorkerNoMandaCierre(t *testing.T) {
+	root := proyectoVis(t)
+	repo := t.TempDir()
+	exec.Command("git", "-C", repo, "init", "-q").Run()
+	exec.Command("git", "-C", repo, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-q", "--allow-empty", "-m", "x").Run()
+	wt := filepath.Join(t.TempDir(), "wt")
+	if out, err := exec.Command("git", "-C", repo, "worktree", "add", "-q", wt).CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	t.Chdir(wt)
+	t.Setenv("ORQ_ROL", "orquestador")
+	for _, tipo := range []string{"cierre", "closing", "historia", "plan"} {
+		if _, errs, code := run(t, "msg", "send", "-para", "orquestador", "-tipo", tipo, "-intento", "a1", "listo"); code == 0 {
+			t.Errorf("worker mandó %s: %s", tipo, errs)
+		}
+	}
+	if _, errs, code := run(t, "msg", "send", "--para", "orquestador", "--tipo", "estado", "voy"); code != 0 {
+		t.Fatal(errs)
+	}
+	raw, _ := os.ReadFile(filepath.Join(root, ".orq", "canal.jsonl"))
+	if strings.Contains(string(raw), "cierre") || !strings.Contains(string(raw), `"worker-worktree"`) {
+		t.Fatalf("canal: %s", raw)
+	}
+}
