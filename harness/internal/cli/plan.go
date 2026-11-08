@@ -74,9 +74,8 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		}
 		defer soltar()
 		var kept, reabiertas []string
-		if viejo, err := plan.Leer(p.planPath(e.NN)); err == nil {
-			kept, reabiertas = plan.Conservar(pl, viejo)
-		}
+		viejo, _ := plan.Leer(p.planPath(e.NN))
+		kept, reabiertas = plan.Conservar(pl, viejo)
 		err = plan.Validar(pl, e.Alcance)
 		if ferr := plan.ValidarFronts(pl, maxFronts()); ferr != nil {
 			err = errors.Join(err, ferr)

@@ -328,12 +328,17 @@ func Hecha(p *Plan, id string) (*Tarea, error) {
 // Conservar lleva al plan recargado el avance del guardado: una tarea en curso o hecha no vuelve
 // a pendiente. Excepción (H-05): una tarea hecha cuyo contrato cambió vuelve a pendiente, porque
 // lo hecho no prueba lo pedido ahora; se devuelve en reabiertas. Una en curso sigue en curso
-// (su worker recibe las rutas nuevas).
+// (su worker recibe las rutas nuevas). El avance que traiga el archivo cargado no cuenta: toda
+// tarea entra pendiente salvo el avance registrado en el plan guardado (viejo puede ser nil).
 func Conservar(nuevo, viejo *Plan) (kept, reabiertas []string) {
 	for i := range nuevo.Tareas {
 		t := &nuevo.Tareas[i]
+		t.Estado, t.Worker = "pendiente", ""
+		if viejo == nil {
+			continue
+		}
 		v := viejo.tarea(t.ID)
-		if v == nil || v.Estado == "pendiente" || t.Estado != "pendiente" {
+		if v == nil || v.Estado == "pendiente" {
 			continue
 		}
 		if v.Estado == "hecha" && v.HashContrato() != t.HashContrato() {

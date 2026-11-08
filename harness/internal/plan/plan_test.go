@@ -203,3 +203,20 @@ func TestReservasConcurrentesPersisten(t *testing.T) {
 		}
 	}
 }
+
+// Exploit 5: el archivo cargado no trae avance propio; solo vale el avance registrado.
+func TestConservarNoCreeEstadoDelArchivo(t *testing.T) {
+	nuevo := &Plan{Tareas: []Tarea{{ID: "t1", Estado: "hecha", Worker: "x"}, {ID: "t2", Estado: "en_curso"}}}
+	Conservar(nuevo, nil)
+	for _, x := range nuevo.Tareas {
+		if x.Estado != "pendiente" || x.Worker != "" {
+			t.Fatalf("sin plan previo: %+v", x)
+		}
+	}
+	viejo := &Plan{Tareas: []Tarea{{ID: "t1", Estado: "pendiente"}, {ID: "t2", Estado: "hecha", Worker: "w"}}}
+	nuevo = &Plan{Tareas: []Tarea{{ID: "t1", Estado: "hecha"}, {ID: "t2", Estado: "hecha"}}}
+	Conservar(nuevo, viejo)
+	if nuevo.Tareas[0].Estado != "pendiente" || nuevo.Tareas[1].Estado != "hecha" || nuevo.Tareas[1].Worker != "w" {
+		t.Fatalf("%+v", nuevo.Tareas)
+	}
+}
