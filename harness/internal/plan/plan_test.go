@@ -81,7 +81,7 @@ func TestDespacho(t *testing.T) {
 	}
 }
 
-func TestGuardarLeerYModelo(t *testing.T) {
+func TestGuardarLeer(t *testing.T) {
 	path := Path(t.TempDir(), "01")
 	p := ejemplo()
 	p.Tareas[0].Estado, p.Tareas[0].Dificultad = "", ""
@@ -91,14 +91,6 @@ func TestGuardarLeerYModelo(t *testing.T) {
 	q, err := Leer(path)
 	if err != nil || q.Tareas[0].Estado != "pendiente" || q.Tareas[0].Dificultad != "media" || filepath.Base(path) != "01.json" {
 		t.Fatalf("%+v %v", q, err)
-	}
-	for _, c := range []struct{ ag, dif, mod, esf string }{
-		{"claude", "baja", "haiku", "medium"}, {"claude", "", "sonnet", "medium"}, {"claude", "alta", "opus", "high"},
-		{"codex", "baja", "gpt-6-luna", "medium"}, {"codex", "alta", "gpt-6.1-sol", "high"},
-	} {
-		if m, e := Modelo(c.ag, c.dif); m != c.mod || e != c.esf {
-			t.Errorf("%s/%s: %s %s", c.ag, c.dif, m, e)
-		}
 	}
 }
 

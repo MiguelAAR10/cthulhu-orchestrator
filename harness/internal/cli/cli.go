@@ -57,9 +57,9 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq slice alcance RUTA[,RUTA] --aprobado "req…"   amplía el alcance con aprobación de Atena
   orq slice verificar            corre el examen intacto, cuenta pruebas y deja un recibo
                                  (2 reparaciones o sin progreso → BLOQUEADO)
-  orq slice lanzar [--slice NN] --agente claude|codex [--tarea ID|siguiente] [--dificultad baja|media|alta]
+  orq slice lanzar [--slice NN] [--agente A] [--tarea ID|siguiente] [--dificultad baja|media|alta]
                                  [--zona front --rutas web,ui] [--alcance "..."]
-                                 abre el worker en su panel de herdr con su contrato. Con --zona se suma
+                                 abre el worker en su panel (runner: herdr|tmux|process) con su contrato. Con --zona se suma
                                  al EQUIPO del slice (front, back, test… a la vez, hasta 4), cada uno en su
                                  rama y worktree; se hablan con orq msg send --para worker-<zona>-sNN
   orq slice juntar [--slice NN]  integra lo commiteado de cada worker del equipo; rechaza lo que salga
@@ -84,6 +84,11 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq slice estado               fase, intento, escritor, recibo y sobrantes
                                  Con varios slices abiertos (hasta 4), cada comando lleva --slice NN
   orq metricas [--desde AAAA-MM-DD] [--json]   aceptados, intentos, sin progreso, cuarentena
+  orq config agents [show | detect | set ROL AGENTE:MODELO]
+                                 agentes y modelos por rol desde datos (orq.agents.json sobre
+                                 ~/.config/orq/agents.json). detect busca claude, codex, cursor-agent,
+                                 gemini, opencode y aider en el PATH y escribe una propuesta; el Owner gana.
+                                 El adversario es de otra familia que el planificador (lo impone orq)
   orq version
 `
 
@@ -145,6 +150,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runMetricas(args[1:], stdout, stderr)
 	case "skill", "--skill":
 		return runSkill(args[1:], stdout, stderr)
+	case "config":
+		return runConfig(args[1:], stdout, stderr)
 	case "version":
 		fmt.Fprintln(stdout, Version)
 		return 0

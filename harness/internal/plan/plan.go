@@ -356,29 +356,7 @@ func (p *Plan) Pendientes() int {
 	return n
 }
 
-// Modelo traduce dificultad a modelo y esfuerzo por agente. Lo barato donde la tarea es fácil;
-// lo potente donde es core. Tabla heredada del protocolo de OdontoFlow (2026-10).
-func Modelo(agente, dificultad string) (modelo, esfuerzo string) {
-	if dificultad == "" {
-		dificultad = "media"
-	}
-	if agente == "codex" {
-		switch dificultad {
-		case "baja":
-			return "gpt-6-luna", "medium"
-		case "alta":
-			return "gpt-6.1-sol", "high"
-		}
-		return "gpt-6.1-sol", "medium"
-	}
-	switch dificultad {
-	case "baja":
-		return "haiku", "medium"
-	case "alta":
-		return "opus", "high"
-	}
-	return "sonnet", "medium"
-}
+// El modelo por dificultad ya no vive aquí: es dato de orq.agents.json (roles.worker.by_risk).
 
 // Desvio compara el plan con lo que de verdad cambió en el slice. Es lo que el Planificador
 // mira para mantener el plan mínimo y al día, sin reescribirlo entero.

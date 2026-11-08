@@ -224,6 +224,9 @@ type Sesion struct {
 	Desde  time.Time `json:"desde"`
 	Gen    int       `json:"gen"`
 	Tab    string    `json:"tab,omitempty"` // pestaña tipada de herdr donde vive
+	// Gate: "hook" si el agente pasa por `orq gate`; "post-only" si no tiene hooks (Codex…) y su
+	// protección es verificar/juntar/cerrar y los permisos del sistema sobre el examen.
+	Gate string `json:"gate,omitempty"`
 }
 
 func LoadSesiones(path string) (map[string]Sesion, error) {

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"orq/internal/canal"
-	"orq/internal/herdr"
 )
 
 // Distribución de herdr, siempre igual y con nombre:
@@ -25,7 +24,7 @@ func runSesion(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	uso := "uso: orq sesion ver | abrir planificador|astra [--kind claude|codex --modelo M --esfuerzo E] | cerrar NOMBRE"
+	uso := "uso: orq sesion ver | abrir planificador|astra [--kind AGENTE --modelo M --esfuerzo E] | cerrar NOMBRE"
 	if len(args) == 0 {
 		args = []string{"ver"}
 	}
@@ -55,8 +54,8 @@ func runSesion(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		if !herdr.Inside() {
-			fmt.Fprintln(stderr, "orq sesion: corre esto dentro de herdr (panel del Orquestador)")
+		if !rn().Inside() {
+			fmt.Fprintln(stderr, "orq sesion: corre esto dentro del runner (panel del Orquestador)")
 			return 1
 		}
 		rol := args[1]
@@ -100,8 +99,8 @@ func (p proyecto) cerrarSesiones(ses map[string]canal.Sesion, sirve func(string)
 		if k == "atena" || k == "orquestador" || !sirve(k) {
 			continue
 		}
-		if s.Pane != "" && herdr.Inside() {
-			if err := herdr.ClosePane(s.Pane); err != nil && !strings.Contains(err.Error(), "not found") {
+		if s.Pane != "" && rn().Inside() {
+			if err := rn().Close(s.Pane); err != nil && !strings.Contains(err.Error(), "not found") {
 				return cerradas, fmt.Errorf("%s: %v", k, err)
 			}
 		}

@@ -30,6 +30,18 @@ El gate (hook) y `orq slice lanzar` usan la misma función (`internal/admision`)
 
 Cada worktree que orq crea (slice, zona, integración) queda en `.orq/worktrees.jsonl` con `{path, repo, owner_role, slice, kind, created, ttl}` (ttl por defecto 72h). `orq gc [--dry-run]` revisa solo esas entradas y retira un worktree únicamente si: no es de un slice abierto, ningún proceso trabaja adentro, `git status --porcelain --untracked-files=all` sale vacío y no hubo actividad en el ttl (el puntero `.git` del worktree no cuenta como actividad). Si su HEAD no está en una rama local o remota, primero se guarda en `.orq/bundles/*.bundle` verificado. Los ignorados únicos (no dependencias regenerables) se respaldan en `.orq/backups/<nombre>.tgz` con manifiesto y sha256 comprobado releyendo; si alguno parece secreto (`.env`, claves, tokens) el worktree se conserva y se avisa. Luego `git worktree remove` **sin --force**; si git se niega, o falta el `.git`, va a `.orq/cuarentena.jsonl` con el motivo. Del registro solo se podan las rutas que ya no existen. `orq gc` corre solo al final de `orq slice cerrar` y dentro de `orq watch`, que además avisa (sin HALT) cuando el disco baja de `min_free_gb` y muestra cuántos worktrees hay.
 
+## Runner y agentes (datos, no código)
+
+- **Runner**: todo panel, arranque y mensaje pasa por `internal/runner` (`herdr`, `tmux` o `process`). Se elige con `ORQ_RUNNER`, luego `"runner"` en `orq.agents.json`; por defecto herdr si estás dentro o está instalado, si no `process` (proceso hijo headless con log; cada prompt es una corrida nueva).
+- **Agentes**: `orq.agents.json` del proyecto pisa a `~/.config/orq/agents.json`, que pisa a la propuesta de `orq config agents detect` (`.orq/agents.propuesta.json`), que pisa a los defaults integrados (claude y codex de siempre, más cursor-agent, gemini, opencode y aider). Plantilla: `templates/orq.agents.json`. `orq config agents set ROL AGENTE:MODELO` escribe en el archivo del proyecto: lo del Owner siempre gana.
+- **Reglas en código**: el adversario (Astra) es de otra familia que el planificador (se rechaza al cargar, al `set` y al abrir Astra); el verificador siempre arranca en sesión nueva; docs/escriba usa el modelo más barato configurado de su agente.
+
+## H-06: gate presente o post-only
+
+- **Agente con hooks (Claude)**: `orq slice abrir` deja `.claude/settings.json` con `orq gate` en el worktree del slice (lo copia del proyecto si falta) y `orq slice lanzar` lo exige en el worktree del worker: sin hook, no lanza. El registro de sesión queda con `gate: hook`.
+- **Agente sin hooks (Codex y otros)**: se registra `gate: post-only`. Su protección es verificar/juntar/cerrar (huella del examen, zonas) y el sistema operativo: al lanzar, los archivos del examen quedan de solo lectura (`chmod a-w`) en el worktree del worker; solo `orq slice cerrar` les devuelve la escritura. No impide un `chmod` deliberado del agente: eso lo atrapa la huella en Verificar.
+- **Escriba**: cada llamada tiene tiempo máximo (`ORQ_ESCRIBA_TIMEOUT` en segundos, 120 por defecto). Si falla o vence, el cierre, el relevo y la ficha siguen con un aviso.
+
 ## Qué pasa en cada caso
 
 - **Lanzar con disco bajo, HALT, medición vieja, scratch sobre cuota o demasiados worktrees** (gate o `orq slice lanzar`): bloqueado, con la causa y el comando para resolverla.

@@ -5,28 +5,52 @@ package escriba
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"time"
 
 	"orq/internal/memoria"
 )
+
+// ModeloDocs es el modelo más barato del rol docs (orq.agents.json); lo fija la CLI al arrancar.
+var ModeloDocs = "haiku"
 
 // Modelo se puede cambiar con ORQ_ESCRIBA_MODELO.
 func Modelo() string {
 	if m := os.Getenv("ORQ_ESCRIBA_MODELO"); m != "" {
 		return m
 	}
-	return "haiku"
+	return ModeloDocs
+}
+
+// Timeout por llamada: ORQ_ESCRIBA_TIMEOUT en segundos, 120 por defecto. El escriba nunca bloquea.
+func Timeout() time.Duration {
+	if s, err := strconv.ParseFloat(os.Getenv("ORQ_ESCRIBA_TIMEOUT"), 64); err == nil && s > 0 {
+		return time.Duration(s * float64(time.Second))
+	}
+	return 120 * time.Second
+}
+
+var comando = func(ctx context.Context) *exec.Cmd {
+	return exec.CommandContext(ctx, "claude", "-p", "--model", Modelo(), "--output-format", "text", "--no-session-persistence")
 }
 
 // Ask se reemplaza en pruebas.
 var Ask = func(prompt string) (string, error) {
-	cmd := exec.Command("claude", "-p", "--model", Modelo(), "--output-format", "text", "--no-session-persistence")
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout())
+	defer cancel()
+	cmd := comando(ctx)
 	cmd.Stdin = strings.NewReader(prompt)
+	cmd.WaitDelay = time.Second
 	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("escriba (%s): sin respuesta en el tiempo máximo (%s)", Modelo(), Timeout())
+	}
 	if err != nil {
 		return "", fmt.Errorf("escriba (%s): %v", Modelo(), err)
 	}
