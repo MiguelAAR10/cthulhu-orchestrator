@@ -79,6 +79,9 @@ func OrqPermitidoAWorker(args []string) bool {
 		}
 		switch k {
 		case "--fuente", "--source":
+			if cmd == "mem" && v != "worker" && v != "scout" {
+				return false // la misma regla que `orq mem add`: otra fuente suplanta a una sesión
+			}
 			if v == "owner" || v == "atena" {
 				return false
 			}

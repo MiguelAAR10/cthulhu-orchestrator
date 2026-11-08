@@ -194,3 +194,83 @@ func TestShimEjecutado(t *testing.T) {
 		t.Fatalf("%v %q", err, out)
 	}
 }
+
+// Sin --source, la fuente sale del rol efectivo; nunca owner ni atena.
+func TestMemAddFuentePorDefecto(t *testing.T) {
+	root := proyectoVis(t)
+	t.Setenv("ORQ_TOKEN", "")
+	ultima := func() memoria.Item {
+		items, _ := memoria.Load(filepath.Join(root, ".orq", "memoria.jsonl"))
+		if len(items) == 0 {
+			t.Fatal("sin items")
+		}
+		return items[len(items)-1]
+	}
+	for _, c := range []struct{ id, rol, fuente string }{
+		{"w1", "w1", "worker"},
+		{"w1", "", "worker"},
+		{"w1", "owner", "worker"},
+		{"w1", "atena", "worker"},
+		{"", "tester", "worker"},
+		{"", "scout", "scout"},
+		{"", "orquestador", "orquestador"},
+		{"", "orchestrator", "orquestador"},
+		{"", "planner", "planificador"},
+	} {
+		t.Setenv("ORQ_WORKER_ID", c.id)
+		t.Setenv("ORQ_ROL", c.rol)
+		if _, errs, code := run(t, "mem", "add", "--imp", "baja", "--cat", "riesgo", "nota "+c.id+c.rol); code != 0 {
+			t.Errorf("%+v: %s", c, errs)
+			continue
+		}
+		if it := ultima(); it.Fuente != c.fuente {
+			t.Errorf("%+v: fuente %q", c, it.Fuente)
+		}
+	}
+	t.Setenv("ORQ_WORKER_ID", "")
+	antes := len(mustItems(t, root))
+	for _, rol := range []string{"owner", "atena", ""} {
+		t.Setenv("ORQ_ROL", rol)
+		if _, errs, code := run(t, "mem", "add", "--imp", "baja", "--cat", "riesgo", "sin fuente"); code == 0 || !strings.Contains(errs, "--source") {
+			t.Errorf("rol %q: code=%d %s", rol, code, errs)
+		}
+	}
+	if len(mustItems(t, root)) != antes {
+		t.Fatal("grabó sin fuente")
+	}
+}
+
+func mustItems(t *testing.T, root string) []memoria.Item {
+	t.Helper()
+	items, err := memoria.Load(filepath.Join(root, ".orq", "memoria.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return items
+}
+
+// Las fuentes forjadas siguen rechazadas, también las que afirman hechos (filtro) o suplantan a una sesión.
+func TestMemAddFuenteForjada(t *testing.T) {
+	root := proyectoVis(t)
+	t.Setenv("ORQ_TOKEN", "")
+	t.Setenv("ORQ_WORKER_ID", "w1")
+	t.Setenv("ORQ_ROL", "w1")
+	for _, f := range []string{"owner", "atena", "filtro", "liaison", "orquestador", "orchestrator", "planner", "astra", "escriba", "OWNER", "nadie"} {
+		if _, _, code := run(t, "mem", "add", "--imp", "baja", "--cat", "riesgo", "--source", f, "x"); code == 0 {
+			t.Errorf("worker firmó como %s", f)
+		}
+	}
+	if len(mustItems(t, root)) != 0 {
+		t.Fatal("grabó algo")
+	}
+	for _, f := range []string{"worker", "scout"} {
+		if _, errs, code := run(t, "mem", "add", "--imp", "baja", "--cat", "riesgo", "--source", f, "x"); code != 0 {
+			t.Errorf("%s: %s", f, errs)
+		}
+	}
+	t.Setenv("ORQ_WORKER_ID", "")
+	t.Setenv("ORQ_ROL", "planner")
+	if _, _, code := run(t, "mem", "add", "--imp", "baja", "--cat", "riesgo", "--source", "filtro", "x"); code == 0 {
+		t.Error("planner sin token firmó como filtro")
+	}
+}
