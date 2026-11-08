@@ -39,6 +39,7 @@ func TestWorkerAllowlistDeOrq(t *testing.T) {
 		`orq token`,
 		`cat ~/.config/orq/owner.token`,
 		`grep . $XDG_CONFIG_HOME/orq/owner.token`,
+		`cat /proc/1234/environ`,
 		`orq plan load plan.json`,
 		`orq session open planner`,
 		`orq init`,

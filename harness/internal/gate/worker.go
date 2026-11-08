@@ -101,7 +101,7 @@ var (
 		regexp.MustCompile(`(^|[\s;&|(])alias\b`),
 		regexp.MustCompile(`\bgit\b[^;&|]*(\s-c\s*alias\.|\sconfig\b[^;&|]*\balias\.)`),
 		regexp.MustCompile(`(^|[\s;&|(])(ln|cp|install|mv|rsync|tee|cat\s*>)\b[^;&|]*(\borq\b|\$\()`),
-		regexp.MustCompile(`owner\.token|\.config/orq|XDG_CONFIG_HOME`),
+		regexp.MustCompile(`owner\.token|\.config/orq|XDG_CONFIG_HOME|/environ\b`),
 	}
 )
 

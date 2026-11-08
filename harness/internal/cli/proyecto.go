@@ -449,6 +449,9 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ya hay orquestador (%s, panel %s). Para una sesión fresca: orq relevo orquestador\n", o.Agente, o.Pane)
 		return 1
 	}
+	if !identidad.Valido() {
+		fmt.Fprintln(stderr, "warning: no valid ORQ_TOKEN in this pane; the Orchestrator will not get the Owner's token (export ORQ_TOKEN=\"$(orq token)\" before starting Atena)")
+	}
 	fname := "atena-" + orqdir.Slug(p.root)
 	if err := rn().Rename(rn().Current(), fname); err != nil {
 		fmt.Fprintf(stderr, "aviso: no se pudo nombrar este panel como %s (%v)\n", fname, err)
