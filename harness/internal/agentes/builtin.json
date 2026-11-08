@@ -48,6 +48,8 @@
     "adversary": {"agent": "codex",  "model": "gpt-6-astra", "effort": "high"},
     "verifier":  {"agent": "codex",  "model": "gpt-6.1-sol", "effort": "medium", "fresh": true},
     "docs":      {"agent": "claude", "model": "haiku",  "effort": "low"},
+    "tester":    {"agent": "codex",  "model": "gpt-6.1-sol", "effort": "medium", "fresh": true},
+    "repairer":  {"agent": "claude", "model": "sonnet", "effort": "medium"},
     "worker": {"by_risk": {
       "low":    {"agent": "claude", "model": "haiku",  "effort": "medium"},
       "medium": {"agent": "claude", "model": "sonnet", "effort": "medium"},

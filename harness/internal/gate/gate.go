@@ -36,6 +36,8 @@ type Env struct {
 	Bundle func(cwd string) []string
 	// Worktrees cuenta los worktrees que orq registró en el proyecto de cwd (max_worktrees).
 	Worktrees func(cwd string) (int, error)
+	// Rol es ORQ_ROL de la sesión: tester es de solo lectura; repairer no toca el examen fijado.
+	Rol string
 }
 
 type Decision struct {
@@ -67,6 +69,9 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 		return d
 	}
 	if d, ok := soloOrquestador(p, env); ok {
+		return d
+	}
+	if d, ok := soloLectura(p, env); ok {
 		return d
 	}
 	if target, ok := protectedTarget(p, l, env); ok {
@@ -108,7 +113,7 @@ func evaluateLaunch(p Payload, l limits.Limits, env Env) Decision {
 // tanto con Edit/Write como con redirecciones, comandos e intérpretes en Bash.
 // Las rutas se resuelven de verdad: contra el cwd, tras `cd`, y siguiendo enlaces simbólicos.
 func protectedTarget(p Payload, l limits.Limits, env Env) (string, bool) {
-	if !env.IsWorktree(p.Cwd) {
+	if !env.IsWorktree(p.Cwd) && env.Rol != "repairer" {
 		return "", false
 	}
 	pats := append([]string{}, l.Protected...)
@@ -309,7 +314,7 @@ func destructivo(p Payload) (Decision, bool) {
 }
 
 // soloOrqRe: transiciones que solo pide el Orquestador desde el checkout principal.
-var soloOrqRe = regexp.MustCompile(`(^|[\s;&|(])orq\s+(slice\s+(abrir|cerrar|reintentar|tomar|lanzar|juntar|examen|alcance)|plan\s+(cargar|hecha|debatido)|sesion\s+(abrir|cerrar)|aprender\s+promover|msg\s+send\s+.*--tipo\s+cierre|halt\s+--clear)`)
+var soloOrqRe = regexp.MustCompile(`(^|[\s;&|(])orq\s+(slice\s+(abrir|cerrar|reintentar|tomar|lanzar|juntar|examen|alcance)|plan\s+(cargar|hecha|debatido)|sesion\s+(abrir|cerrar)|aprender\s+promover|msg\s+send\s+.*--tipo\s+cierre|halt\s+--clear|qa\s+run)`)
 
 func soloOrquestador(p Payload, env Env) (Decision, bool) {
 	if p.ToolName != "Bash" {
@@ -319,8 +324,35 @@ func soloOrquestador(p Payload, env Env) (Decision, bool) {
 	if !soloOrqRe.MatchString(cmd) {
 		return Decision{}, false
 	}
-	if p.AgentID != "" || env.IsWorktree(p.Cwd) {
+	if p.AgentID != "" || env.IsWorktree(p.Cwd) || env.Rol == "tester" || env.Rol == "repairer" {
 		return deny("orq: un worker no abre, toma, reintenta ni cierra slices, ni cambia su examen o alcance. Pide verificación al Orquestador con tu resultado."), true
+	}
+	return Decision{}, false
+}
+
+// escrituraRe: comandos que cambian el repo o el disco aunque no nombren un destino con >.
+var escrituraRe = regexp.MustCompile(`(^|[\s;&|(])(git\s+(add|commit|checkout|switch|restore|reset|rm|mv|apply|clean|stash|merge|rebase|cherry-pick|revert|tag|branch|worktree|am|pull|fetch)` +
+	`|mkdir|rmdir|chown|patch|npm\s+(i|install|ci|uninstall)|pnpm\s+(i|install|add)|yarn\s+add|pip3?\s+install|go\s+(get|mod\s+tidy)|gofmt\s+-w|prettier\s+--write|eslint\s+--fix)\b`)
+
+// soloLectura: el tester (ORQ_ROL=tester) lee, corre pruebas y registra hallazgos con orq; nunca escribe.
+func soloLectura(p Payload, env Env) (Decision, bool) {
+	if env.Rol != "tester" {
+		return Decision{}, false
+	}
+	no := deny("orq: el tester es de solo lectura. Registra lo que encuentres con `orq qa finding add`; repara el repairer.")
+	switch p.ToolName {
+	case "Edit", "Write", "MultiEdit", "NotebookEdit":
+		return no, true
+	case "Bash":
+		cmd, _ := p.ToolInput["command"].(string)
+		for _, t := range shellWriteTargets(cmd, p.Cwd) {
+			if t != "/dev/null" {
+				return no, true
+			}
+		}
+		if escrituraRe.MatchString(cmd) || interpreteRe.MatchString(cmd) {
+			return no, true
+		}
 	}
 	return Decision{}, false
 }
