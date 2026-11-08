@@ -296,6 +296,9 @@ func Retirar(orqDir, repo, d string, now time.Time) (Resultado, error) {
 		return r, errors.New(motivo)
 	}
 	nombre := fmt.Sprintf("%s-%s", filepath.Base(d), now.UTC().Format("20060102T150405"))
+	for i, base := 2, nombre; existe(filepath.Join(orqDir, "backups", nombre+".tgz")) || existe(filepath.Join(orqDir, "bundles", nombre+".bundle")); i++ {
+		nombre = fmt.Sprintf("%s-%d", base, i) // la misma ruta, retirada otra vez en el mismo segundo
+	}
 	if cont, _ := git(d, "for-each-ref", "--contains", head, "--format=%(refname)", "refs/remotes", "refs/heads"); cont == "" {
 		if r.Bundle, err = empaquetar(orqDir, repo, d, head, nombre); err != nil {
 			return r, fmt.Errorf("HEAD sin ref duradera y el bundle falló: %w", err)

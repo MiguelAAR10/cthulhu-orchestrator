@@ -266,3 +266,18 @@ func TestProtegidoSeConserva(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+// Retirar dos veces la misma ruta en el mismo segundo no choca con el respaldo anterior.
+func TestRetirarMismoSegundoNoChoca(t *testing.T) {
+	f := nuevo(t)
+	now := time.Now()
+	for i := 0; i < 2; i++ {
+		p := f.crear(t, "s01-int", "--detach")
+		os.MkdirAll(filepath.Join(p, "evidence"), 0o755)
+		os.WriteFile(filepath.Join(p, "evidence", "x.log"), []byte("único "+string(rune('a'+i))), 0o644)
+		r, err := Retirar(f.orq, f.root, p, now)
+		if err != nil || r.Backup == "" || existe(p) {
+			t.Fatalf("vuelta %d: %+v %v", i, r, err)
+		}
+	}
+}
