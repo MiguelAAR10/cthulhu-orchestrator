@@ -29,6 +29,7 @@ type Overall struct {
 	Pct      *int `json:"pct"`
 	Measured int  `json:"measured"`
 	Total    int  `json:"total"`
+	Rejected int  `json:"rejected"`
 }
 
 type Stopper struct {
@@ -61,7 +62,9 @@ type Slice struct {
 	Who           []string  `json:"who"`
 	Rework        int       `json:"rework"`
 	BlockedReason string    `json:"blocked_reason"`
-	Fronts        []Front   `json:"fronts,omitempty"`
+	// RejectedReason: por qué se cerró sin aceptar. Un rechazado cuenta 0 en el total: nada llegó.
+	RejectedReason string  `json:"rejected_reason,omitempty"`
+	Fronts         []Front `json:"fronts,omitempty"`
 }
 
 // Front agrupa las tareas de un slice por sub-orquestador (dato del plan).
@@ -238,6 +241,7 @@ func Build(orqDir string, now time.Time) (Board, error) {
 
 	sumW, sumWP := 0, 0
 	var measuredPct []int
+	sinPeso := false // un slice medido sin tareas no cabe en el promedio ponderado
 	for _, s := range srcs {
 		id := "S-" + s.nn
 		c := Slice{ID: id, Title: s.title, Phase: s.phase, Missing: []string{}, Who: []string{}}
@@ -283,13 +287,20 @@ func Build(orqDir string, now time.Time) (Board, error) {
 			c.Pct = ip(int(math.Round(100 * float64(c.Tasks.WeightDone) / float64(c.Tasks.WeightTotal))))
 		}
 		done := s.phase == slice.Verificado || s.phase == slice.Integrando || s.accepted
+		rejected := s.closed && !s.accepted
 		if done {
 			c.Pct = ip(100)
+		}
+		if rejected {
+			c.Pct = ip(0)
+			c.RejectedReason = s.motivo
+			b.Overall.Rejected++
 		}
 		if c.Pct != nil {
 			measuredPct = append(measuredPct, *c.Pct)
 			sumW += c.Tasks.WeightTotal
 			sumWP += c.Tasks.WeightTotal * *c.Pct
+			sinPeso = sinPeso || c.Tasks.WeightTotal == 0
 		}
 		var blocking, soon string
 		for _, st := range open {
@@ -316,12 +327,17 @@ func Build(orqDir string, now time.Time) (Board, error) {
 			c.Color = "amber"
 		case done:
 			c.Color = "green"
+		case rejected:
+			c.Color = "grey"
 		case !hasPlan:
 			c.Color = "grey"
 		default:
 			c.Color = "blue"
 		}
 		c.Status = statusOf[c.Color]
+		if rejected {
+			c.Status = "REJECTED"
+		}
 		b.Slices = append(b.Slices, c)
 	}
 	slices.SortStableFunc(b.Slices, func(x, y Slice) int { return colorRank[x.Color] - colorRank[y.Color] })
@@ -329,7 +345,7 @@ func Build(orqDir string, now time.Time) (Board, error) {
 	b.Overall.Total, b.Overall.Measured = len(srcs), len(measuredPct)
 	switch {
 	case len(measuredPct) == 0:
-	case sumW > 0:
+	case sumW > 0 && !sinPeso:
 		b.Overall.Pct = ip(int(math.Round(float64(sumWP) / float64(sumW))))
 	default:
 		t := 0
@@ -372,11 +388,33 @@ func missing(m []string) string {
 	return strings.Join(m[:3], "; ") + fmt.Sprintf("; +%d more", len(m)-3)
 }
 
+func faltante(c Slice) string {
+	if c.Status == "REJECTED" {
+		return "not delivered"
+	}
+	return missing(c.Missing)
+}
+
+func motivoRechazo(c Slice) string {
+	if c.RejectedReason == "" {
+		return "no reason recorded"
+	}
+	return lang.Traducir(c.RejectedReason)
+}
+
 func who(w []string) string {
 	if len(w) == 0 {
 		return "nobody"
 	}
 	return strings.Join(w, ", ")
+}
+
+// rechazados: el total lo dice, para que un 50% no parezca trabajo a medias.
+func rechazados(o Overall) string {
+	if o.Rejected == 0 {
+		return ""
+	}
+	return fmt.Sprintf(", %d rejected and counted as 0%%", o.Rejected)
 }
 
 // Text es el tablero para la terminal; color solo si se pide (TTY y sin NO_COLOR).
@@ -401,20 +439,27 @@ func Text(b Board, color bool) string {
 	} else {
 		s.WriteString("STOPPERS · none, nothing waits on you\n")
 	}
-	fmt.Fprintf(&s, "\nOVERALL %s %s (%d of %d slices measured)\n", unknown(b.Overall.Pct, "%"), bar(b.Overall.Pct), b.Overall.Measured, b.Overall.Total)
+	fmt.Fprintf(&s, "\nOVERALL %s %s (%d of %d slices measured%s)\n", unknown(b.Overall.Pct, "%"), bar(b.Overall.Pct), b.Overall.Measured, b.Overall.Total, rechazados(b.Overall))
 	s.WriteString("\nSLICES\n")
 	if len(b.Slices) == 0 {
 		s.WriteString("  none yet\n")
 	}
 	for _, c := range b.Slices {
 		fmt.Fprintf(&s, "  %s %s · %s (%s)\n", paint(c.Color, "■ "+c.Status), c.ID, c.Title, lang.Traducir(c.Phase))
-		fmt.Fprintf(&s, "     %s done %s · %d of %d tasks · missing: %s\n", unknown(c.Pct, "%"), bar(c.Pct), c.Tasks.Done, c.Tasks.Total, missing(c.Missing))
+		if c.Status == "REJECTED" {
+			fmt.Fprintf(&s, "     not delivered · %d of %d tasks were done before rejection\n", c.Tasks.Done, c.Tasks.Total)
+		} else {
+			fmt.Fprintf(&s, "     %s done %s · %d of %d tasks · missing: %s\n", unknown(c.Pct, "%"), bar(c.Pct), c.Tasks.Done, c.Tasks.Total, missing(c.Missing))
+		}
 		for _, f := range c.Fronts {
 			fmt.Fprintf(&s, "     front %s: %s · %d of %d tasks\n", f.ID, f.Goal, f.Tasks.Done, f.Tasks.Total)
 		}
 		fmt.Fprintf(&s, "     who: %s · rework %d", who(c.Who), c.Rework)
 		if c.BlockedReason != "" {
 			fmt.Fprintf(&s, " · blocked: %s", lang.Traducir(c.BlockedReason))
+		}
+		if c.Status == "REJECTED" {
+			fmt.Fprintf(&s, " · rejected: %s", motivoRechazo(c))
 		}
 		s.WriteString("\n")
 	}
@@ -491,13 +536,16 @@ table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px
 		}
 		return fmt.Sprintf(`<div class="bar"><i style="width:%d%%"></i></div>%d%%`, *p, *p)
 	}
-	fmt.Fprintf(&s, "<h2>Overall</h2>%s <small>(%d of %d slices measured)</small>", pct(b.Overall.Pct), b.Overall.Measured, b.Overall.Total)
+	fmt.Fprintf(&s, "<h2>Overall</h2>%s <small>(%d of %d slices measured%s)</small>", pct(b.Overall.Pct), b.Overall.Measured, b.Overall.Total, rechazados(b.Overall))
 	s.WriteString("<h2>What we are building</h2>")
 	for _, c := range b.Slices {
 		fmt.Fprintf(&s, `<div class="card" style="border-color:%s"><span class="w" style="color:%s">%s</span> %s · <b>%s</b> <small>(%s)</small>%s<br>Missing: %s<br>Who: %s · rework %d`,
-			cssColor[c.Color], cssColor[c.Color], esc(c.Status), esc(c.ID), esc(c.Title), esc(lang.Traducir(c.Phase)), pct(c.Pct), esc(missing(c.Missing)), esc(who(c.Who)), c.Rework)
+			cssColor[c.Color], cssColor[c.Color], esc(c.Status), esc(c.ID), esc(c.Title), esc(lang.Traducir(c.Phase)), pct(c.Pct), esc(faltante(c)), esc(who(c.Who)), c.Rework)
 		if c.BlockedReason != "" {
 			fmt.Fprintf(&s, "<br>Blocked: %s", esc(c.BlockedReason))
+		}
+		if c.Status == "REJECTED" {
+			fmt.Fprintf(&s, "<br>Rejected: %s", esc(motivoRechazo(c)))
 		}
 		s.WriteString("</div>")
 	}
