@@ -878,3 +878,130 @@ func TestSumarExamenInvalidaRecibos(t *testing.T) {
 		t.Fatal("cerró sin volver a verificar")
 	}
 }
+
+// H-03: un solo evaluador. La base agrega config que omite una prueba; tras integrar, 1 corrida y
+// 1 omitida no es verde aunque el worker haya verificado 2/0.
+func TestIntegracionRechazaOmitidosQueTraeLaBase(t *testing.T) {
+	r := repoConReporte(t, `if cmp -s total.txt tests/datos.txt; then printf 'ok 1 total\n' > out.tap; if [ -f skip.cfg ]; then printf 'ok 2 iva # SKIP cfg\n' >> out.tap; else printf 'ok 2 iva\n' >> out.tap; fi; else printf 'not ok 1 total\n' > out.tap; exit 1; fi
+`)
+	e, _, err := abrirConReporte(r, Opciones{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if e, _, err = r.Verificar("01", t0); err != nil || e.Recibo.Ejecutados != 2 || e.Recibo.Omitidos != 0 {
+		t.Fatalf("%+v %v", e.Recibo, err)
+	}
+	commitEn(t, r.Root, "skip.cfg", "iva\n")
+	if _, _, _, err := r.Cerrar("01", true, "", t0); err == nil || !strings.Contains(err.Error(), "omitid") {
+		t.Fatalf("integró con una prueba omitida por la base: %v", err)
+	}
+}
+
+func TestEvaluarUnico(t *testing.T) {
+	e := &Estado{}
+	casos := []struct {
+		nombre string
+		e      *Estado
+		ok     bool
+		cnt    *Conteo
+		huella bool
+		paso   bool
+	}{
+		{"verde contado", e, true, &Conteo{Ejecutados: 2}, true, true},
+		{"exit malo", e, false, &Conteo{Ejecutados: 2}, true, false},
+		{"cero pruebas", e, true, &Conteo{}, true, false},
+		{"fallidas", e, true, &Conteo{Ejecutados: 2, Fallidos: 1}, true, false},
+		{"omitidas", e, true, &Conteo{Ejecutados: 1, Omitidos: 1}, true, false},
+		{"omitidas permitidas", &Estado{Omitir: true}, true, &Conteo{Ejecutados: 1, Omitidos: 1}, true, true},
+		{"huella rota", e, true, &Conteo{Ejecutados: 2}, false, false},
+		{"sin conteo, laxo", e, true, nil, true, true},
+		{"sin conteo, estricto", &Estado{Estricto: true}, true, nil, true, false},
+	}
+	for _, c := range casos {
+		if paso, _ := Evaluar(c.e, c.ok, c.cnt, c.huella); paso != c.paso {
+			t.Errorf("%s: paso=%v", c.nombre, paso)
+		}
+	}
+}
+
+func TestEstrictoExigeReporte(t *testing.T) {
+	r := repoDeJuguete(t)
+	if _, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Estricto: true}, t0); err == nil || !strings.Contains(err.Error(), "--reporte") {
+		t.Fatalf("estricto sin reporte abrió: %v", err)
+	}
+}
+
+// El SHA integrado tiene su propio recibo; cerrar exige ese recibo para el SHA que se entrega.
+func TestReciboDeIntegracion(t *testing.T) {
+	r := repoConReporte(t, tapReal)
+	e, _, err := abrirConReporte(r, Opciones{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if _, _, err := r.Verificar("01", t0); err != nil {
+		t.Fatal(err)
+	}
+	reg, _, _, err := r.Cerrar("01", true, "", t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var integ *Recibo
+	for _, rc := range leerJSONL[Recibo](r.recibosPath()) {
+		if rc.Tipo == "integracion" {
+			integ = &rc
+		}
+	}
+	if integ == nil || integ.Head != reg.SHA || integ.Ejecutados != 1 || integ.Resultado != "paso" || integ.TS.IsZero() {
+		t.Fatalf("sin recibo de integración para %s: %+v", reg.SHA, integ)
+	}
+}
+
+func TestCerrarSinReciboDeIntegracionNoPublica(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	e, _, _ = r.Verificar("01", t0)
+	e.Fase, e.Integrado = Cerrando, e.Recibo.Head // "integrado" sin recibo propio
+	r.save(e)
+	if _, _, _, err := r.Cerrar("01", true, "", t0); err == nil || !strings.Contains(err.Error(), "integración") {
+		t.Fatalf("publicó sin recibo de integración: %v", err)
+	}
+}
+
+// Todo cambio de contrato invalida los recibos (del worker y de integración).
+func TestCambiosDeContratoInvalidanRecibos(t *testing.T) {
+	falso := func(e *Estado) {
+		e.Recibo = &Recibo{Attempt: e.Attempt(), Head: "x"}
+		e.ReciboInt = &Recibo{Attempt: e.Attempt(), Head: "y", Tipo: "integracion"}
+		e.Integrado = "y"
+	}
+	ops := map[string]struct {
+		fase string
+		op   func(Repo) (*Estado, error)
+	}{
+		"ampliar":    {Verificado, func(r Repo) (*Estado, error) { return r.Ampliar("01", []string{"api"}) }},
+		"rehuella":   {Bloqueado, func(r Repo) (*Estado, error) { return r.Rehuella("01", "m1 huella") }},
+		"reintentar": {Bloqueado, func(r Repo) (*Estado, error) { return r.Reintentar("01", "otro enfoque", false) }},
+		"reabrir":    {Verificado, func(r Repo) (*Estado, error) { return r.Reabrir("01", "reparar") }},
+	}
+	for nombre, c := range ops {
+		r := repoDeJuguete(t)
+		e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}}, t0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		falso(e)
+		e.Fase = c.fase
+		r.save(e)
+		if _, err := c.op(r); err != nil {
+			t.Errorf("%s: %v", nombre, err)
+			continue
+		}
+		e, _ = r.Load("01")
+		if e.Recibo != nil || e.ReciboInt != nil || e.Integrado != "" || e.Fase == Verificado {
+			t.Errorf("%s dejó recibos vivos: fase %s recibo %v int %v %q", nombre, e.Fase, e.Recibo, e.ReciboInt, e.Integrado)
+		}
+	}
+}

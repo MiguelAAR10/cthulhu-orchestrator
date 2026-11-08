@@ -28,6 +28,8 @@ type Limits struct {
 	PushRamas []string `json:"push_ramas,omitempty"`
 	// MaxSlices: slices abiertos a la vez por repo; 0 = el tope por defecto del paquete slice.
 	MaxSlices int `json:"max_slices,omitempty"`
+	// ConteoEstricto: todo slice exige --reporte/--formato; sin contadores no hay verde (por defecto, laxo).
+	ConteoEstricto bool `json:"conteo_estricto,omitempty"`
 }
 
 // DefaultPath respeta ORQ_LIMITS para pruebas y usa ~/.config/orq/limits.json por defecto.

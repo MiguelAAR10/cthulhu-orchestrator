@@ -82,11 +82,14 @@ type Estado struct {
 	Aislado     bool      `json:"aislado,omitempty"`
 	TimeoutSeg  int       `json:"timeout_seg,omitempty"`
 	Recibo      *Recibo   `json:"recibo,omitempty"`
-	Integrado   string    `json:"integrado,omitempty"` // SHA del merge revalidado
-	IntDir      string    `json:"int_dir,omitempty"`   // worktree de integración en uso
-	Equipo      []Worker  `json:"equipo,omitempty"`    // workers en paralelo dentro del slice
-	Motivo      string    `json:"motivo,omitempty"`    // por qué está bloqueado
-	Alcance     []string  `json:"alcance,omitempty"`   // rutas que la historia justifica tocar
+	ReciboInt   *Recibo   `json:"recibo_integracion,omitempty"` // recibo del SHA integrado, distinto del del worker
+	Estricto    bool      `json:"estricto,omitempty"`           // sin contadores no hay verde
+	ContratoTS  time.Time `json:"contrato_ts,omitempty"`        // último cambio de examen o alcance
+	Integrado   string    `json:"integrado,omitempty"`          // SHA del merge revalidado
+	IntDir      string    `json:"int_dir,omitempty"`            // worktree de integración en uso
+	Equipo      []Worker  `json:"equipo,omitempty"`             // workers en paralelo dentro del slice
+	Motivo      string    `json:"motivo,omitempty"`             // por qué está bloqueado
+	Alcance     []string  `json:"alcance,omitempty"`            // rutas que la historia justifica tocar
 }
 
 func (e *Estado) ID() string      { return fmt.Sprintf("S-%s", e.NN) }
@@ -105,6 +108,7 @@ type Worker struct {
 
 // Recibo es la evidencia de una verificación. "Terminé" no vale: vale el recibo.
 type Recibo struct {
+	Tipo       string    `json:"tipo,omitempty"` // "" = worker | integracion
 	Attempt    string    `json:"attempt"`
 	Head       string    `json:"head"`
 	Bundle     string    `json:"bundle_hash"`
@@ -325,6 +329,7 @@ type Opciones struct {
 	Aislado          bool     // corre el examen en una copia del commit, sin archivos del worker
 	Timeout          int      // segundos; 0 = 600
 	Alcance          []string // rutas que la historia justifica; fuera de ellas, alarma de desalineación
+	Estricto         bool     // --reporte/--formato obligatorios: sin contadores no hay verde
 }
 
 func (e *Estado) limite() time.Duration {
@@ -401,6 +406,9 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 			return nil, out, errors.New("la base no está sana: el comando --sano falla antes de empezar. Arregla la base primero")
 		}
 	}
+	if o.Estricto && o.Reporte == "" {
+		return nil, "", errors.New("modo estricto: --reporte y --formato son obligatorios (sin contadores no hay verde)")
+	}
 	if (o.Reporte == "") != (o.Formato == "") {
 		return nil, "", errors.New("--reporte y --formato van juntos")
 	}
@@ -433,7 +441,7 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 	e := &Estado{NN: nn, Intento: 1, Fase: Implementando, Titulo: titulo, Test: test, Bundle: bundle, Cmd: cmd,
 		Sano: o.Sano, Alcance: o.Alcance, Base: base, SHARojo: sha, Rama: rama, Worktree: wt, Procedencia: "git", Host: host,
 		Abierto: now.UTC().Truncate(time.Second), Huella: huella, SalidaRojo: cola(out, 20),
-		Reporte: o.Reporte, Formato: o.Formato, Omitir: o.PermiteOmitir, Aislado: o.Aislado, TimeoutSeg: o.Timeout}
+		Reporte: o.Reporte, Formato: o.Formato, Omitir: o.PermiteOmitir, Aislado: o.Aislado, TimeoutSeg: o.Timeout, Estricto: o.Estricto}
 	if _, err := Git(r.Root, "worktree", "add", e.Worktree, "-b", e.Rama); err == nil {
 		prepararDeps(r.Root, e.Worktree)
 	} else {
@@ -474,6 +482,9 @@ func (r Repo) Ampliar(nn string, rutas []string) (*Estado, error) {
 	if err != nil || e == nil {
 		return nil, errors.Join(err, errors.New("no hay slice abierto"))
 	}
+	if e.Fase == Integrando || e.Fase == Cerrando {
+		return e, fmt.Errorf("%s está en %s: el alcance no cambia mientras se integra", e.ID(), e.Fase)
+	}
 	// Sin alcance el slice ya puede tocar todo: sumar rutas lo encogería a solo esas.
 	libre := len(e.Alcance) == 0
 	for _, b := range rutas {
@@ -486,6 +497,9 @@ func (r Repo) Ampliar(nn string, rutas []string) (*Estado, error) {
 			e.Alcance = append(e.Alcance, b)
 		}
 	}
+	// El alcance es parte del contrato: lo verificado antes ya no vale.
+	e.invalidarRecibos()
+	e.ContratoTS = time.Now().UTC()
 	return e, r.save(e)
 }
 
@@ -534,27 +548,17 @@ func (r Repo) Verificar(nn string, now time.Time) (*Estado, string, error) {
 	if h, _ := Huella(dir, e.Bundle, e.Cmd); h != e.Huella {
 		return e, out, r.bloquear(e, "el examen se modificó mientras corría: trampa")
 	}
-	rec := &Recibo{Attempt: e.Attempt(), Head: head, Bundle: e.Huella, Runner: Version, Cmd: e.Cmd,
-		Exit: code, Salida: cola(out, 20), TS: now.UTC().Truncate(time.Second), Resultado: "paso"}
-	if cnt != nil {
-		rec.Contado, rec.Ejecutados, rec.Omitidos, rec.Fallidos = true, cnt.Ejecutados, cnt.Omitidos, cnt.Fallidos
-		switch {
-		case ok && cnt.Ejecutados == 0:
-			ok, rec.Nota = false, "el comando salió bien pero corrió 0 pruebas"
-		case ok && cnt.Omitidos > 0 && !e.Omitir:
-			ok, rec.Nota = false, fmt.Sprintf("%d pruebas omitidas y el slice no permite omitir", cnt.Omitidos)
-		case ok && cnt.Fallidos > 0:
-			ok, rec.Nota = false, fmt.Sprintf("salió 0 pero el reporte trae %d fallidas", cnt.Fallidos)
-		}
-	} else {
-		rec.Nota = "sin contadores: declara --reporte y --formato para saber cuántas pruebas corrieron"
-	}
+	rec := nuevoRecibo(e, "", head, out, code, cnt, now)
+	ok, rec.Nota = Evaluar(e, ok, cnt, true) // la huella ya se comprobó arriba (y su cambio bloquea)
 	salidas := filepath.Join(r.OrqDir, "salidas")
 	os.MkdirAll(salidas, 0o755)
 	rec.Artefacto = filepath.Join(salidas, fmt.Sprintf("%s-a%d-%d.txt", e.ID(), e.Intento, now.UnixNano()))
 	os.WriteFile(rec.Artefacto, []byte(out), 0o644)
 	if !ok {
 		rec.Resultado = "fallo"
+	}
+	if !rec.Contado && rec.Resultado == "fallo" && !e.Estricto {
+		rec.Nota = "sin contadores: declara --reporte y --formato para saber cuántas pruebas corrieron"
 	}
 	// La corrida pudo durar minutos: si el slice cambió mientras tanto (relevo, rechazo, reintento), el recibo no vale.
 	soltar, err := r.bloqueo(e.NN)
@@ -592,6 +596,15 @@ func (r Repo) Verificar(nn string, now time.Time) (*Estado, string, error) {
 	return e, out, errors.Join(r.save(e), fmt.Errorf("%s (reparación %d de %d)", motivo, e.Fallos, MaxFallos-1))
 }
 
+func nuevoRecibo(e *Estado, tipo, head, out string, code int, cnt *Conteo, now time.Time) *Recibo {
+	rec := &Recibo{Tipo: tipo, Attempt: e.Attempt(), Head: head, Bundle: e.Huella, Runner: Version, Cmd: e.Cmd,
+		Exit: code, Salida: cola(out, 20), TS: now.UTC().Truncate(time.Second), Resultado: "paso"}
+	if cnt != nil {
+		rec.Contado, rec.Ejecutados, rec.Omitidos, rec.Fallidos = true, cnt.Ejecutados, cnt.Omitidos, cnt.Fallidos
+	}
+	return rec
+}
+
 func (r Repo) bloquear(e *Estado, motivo string) error {
 	e.Fase, e.Motivo, e.Escritor = Bloqueado, motivo, ""
 	if err := r.save(e); err != nil {
@@ -627,7 +640,8 @@ func (r Repo) Reintentar(nn, cambio string, decisionOwner bool) (*Estado, error)
 	}
 	e.Intento++
 	e.FirmaFallo = ""
-	e.Fase, e.Fallos, e.HeadFallo, e.Recibo, e.Motivo, e.Escritor = Implementando, 0, "", nil, "", ""
+	e.invalidarRecibos()
+	e.Fase, e.Fallos, e.HeadFallo, e.Motivo, e.Escritor = Implementando, 0, "", "", ""
 	return e, r.save(e)
 }
 
@@ -660,6 +674,7 @@ func (r Repo) Rehuella(nn, motivo string) (*Estado, error) {
 	if h, _ := Huella(e.Worktree, e.Bundle, e.Cmd); h != enRojo {
 		return e, errors.New("el examen del worktree no es idéntico al del rojo: no se repara")
 	}
+	e.invalidarRecibos()
 	e.Huella, e.Fase, e.Motivo, e.Escritor = enRojo, Implementando, "huella reparada: "+motivo, ""
 	return e, r.save(e)
 }
@@ -727,7 +742,8 @@ func (r Repo) SumarExamen(nn string, nuevos []string, cmd, aprobado string) (*Es
 		return e, err
 	}
 	// El contrato cambió: un recibo anterior ya no prueba nada; hay que volver a verificar.
-	e.Bundle, e.Huella, e.SHAExamen, e.Motivo, e.Recibo = bundle, h, strings.TrimSpace(head), "examen sumado o corregido: "+aprobado, nil
+	e.invalidarRecibos()
+	e.Bundle, e.Huella, e.SHAExamen, e.Motivo, e.ContratoTS = bundle, h, strings.TrimSpace(head), "examen sumado o corregido: "+aprobado, time.Now().UTC()
 	return e, r.save(e)
 }
 
@@ -749,7 +765,8 @@ func (r Repo) Reabrir(nn, motivo string) (*Estado, error) {
 	if strings.TrimSpace(motivo) == "" {
 		return e, errors.New("di qué se repara; reabrir sin motivo no vale")
 	}
-	e.Fase, e.Recibo, e.Motivo = Implementando, nil, motivo
+	e.invalidarRecibos()
+	e.Fase, e.Motivo = Implementando, motivo
 	if len(e.Equipo) > 0 {
 		e.Escritor = "equipo"
 	}
@@ -863,6 +880,11 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time) (*R
 				return nil, nil, out, err
 			}
 		}
+		if ri := e.ReciboInt; ri == nil || ri.Tipo != "integracion" || ri.Head != e.Integrado || ri.Attempt != e.Attempt() || ri.Resultado != "paso" {
+			e.Fase = Integrando // se integra y revalida de nuevo
+			r.save(e)
+			return nil, nil, out, fmt.Errorf("no hay recibo de integración verde para el SHA a entregar (%s): no se publica. Repite el cierre para integrar y revalidar", e.Integrado)
+		}
 		if err := r.publicar(e); err != nil {
 			if errors.Is(err, ErrBaseAvanzo) {
 				e.Fase = Integrando // la próxima vez integra de nuevo sobre la base nueva
@@ -954,7 +976,7 @@ func (r Repo) integrar(e *Estado) (string, error) {
 			ip = fmt.Sprintf("%s-int-%d", e.Worktree, time.Now().UnixNano())
 		}
 	}
-	e.IntDir = ip
+	e.IntDir, e.Integrado, e.ReciboInt = ip, "", nil
 	if err := r.save(e); err != nil {
 		return "", err
 	}
@@ -973,21 +995,30 @@ func (r Repo) integrar(e *Estado) (string, error) {
 	if h, _ := Huella(ip, e.Bundle, e.Cmd); h != e.Huella {
 		return "", fmt.Errorf("tras integrar, el paquete del examen difiere del rojo (la base cambió). Nada se borró")
 	}
-	out, _, ok, cnt, _ := e.correr(ip)
-	if ok && cnt != nil && (cnt.Ejecutados == 0 || cnt.Fallidos > 0) {
-		ok = false
+	sha, err := Git(ip, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
 	}
+	out, code, ok, cnt, err := e.correr(ip)
+	if err != nil {
+		return out, err
+	}
+	h, _ := Huella(ip, e.Bundle, e.Cmd)
+	rec := nuevoRecibo(e, "integracion", sha, out, code, cnt, time.Now())
+	if ok, rec.Nota = Evaluar(e, ok, cnt, h == e.Huella); !ok {
+		rec.Resultado = "fallo"
+	}
+	appendJSON(r.recibosPath(), rec)
 	if !ok {
-		return out, fmt.Errorf("integrado en %s, pero el examen falla ahí. Tu rama %s no se tocó; nada se borró", ip, e.Base)
+		return out, fmt.Errorf("integrado en %s, pero el examen no queda verde ahí: %s. Tu rama %s no se tocó; nada se borró", ip, rec.Nota, e.Base)
 	}
 	if e.Sano != "" {
 		if o2, _, ok := RunCmd(ip, e.Sano); !ok {
 			return o2, fmt.Errorf("integrado, pero la base dejó de estar sana (--sano falla). Nada se borró")
 		}
 	}
-	sha, err := Git(ip, "rev-parse", "HEAD")
-	e.Integrado = sha
-	return out, err
+	e.Integrado, e.ReciboInt = sha, rec
+	return out, nil
 }
 
 // publicar avanza la rama base al merge revalidado. Si el dueño tiene la rama abierta y limpia,
@@ -1462,4 +1493,46 @@ func (r Repo) Podar(nn string, nombres []string) (*Estado, []string, error) {
 		informe = append(informe, nombre+": podado (worktree y rama "+w.Rama+")")
 	}
 	return e, informe, r.save(e)
+}
+
+// Evaluar es el único juez de una corrida del examen, en el worktree del worker y tras integrar:
+// salida 0, huella intacta, y si hay reporte: más de 0 pruebas, 0 fallidas y omitidas solo si se
+// permiten. En modo estricto, sin contadores no hay verde.
+func Evaluar(e *Estado, ok bool, cnt *Conteo, huella bool) (bool, string) {
+	switch {
+	case !huella:
+		return false, "el paquete del examen difiere del aprobado"
+	case cnt == nil && e.Estricto:
+		return false, "modo estricto: sin contadores del runner no hay verde (declara --reporte y --formato)"
+	case cnt == nil && !ok:
+		return false, "el examen no pasa"
+	case cnt == nil:
+		return true, "sin contadores: declara --reporte y --formato para saber cuántas pruebas corrieron"
+	case !ok:
+		return false, "el examen no pasa"
+	case cnt.Ejecutados == 0:
+		return false, "el comando salió bien pero corrió 0 pruebas"
+	case cnt.Fallidos > 0:
+		return false, fmt.Sprintf("salió 0 pero el reporte trae %d fallidas", cnt.Fallidos)
+	case cnt.Omitidos > 0 && !e.Omitir:
+		return false, fmt.Sprintf("%d pruebas omitidas y el slice no permite omitir", cnt.Omitidos)
+	}
+	return true, ""
+}
+
+// invalidarRecibos: el contrato cambió (examen, alcance, intento, huella o reapertura); ningún
+// recibo anterior, del worker o de integración, prueba nada ya.
+func (e *Estado) invalidarRecibos() {
+	e.Recibo, e.ReciboInt, e.Integrado = nil, nil, ""
+	if e.Fase == Verificado {
+		e.Fase = Implementando
+	}
+}
+
+// DesdeContrato: una decisión que aprueba un cambio de contrato tiene que ser posterior a esto.
+func (e *Estado) DesdeContrato() time.Time {
+	if e.ContratoTS.After(e.Abierto) {
+		return e.ContratoTS
+	}
+	return e.Abierto
 }

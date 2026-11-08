@@ -143,3 +143,31 @@ func TestAprobadoExigeDecisionRegistrada(t *testing.T) {
 		}
 	}
 }
+
+// 1B: --aprobado tiene que hablar de este slice y ser posterior a su apertura o al último cambio de contrato.
+func TestAprobadoLigadoAlSlice(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, ".orq"), 0o755)
+	mem, can := filepath.Join(root, ".orq", "memoria.jsonl"), filepath.Join(root, ".orq", "canal.jsonl")
+	desde := time.Date(2026, 11, 8, 10, 0, 0, 0, time.UTC)
+	antes, despues := desde.Add(-time.Hour), desde.Add(time.Hour)
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Texto: "S-07: sumar examen x"}, antes)         // m1 vieja
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Texto: "sumar examen de S-03"}, despues)       // m2 otro slice
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "atena", Texto: "sumar examen x"}, despues)             // m3 sin slice
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Texto: "S-07 suma examen x"}, despues)         // m4 bien por texto
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "atena", Slice: "S-07", Texto: "alcance api"}, despues) // m5 bien por campo
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Texto: "S-070 otra cosa"}, despues)            // m6 id parecido
+	canal.Append(can, &canal.Msg{De: "atena", Para: "orquestador", Tipo: "respuesta", Texto: "sí para S-07", TS: antes})        // c1 vieja
+	canal.Append(can, &canal.Msg{De: "atena", Para: "orquestador", Tipo: "respuesta", Texto: "sí para S-07", TS: despues})      // c2 bien
+	p := proyecto{root, filepath.Join(root, ".orq")}
+	for _, mal := range []string{"m1", "m2", "m3", "m6", "c1"} {
+		if err := p.decisionDelSlice(mal, "S-07", desde); err == nil {
+			t.Errorf("aceptó %q", mal)
+		}
+	}
+	for _, bien := range []string{"m4", "m5 alcance", "c2 de Atena"} {
+		if err := p.decisionDelSlice(bien, "S-07", desde); err != nil {
+			t.Errorf("rechazó %q: %v", bien, err)
+		}
+	}
+}

@@ -60,6 +60,9 @@ func (r Repo) Metricas(desde time.Time) Metricas {
 	}
 	prev := map[string]string{} // attempt → head del último fallo
 	for _, rc := range leerJSONL[Recibo](r.recibosPath()) {
+		if rc.Tipo == "integracion" {
+			continue // la revalidación tras integrar no es una verificación del worker
+		}
 		if rc.TS.Before(desde) {
 			continue
 		}

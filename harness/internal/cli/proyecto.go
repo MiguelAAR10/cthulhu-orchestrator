@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -592,6 +593,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		omitir := fs.Bool("permite-omitir", false, "acepta pruebas omitidas")
 		aislado := fs.Bool("aislado", false, "corre el examen en una copia limpia del commit")
 		timeout := fs.Int("timeout", 0, "segundos máximos del examen (0 = 600)")
+		estricto := fs.Bool("estricto", false, "--reporte/--formato obligatorios: sin contadores no hay verde (también limits.json conteo_estricto)")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *titulo == "" || *test == "" || *cmd == "" {
 			fmt.Fprintln(stderr, "uso: orq slice abrir NN --titulo \"...\" --test ruta --cmd \"...\" [--bundle a,b] [--sano \"cmd\"] [--reporte f --formato tap|junit|gotest-json] [--permite-omitir] [--aislado] [--timeout s] [--sin-scouts \"motivo\"]")
 			return 1
@@ -606,7 +608,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 				extra = append(extra, f)
 			}
 		}
-		e, out, err := r.Abrir(args[1], *titulo, *test, *cmd, slice.Opciones{Alcance: partir(*alcance), Bundle: extra, Sano: *sano, Reporte: *reporte, Formato: *formato, PermiteOmitir: *omitir, Aislado: *aislado, Timeout: *timeout}, time.Now())
+		e, out, err := r.Abrir(args[1], *titulo, *test, *cmd, slice.Opciones{Alcance: partir(*alcance), Bundle: extra, Sano: *sano, Reporte: *reporte, Formato: *formato, PermiteOmitir: *omitir, Aislado: *aislado, Timeout: *timeout, Estricto: *estricto || estrictoPorLimites()}, time.Now())
 		show(out)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
@@ -638,7 +640,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "uso: orq slice alcance RUTA[,RUTA] --aprobado \"mNN|cNN de Atena/Owner: motivo\" [--zona back]")
 			return 1
 		}
-		if err := p.cambioDeContrato(*aprobado); err != nil {
+		if err := p.cambioDeContrato(*aprobado, r, nn); err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
@@ -811,7 +813,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "uso: orq slice examen [--slice NN] ARCHIVO[,ARCHIVO] --aprobado \"mNN|cNN de Atena/Owner\" [--cmd \"...\"]")
 			return 1
 		}
-		if err := p.cambioDeContrato(*aprobado); err != nil {
+		if err := p.cambioDeContrato(*aprobado, r, nn); err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
@@ -975,12 +977,15 @@ func rolArgs(kind, modelo, esfuerzo, name, root string) []string {
 
 // cambioDeContrato: el examen y el alcance solo cambian desde el checkout principal (no desde un
 // worktree de worker, aunque falte el hook) y con una decisión registrada de Atena u Owner.
-func (p proyecto) cambioDeContrato(aprobado string) error {
+func (p proyecto) cambioDeContrato(aprobado string, r slice.Repo, nn string) error {
 	if wd, _ := os.Getwd(); gate.IsLinkedWorktree(wd) || gate.IsLinkedWorktree(p.root) {
 		return errors.New("desde un worktree de worker no se cambia el examen ni el alcance: lo pide el Orquestador")
 	}
-	_, err := p.decisionRegistrada(aprobado)
-	return err
+	e, err := r.Load(nn)
+	if err != nil || e == nil {
+		return errors.Join(err, errors.New("no hay slice abierto"))
+	}
+	return p.decisionDelSlice(aprobado, e.ID(), e.DesdeContrato())
 }
 
 // decisionRegistrada exige que --aprobado nombre un id existente: mNN de memoria con fuente
@@ -1005,4 +1010,45 @@ func (p proyecto) decisionRegistrada(aprobado string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("--aprobado %q no nombra una decisión registrada: empieza por el id (mNN de `orq mem` con fuente owner|atena, o cNN de un mensaje de atena)", aprobado)
+}
+
+// decisionDelSlice liga --aprobado al slice: la decisión registrada (mNN de owner|atena o cNN de
+// atena) nombra el slice en su texto o en su campo slice/attempt, y es posterior a la apertura o
+// al último cambio de examen o alcance. Una decisión vieja o de otra historia no aprueba nada.
+func (p proyecto) decisionDelSlice(aprobado, id string, desde time.Time) error {
+	ref, err := p.decisionRegistrada(aprobado)
+	if err != nil {
+		return err
+	}
+	nombra := regexp.MustCompile(`(^|[^0-9A-Za-z])` + regexp.QuoteMeta(id) + `([^0-9]|$)`)
+	habla := func(campo, texto string, ts time.Time) error {
+		if !nombra.MatchString(campo) && !nombra.MatchString(texto) {
+			return fmt.Errorf("--aprobado %s no habla de %s: la decisión tiene que nombrar el slice (texto o --slice)", ref, id)
+		}
+		if ts.Before(desde.Truncate(time.Second)) {
+			return fmt.Errorf("--aprobado %s es de %s, anterior a la apertura o al último cambio de contrato de %s (%s): pide una decisión nueva", ref, ts.Format(time.RFC3339), id, desde.Format(time.RFC3339))
+		}
+		return nil
+	}
+	if strings.HasPrefix(ref, "m") {
+		items, _ := memoria.Load(p.memPath())
+		for _, it := range items {
+			if it.ID == ref {
+				return habla(it.Slice, it.Texto, it.TS)
+			}
+		}
+	}
+	ms, _ := canal.Load(p.canalPath())
+	for _, m := range ms {
+		if m.ID == ref {
+			return habla(m.Attempt, m.Texto, m.TS)
+		}
+	}
+	return fmt.Errorf("--aprobado %s no se encontró", ref)
+}
+
+// estrictoPorLimites: limits.json puede volver obligatorio el conteo en todos los slices.
+func estrictoPorLimites() bool {
+	l, err := limits.Load(limits.DefaultPath())
+	return err == nil && l.ConteoEstricto
 }
