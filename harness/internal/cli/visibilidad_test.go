@@ -20,6 +20,9 @@ import (
 func proyectoVis(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
+	// Hermético: el rol depende del cwd (worktree enlazado ⇒ worker); el cwd de la prueba
+	// no debe heredar el checkout desde el que se corre `go test`.
+	t.Chdir(root)
 	t.Setenv("ORQ_ROOT", root)
 	t.Setenv("ORQ_ROL", "")
 	t.Setenv("ORQ_WORKER_ID", "")
