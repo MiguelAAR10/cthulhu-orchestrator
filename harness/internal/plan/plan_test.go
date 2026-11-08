@@ -1,8 +1,10 @@
 package plan
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -79,7 +81,7 @@ func TestDespacho(t *testing.T) {
 	}
 }
 
-func TestGuardarLeerYModelo(t *testing.T) {
+func TestGuardarLeer(t *testing.T) {
 	path := Path(t.TempDir(), "01")
 	p := ejemplo()
 	p.Tareas[0].Estado, p.Tareas[0].Dificultad = "", ""
@@ -89,14 +91,6 @@ func TestGuardarLeerYModelo(t *testing.T) {
 	q, err := Leer(path)
 	if err != nil || q.Tareas[0].Estado != "pendiente" || q.Tareas[0].Dificultad != "media" || filepath.Base(path) != "01.json" {
 		t.Fatalf("%+v %v", q, err)
-	}
-	for _, c := range []struct{ ag, dif, mod, esf string }{
-		{"claude", "baja", "haiku", "medium"}, {"claude", "", "sonnet", "medium"}, {"claude", "alta", "opus", "high"},
-		{"codex", "baja", "gpt-6-luna", "medium"}, {"codex", "alta", "gpt-6.1-sol", "high"},
-	} {
-		if m, e := Modelo(c.ag, c.dif); m != c.mod || e != c.esf {
-			t.Errorf("%s/%s: %s %s", c.ag, c.dif, m, e)
-		}
 	}
 }
 
@@ -118,7 +112,7 @@ func TestRevisar(t *testing.T) {
 func TestConservarAvance(t *testing.T) {
 	viejo := &Plan{Tareas: []Tarea{{ID: "t1", Estado: "hecha", Worker: "w"}, {ID: "t2", Estado: "en_curso", Worker: "w"}}}
 	nuevo := &Plan{Tareas: []Tarea{{ID: "t1", Estado: "pendiente"}, {ID: "t2", Estado: "pendiente"}, {ID: "t3", Estado: "pendiente"}}}
-	if k := Conservar(nuevo, viejo); len(k) != 2 {
+	if k, re := Conservar(nuevo, viejo); len(k) != 2 || len(re) != 0 {
 		t.Fatalf("conservó %v", k)
 	}
 	if nuevo.Tareas[0].Estado != "hecha" || nuevo.Tareas[1].Estado != "en_curso" || nuevo.Tareas[1].Worker != "w" || nuevo.Tareas[2].Estado != "pendiente" {
@@ -134,5 +128,95 @@ func TestSoltar(t *testing.T) {
 	}
 	if _, err := Soltar(p, "t2"); err == nil {
 		t.Fatal("una tarea hecha no se suelta")
+	}
+}
+
+// H-05: una tarea hecha cuyo contrato cambió (objetivo, deps, rutas) vuelve a pendiente.
+func TestHechaConContratoCambiadoVuelveAPendiente(t *testing.T) {
+	viejo := &Plan{Tareas: []Tarea{
+		{ID: "t1", Zona: "a", Rutas: []string{"a.go"}, Que: "suma", Estado: "hecha", Worker: "w"},
+		{ID: "t2", Zona: "b", Rutas: []string{"b.go"}, Que: "resta", Estado: "hecha", Worker: "w"},
+		{ID: "t3", Zona: "c", Rutas: []string{"c.go"}, Estado: "hecha", Worker: "w"},
+	}}
+	nuevo := &Plan{Tareas: []Tarea{
+		{ID: "t1", Zona: "a", Rutas: []string{"a.go"}, Que: "suma", Estado: "pendiente"},
+		{ID: "t2", Zona: "b", Rutas: []string{"b.go", "b2.go"}, Que: "resta", Estado: "pendiente"},
+		{ID: "t3", Zona: "c", Rutas: []string{"c.go"}, DependeDe: []string{"t1"}, Estado: "pendiente"},
+	}}
+	k, re := Conservar(nuevo, viejo)
+	if len(k) != 1 || len(re) != 2 {
+		t.Fatalf("conservó %v reabrió %v", k, re)
+	}
+	if nuevo.Tareas[0].Estado != "hecha" || nuevo.Tareas[1].Estado != "pendiente" || nuevo.Tareas[1].Worker != "" || nuevo.Tareas[2].Estado != "pendiente" {
+		t.Fatalf("%+v", nuevo.Tareas)
+	}
+}
+
+// H-05: debatido vale para una revisión del plan; cambiar el plan lo borra.
+func TestDebatidoLigadoARevision(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "p.json")
+	p := ejemplo()
+	p.MarcarDebatido()
+	Guardar(path, p)
+	if q, _ := Leer(path); !q.Debatido {
+		t.Fatal("perdió el debate sin cambios")
+	}
+	q, _ := Leer(path)
+	q.Tareas[0].Estado = "en_curso" // el avance no es contrato
+	Guardar(path, q)
+	if q, _ = Leer(path); !q.Debatido {
+		t.Fatal("el avance no debe borrar el debate")
+	}
+	q.Tareas[0].Rutas = append(q.Tareas[0].Rutas, "api/otro.py")
+	Guardar(path, q)
+	if q, _ = Leer(path); q.Debatido {
+		t.Fatal("el plan cambió y sigue debatido")
+	}
+}
+
+// H-04c: dos reservas concurrentes (leer→tomar→guardar) persisten las dos.
+func TestReservasConcurrentesPersisten(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "p.json")
+	p := &Plan{Slice: "01"}
+	for i := 0; i < 8; i++ {
+		p.Tareas = append(p.Tareas, Tarea{ID: fmt.Sprintf("t%d", i), Zona: "z", Rutas: []string{fmt.Sprintf("f%d", i)}, Dificultad: "media", Estado: "pendiente"})
+	}
+	Guardar(path, p)
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if _, err := Actualizar(path, func(p *Plan) error {
+				_, err := Tomar(p, fmt.Sprintf("t%d", i), fmt.Sprintf("w%d", i))
+				return err
+			}); err != nil {
+				t.Error(err)
+			}
+		}(i)
+	}
+	wg.Wait()
+	q, _ := Leer(path)
+	for _, x := range q.Tareas {
+		if x.Estado != "en_curso" {
+			t.Fatalf("se perdió una reserva: %+v", q.Tareas)
+		}
+	}
+}
+
+// Exploit 5: el archivo cargado no trae avance propio; solo vale el avance registrado.
+func TestConservarNoCreeEstadoDelArchivo(t *testing.T) {
+	nuevo := &Plan{Tareas: []Tarea{{ID: "t1", Estado: "hecha", Worker: "x"}, {ID: "t2", Estado: "en_curso"}}}
+	Conservar(nuevo, nil)
+	for _, x := range nuevo.Tareas {
+		if x.Estado != "pendiente" || x.Worker != "" {
+			t.Fatalf("sin plan previo: %+v", x)
+		}
+	}
+	viejo := &Plan{Tareas: []Tarea{{ID: "t1", Estado: "pendiente"}, {ID: "t2", Estado: "hecha", Worker: "w"}}}
+	nuevo = &Plan{Tareas: []Tarea{{ID: "t1", Estado: "hecha"}, {ID: "t2", Estado: "hecha"}}}
+	Conservar(nuevo, viejo)
+	if nuevo.Tareas[0].Estado != "pendiente" || nuevo.Tareas[1].Estado != "hecha" || nuevo.Tareas[1].Worker != "w" {
+		t.Fatalf("%+v", nuevo.Tareas)
 	}
 }

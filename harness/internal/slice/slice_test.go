@@ -692,6 +692,45 @@ func TestAmpliarAlcance(t *testing.T) {
 	}
 }
 
+// H-04b: una ampliación de alcance mientras corre el examen no se pierde, y el resultado se descarta.
+func TestVerificarNoPisaAmpliacionConcurrente(t *testing.T) {
+	r := repoDeJuguete(t)
+	sync := t.TempDir()
+	corre, sigue := filepath.Join(sync, "corre"), filepath.Join(sync, "sigue")
+	os.WriteFile(sigue, nil, 0o644)
+	cmd := "touch " + corre + "; while [ ! -f " + sigue + " ]; do sleep 0.02; done; " + examen
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", cmd, Opciones{Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}}, t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	os.Remove(sigue)
+	os.Remove(corre)
+	hecho := make(chan error, 1)
+	go func() {
+		for {
+			if _, err := os.Stat(corre); err == nil {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		_, err := r.Ampliar("01", []string{"db/m.txt"}) // no debe esperar a la corrida
+		os.WriteFile(sigue, nil, 0o644)
+		hecho <- err
+	}()
+	_, _, err = r.Verificar("01", t0)
+	if errA := <-hecho; errA != nil {
+		t.Fatal(errA)
+	}
+	if err == nil || !strings.Contains(err.Error(), "contrato") {
+		t.Fatalf("debió descartar el resultado: %v", err)
+	}
+	ahora, _ := r.Load("01")
+	if len(ahora.Alcance) != 2 || ahora.Recibo != nil || ahora.Fase != Implementando {
+		t.Fatalf("se pisó la ampliación: %+v", ahora)
+	}
+}
+
 // Sin alcance el slice toca todo: ampliar no puede encogerlo a las rutas sumadas.
 func TestAmpliarSinAlcanceNoEncoge(t *testing.T) {
 	r := repoDeJuguete(t)
@@ -851,5 +890,177 @@ func TestRehuellaNoBendiceTrampa(t *testing.T) {
 	r.Verificar("01", t0)
 	if _, err := r.Rehuella("01", "x"); err == nil {
 		t.Fatal("un examen cambiado no se repara")
+	}
+}
+
+// H-01: un examen cambiado con aprobación invalida los recibos previos; hay que volver a verificar.
+func TestSumarExamenInvalidaRecibos(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "tests/extra.sh", "true\n")
+	head, _ := Git(e.Worktree, "rev-parse", "HEAD")
+	e.Recibo = &Recibo{Attempt: e.Attempt(), Head: strings.TrimSpace(head)}
+	if err := r.save(e); err != nil {
+		t.Fatal(err)
+	}
+	e, err := r.SumarExamen("01", []string{"tests/extra.sh"}, "sh tests/extra.sh", "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Recibo != nil {
+		t.Fatal("el recibo viejo sobrevivió al cambio de examen")
+	}
+	if e, _ = r.Load("01"); e.Recibo != nil {
+		t.Fatal("el recibo viejo quedó guardado")
+	}
+	if _, _, _, err := r.Cerrar("", true, "", t0); err == nil {
+		t.Fatal("cerró sin volver a verificar")
+	}
+}
+
+// H-03: un solo evaluador. La base agrega config que omite una prueba; tras integrar, 1 corrida y
+// 1 omitida no es verde aunque el worker haya verificado 2/0.
+func TestIntegracionRechazaOmitidosQueTraeLaBase(t *testing.T) {
+	r := repoConReporte(t, `if cmp -s total.txt tests/datos.txt; then printf 'ok 1 total\n' > out.tap; if [ -f skip.cfg ]; then printf 'ok 2 iva # SKIP cfg\n' >> out.tap; else printf 'ok 2 iva\n' >> out.tap; fi; else printf 'not ok 1 total\n' > out.tap; exit 1; fi
+`)
+	e, _, err := abrirConReporte(r, Opciones{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if e, _, err = r.Verificar("01", t0); err != nil || e.Recibo.Ejecutados != 2 || e.Recibo.Omitidos != 0 {
+		t.Fatalf("%+v %v", e.Recibo, err)
+	}
+	commitEn(t, r.Root, "skip.cfg", "iva\n")
+	if _, _, _, err := r.Cerrar("01", true, "", t0); err == nil || !strings.Contains(err.Error(), "omitid") {
+		t.Fatalf("integró con una prueba omitida por la base: %v", err)
+	}
+}
+
+func TestEvaluarUnico(t *testing.T) {
+	e := &Estado{}
+	casos := []struct {
+		nombre string
+		e      *Estado
+		ok     bool
+		cnt    *Conteo
+		huella bool
+		paso   bool
+	}{
+		{"verde contado", e, true, &Conteo{Ejecutados: 2}, true, true},
+		{"exit malo", e, false, &Conteo{Ejecutados: 2}, true, false},
+		{"cero pruebas", e, true, &Conteo{}, true, false},
+		{"fallidas", e, true, &Conteo{Ejecutados: 2, Fallidos: 1}, true, false},
+		{"omitidas", e, true, &Conteo{Ejecutados: 1, Omitidos: 1}, true, false},
+		{"omitidas permitidas", &Estado{Omitir: true}, true, &Conteo{Ejecutados: 1, Omitidos: 1}, true, true},
+		{"huella rota", e, true, &Conteo{Ejecutados: 2}, false, false},
+		{"sin conteo, laxo", e, true, nil, true, true},
+		{"sin conteo, estricto", &Estado{Estricto: true}, true, nil, true, false},
+	}
+	for _, c := range casos {
+		if paso, _ := Evaluar(c.e, c.ok, c.cnt, c.huella); paso != c.paso {
+			t.Errorf("%s: paso=%v", c.nombre, paso)
+		}
+	}
+}
+
+func TestEstrictoExigeReporte(t *testing.T) {
+	r := repoDeJuguete(t)
+	if _, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Estricto: true}, t0); err == nil || !strings.Contains(err.Error(), "--reporte") {
+		t.Fatalf("estricto sin reporte abrió: %v", err)
+	}
+}
+
+// El SHA integrado tiene su propio recibo; cerrar exige ese recibo para el SHA que se entrega.
+func TestReciboDeIntegracion(t *testing.T) {
+	r := repoConReporte(t, tapReal)
+	e, _, err := abrirConReporte(r, Opciones{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if _, _, err := r.Verificar("01", t0); err != nil {
+		t.Fatal(err)
+	}
+	reg, _, _, err := r.Cerrar("01", true, "", t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var integ *Recibo
+	for _, rc := range leerJSONL[Recibo](r.recibosPath()) {
+		if rc.Tipo == "integracion" {
+			integ = &rc
+		}
+	}
+	if integ == nil || integ.Head != reg.SHA || integ.Ejecutados != 1 || integ.Resultado != "paso" || integ.TS.IsZero() {
+		t.Fatalf("sin recibo de integración para %s: %+v", reg.SHA, integ)
+	}
+}
+
+func TestCerrarSinReciboDeIntegracionNoPublica(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	e, _, _ = r.Verificar("01", t0)
+	e.Fase, e.Integrado = Cerrando, e.Recibo.Head // "integrado" sin recibo propio
+	r.save(e)
+	if _, _, _, err := r.Cerrar("01", true, "", t0); err == nil || !strings.Contains(err.Error(), "integración") {
+		t.Fatalf("publicó sin recibo de integración: %v", err)
+	}
+}
+
+// Todo cambio de contrato invalida los recibos (del worker y de integración).
+func TestCambiosDeContratoInvalidanRecibos(t *testing.T) {
+	falso := func(e *Estado) {
+		e.Recibo = &Recibo{Attempt: e.Attempt(), Head: "x"}
+		e.ReciboInt = &Recibo{Attempt: e.Attempt(), Head: "y", Tipo: "integracion"}
+		e.Integrado = "y"
+	}
+	ops := map[string]struct {
+		fase string
+		op   func(Repo) (*Estado, error)
+	}{
+		"ampliar":    {Verificado, func(r Repo) (*Estado, error) { return r.Ampliar("01", []string{"api"}) }},
+		"rehuella":   {Bloqueado, func(r Repo) (*Estado, error) { return r.Rehuella("01", "m1 huella") }},
+		"reintentar": {Bloqueado, func(r Repo) (*Estado, error) { return r.Reintentar("01", "otro enfoque", false) }},
+		"reabrir":    {Verificado, func(r Repo) (*Estado, error) { return r.Reabrir("01", "reparar") }},
+	}
+	for nombre, c := range ops {
+		r := repoDeJuguete(t)
+		e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}}, t0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		falso(e)
+		e.Fase = c.fase
+		r.save(e)
+		if _, err := c.op(r); err != nil {
+			t.Errorf("%s: %v", nombre, err)
+			continue
+		}
+		e, _ = r.Load("01")
+		if e.Recibo != nil || e.ReciboInt != nil || e.Integrado != "" || e.Fase == Verificado {
+			t.Errorf("%s dejó recibos vivos: fase %s recibo %v int %v %q", nombre, e.Fase, e.Recibo, e.ReciboInt, e.Integrado)
+		}
+	}
+}
+
+// Exploit 4: rechazar no borra un ignorado único sin respaldo verificado.
+func TestRechazarRespaldaIgnoradoUnico(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	os.WriteFile(filepath.Join(e.Worktree, ".gitignore"), []byte("out.tap\n"), 0o644)
+	Git(e.Worktree, "add", ".gitignore")
+	Git(e.Worktree, "commit", "-qm", "ignora")
+	os.WriteFile(filepath.Join(e.Worktree, "out.tap"), []byte("ok 1 único\n"), 0o644)
+	if _, _, _, err := r.Cerrar("", false, "no", t0); err != nil {
+		t.Fatal(err)
+	}
+	if existe(filepath.Join(e.Worktree, "out.tap")) {
+		return // conservado o en cuarentena: no se perdió
+	}
+	bs, _ := filepath.Glob(filepath.Join(r.OrqDir, "backups", "*.tgz"))
+	if len(bs) == 0 {
+		t.Fatal("borró out.tap sin respaldo")
 	}
 }

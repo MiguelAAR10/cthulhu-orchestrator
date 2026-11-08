@@ -4,21 +4,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"orq/internal/gate"
-	"orq/internal/herdr"
+	"orq/internal/admision"
+	"orq/internal/agentes"
 	"orq/internal/limits"
 	"orq/internal/orqdir"
 	"orq/internal/plan"
-	"orq/internal/sysinfo"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"orq/internal/canal"
 	"orq/internal/memoria"
 	"orq/internal/slice"
+	"orq/internal/workers"
 )
 
 // memVigente es la memoria que vale hoy: sin reemplazados ni vencidos con slices cerrados.
@@ -58,6 +58,7 @@ func (p proyecto) datosRelevo(rol string) Relevo {
 	rv := Relevo{Rol: rol, Objetivo: "(sin historia en curso)", Comprobado: "nada todavía",
 		Referencias: []string{"orq slice estado", "orq slice recibo", "orq mem ver", "orq msg leer"}}
 	ms, _ := canal.Load(p.canalPath())
+	ms = canal.Vigentes(ms)
 	for _, m := range ms {
 		if m.Tipo == "historia" {
 			rv.Objetivo = recortar(strings.ReplaceAll(m.Texto, "\n", " "), 300) + " (" + m.ID + ")"
@@ -218,20 +219,30 @@ func (p proyecto) contrato(nn, worker, alcance, suite, presupuesto string) (stri
 // directo en el worktree del slice (trabajo pequeño). Con zona, se suma al equipo del slice con su
 // propia rama y worktree, y puede hablar con sus compañeros.
 func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance, suite, pres, dificultad, tarea string) (string, error) {
-	if !herdr.Inside() {
-		return "", errors.New("hay que correrlo dentro de herdr (panel del Orquestador)")
+	run := rn()
+	if !run.Inside() {
+		return "", fmt.Errorf("hay que correrlo dentro de %s (panel del Orquestador)", run.Name())
 	}
-	if agente != "claude" && agente != "codex" {
-		return "", errors.New("--agente claude|codex")
+	cfg, err := p.agentes()
+	if err != nil {
+		return "", err
+	}
+	if agente != "" {
+		if _, err := cfg.Para(agente, ""); err != nil {
+			return "", err
+		}
 	}
 	l, err := limits.Load(limits.DefaultPath())
 	if err != nil {
 		return "", err
 	}
-	procs, _ := sysinfo.ListProcs()
-	if n := len(sysinfo.Workers(procs, l.WorkerProcessName, gate.IsLinkedWorktree)); n >= *l.MaxWorkers {
-		return "", fmt.Errorf("hay %d worker(s) vivos y el tope es %d; espera a que uno termine", n, *l.MaxWorkers)
+	// La misma puerta que el gate: HALT, disco, medición fresca, cuota, workers y worktrees.
+	// El cupo queda reservado hasta que el worker arranca (o falla) para que dos lanzamientos no lo compartan.
+	liberar, err := admision.Reservar(l, p.admision(l))
+	if err != nil {
+		return "", err
 	}
+	defer liberar()
 	r := p.slices()
 	e, err := r.Load(nn)
 	if err != nil || e == nil {
@@ -267,7 +278,16 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 			alcance = tareaPl.Que + ". " + alcance
 		}
 	}
-	modelo, esfuerzo := plan.Modelo(agente, dificultad)
+	el, err := cfg.Worker(agente, dificultad)
+	if err != nil {
+		return "", err
+	}
+	agente = el.Agent
+	// H-06: un worker con hooks (Claude) no arranca sin el gate en su worktree.
+	conHook := cfg.Agents[agente].TieneHooks()
+	if conHook && !hookEn(p.root) && !hookEn(e.Worktree) {
+		return "", fmt.Errorf("el proyecto no tiene el hook de `orq gate` en .claude/settings.json: corre `orq init`; un worker %s no se lanza sin él", agente)
+	}
 	nombre := fmt.Sprintf("worker-%s-s%s", agente, e.NN)
 	dir := e.Worktree
 	var w *slice.Worker
@@ -280,12 +300,19 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 	} else if _, err := r.Tomar(e.NN, nombre, false); err != nil {
 		return "", err
 	}
+	if conHook {
+		if err := asegurarHook(dir, p.root); err != nil {
+			return "", fmt.Errorf("H-06: %v", err)
+		}
+	}
+	// Guardia del sistema operativo: el examen queda de solo lectura en el worktree del worker.
+	if err := protegerExamen(dir, e.Bundle); err != nil {
+		return "", fmt.Errorf("no se pudo proteger el examen en %s: %v", dir, err)
+	}
 	arranco := false
 	if tareaPl != nil {
-		if _, err := plan.Tomar(pl, tareaPl.ID, nombre); err != nil {
-			return "", err
-		}
-		if err := plan.Guardar(p.planPath(e.NN), pl); err != nil {
+		// Reserva bajo candado: otro lanzar concurrente no pisa esta reserva (H-04c).
+		if _, err := plan.Actualizar(p.planPath(e.NN), func(pl *plan.Plan) error { _, err := plan.Tomar(pl, tareaPl.ID, nombre); return err }); err != nil {
 			return "", err
 		}
 		// Si el worker no llega a arrancar, la tarea vuelve a pendiente: si no, nadie puede relanzarla.
@@ -293,11 +320,7 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 			if arranco {
 				return
 			}
-			if pl2, err := plan.Leer(p.planPath(e.NN)); err == nil {
-				if _, err := plan.Soltar(pl2, tareaPl.ID); err == nil {
-					plan.Guardar(p.planPath(e.NN), pl2)
-				}
-			}
+			plan.Actualizar(p.planPath(e.NN), func(pl2 *plan.Plan) error { _, err := plan.Soltar(pl2, tareaPl.ID); return err })
 		}()
 	}
 	contrato, err := p.contrato(e.NN, nombre, alcance, suite, pres)
@@ -305,33 +328,57 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 		return "", err
 	}
 	ses, _ := canal.LoadSesiones(p.sesPath())
-	registrarLlamador(ses, os.Getenv("ORQ_ROL"), herdr.CurrentPane(), time.Now())
-	env := map[string]string{"ORQ_ROL": nombre}
+	registrarLlamador(ses, os.Getenv("ORQ_ROL"), run.Current(), time.Now())
+	// ORQ_WORKER_ID y ORQ_ROL hacen del panel un worker: nunca resuelve stoppers ni cambia la autonomía.
+	// ORQ_TOKEN vacío: el token del Owner nunca llega a un worker. PATH antepone el shim de orq,
+	// que mantiene la identidad del worker y rechaza lo privilegiado aunque el agente no tenga hook (Codex).
+	env := map[string]string{"ORQ_ROL": nombre, "ORQ_WORKER_ID": nombre, "ORQ_TOKEN": ""}
+	if bin, err := escribirShim(p.dir, nombre); err == nil {
+		env["PATH"] = bin + string(os.PathListSeparator) + os.Getenv("PATH")
+	} else {
+		fmt.Fprintf(os.Stderr, "orq: worker shim not written: %v\n", err)
+	}
 	var pane, tab string
 	if otro, ok := panelDelSlice(ses, e.NN); ok {
 		tab = otro.Tab
-		pane, err = herdr.SplitDe(otro.Pane, dir, env)
+		pane, err = run.Split(otro.Pane, dir, env)
 	} else {
-		tab, pane, err = herdr.Tab(fmt.Sprintf("S-%s · %s", e.NN, orqdir.Slug(p.root)), dir, env)
+		tab, pane, err = run.Open(fmt.Sprintf("S-%s · %s", e.NN, orqdir.Slug(p.root)), dir, env)
 	}
 	if err != nil {
 		return "", err
 	}
-	if err := herdr.Start(nombre, agente, pane, workerArgs(agente, modelo, esfuerzo, nombre, dir)); err != nil {
+	la, err := cfg.Launch(el, nombre, agentes.Contexto{GitCommon: gitCommon(dir)}, "worker")
+	if err == nil {
+		err = run.Start(nombre, la, pane)
+	}
+	if err != nil {
 		// Sin contrato el agente no sirve aunque haya arrancado tarde: se cierra su panel.
-		if herdr.ClosePane(pane) != nil {
+		if run.Close(pane) != nil {
 			return "", fmt.Errorf("%v (el panel %s quedó abierto; ciérralo)", err, pane)
 		}
 		return "", fmt.Errorf("%v (panel %s cerrado; la tarea volvió a pendiente)", err, pane)
 	}
 	arranco = true
-	ses[nombre] = canal.Sesion{Agente: nombre, Pane: pane, Tab: tab, Desde: time.Now().UTC().Truncate(time.Second), Gen: 1}
+	// Estado vivo del worker (orq.worker/v1). exit_code queda null: ningún runner informa la salida
+	// del agente a orq (el proceso hijo lo espera en una goroutine que muere con este comando).
+	st := workers.State{ID: nombre, Slice: e.ID(), Agent: agente, Model: el.Model, Worktree: dir, Base: baseDe(e, w), BudgetMin: minutosDe(pres)}
+	if tareaPl != nil {
+		st.Task = tareaPl.ID
+	}
+	if err := workers.Launched(p.dir, st, time.Now()); err != nil {
+		fmt.Fprintf(os.Stderr, "orq: worker state not saved: %v\n", err)
+	}
+	ses[nombre] = canal.Sesion{Agente: nombre, Pane: pane, Tab: tab, Desde: time.Now().UTC().Truncate(time.Second), Gen: 1, Gate: gateDe(cfg, agente)}
 	canal.SaveSesiones(p.sesPath(), ses)
 	if tareaPl != nil {
 		contrato += fmt.Sprintf("\nTarea del plan: %s (%s). Al terminar avisa al Orquestador; él la marca hecha con `orq plan hecha %s`.\n", tareaPl.ID, tareaPl.Dificultad, tareaPl.ID)
 	}
 	prompt := contrato + "\nAntes de empezar corre `orq skill worker` y sigue esa guía. Cuando termines, pide verificación por el canal.\n"
-	if err := herdr.Prompt(nombre, prompt); err != nil {
+	if !conHook {
+		prompt += "\nGate: post-only. Este agente no pasa por `orq gate`: el examen es de solo lectura y verificar/juntar rechazan cualquier cambio fuera de tu alcance o al examen.\n"
+	}
+	if err := run.Prompt(nombre, prompt); err != nil {
 		return nombre, fmt.Errorf("worker abierto pero no recibió el contrato: %v", err)
 	}
 	return nombre, nil
@@ -350,20 +397,20 @@ func registrarLlamador(ses map[string]canal.Sesion, rol, pane string, now time.T
 	ses[rol] = canal.Sesion{Agente: pane, Pane: pane, Desde: now.UTC().Truncate(time.Second), Gen: ses[rol].Gen}
 }
 
-// workerArgs suma a un worker Codex lo que su tarea necesita sin pedir aprobación a cada paso:
-// escribir en su worktree y en el git común (git add/commit en un worktree enlazado) y red, para
-// las pruebas contra la base de prueba local. Lo demás sigue pidiendo aprobación.
-func workerArgs(kind, modelo, esfuerzo, name, dir string) []string {
-	args := agentArgs(kind, modelo, esfuerzo, name)
-	if kind != "codex" {
-		return args
+// baseDe: rama desde la que se cuentan los commits del worker (la del slice si trabaja en zona).
+func baseDe(e *slice.Estado, w *slice.Worker) string {
+	if w != nil {
+		return e.Rama
 	}
-	args = append(args, "-s", "workspace-write", "-a", "on-request",
-		"-c", "sandbox_workspace_write.network_access=true")
-	if out, err := exec.Command("git", "-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir").Output(); err == nil {
-		if common := strings.TrimSpace(string(out)); common != "" {
-			args = append(args, "--add-dir", common)
-		}
+	return e.Base
+}
+
+// minutosDe lee "45 min" / "45" como minutos; otra unidad (tokens) deja 0.
+func minutosDe(pres string) int {
+	f := strings.Fields(pres)
+	if len(f) == 0 || (len(f) > 1 && !strings.HasPrefix(f[1], "min")) {
+		return 0
 	}
-	return args
+	n, _ := strconv.Atoi(f[0])
+	return n
 }

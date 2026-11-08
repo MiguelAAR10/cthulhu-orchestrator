@@ -23,14 +23,10 @@ func repo(t *testing.T, files map[string]string) string {
 	return root
 }
 
-func TestRepoVacioEsNuevoYSoloLlevaLaBase(t *testing.T) {
+func TestRepoVacioEsNuevoSinSenales(t *testing.T) {
 	p := Detect(repo(t, map[string]string{"README.md": "x"}))
 	if p.Modo != "nuevo" || len(p.Senales) != 0 {
 		t.Fatalf("%+v", p)
-	}
-	r := Recomendadas(p)
-	if len(r) != 2 || !slices.Contains(r["obra/superpowers"], "test-driven-development") || !slices.Contains(r["mattpocock/skills"], "grill-with-docs") || !slices.Contains(r["mattpocock/skills"], "codebase-design") {
-		t.Fatalf("%v", r)
 	}
 }
 
@@ -43,19 +39,12 @@ func TestReactConCodigoEsMejoraYActivaSkillsDeReactYWeb(t *testing.T) {
 	if p.Modo != "mejora" || !slices.Contains(p.Senales, "react") || !slices.Contains(p.Senales, "web") {
 		t.Fatalf("%+v", p)
 	}
-	r := Recomendadas(p)
-	if !slices.Contains(r["vercel-labs/agent-skills"], "vercel-react-best-practices") || !slices.Contains(r["microsoft/playwright-cli"], "playwright-cli") {
-		t.Fatalf("%v", r)
+	var n []string
+	for _, s := range Lista(p) {
+		n = append(n, s.Nombre)
 	}
-	if slices.Contains(r["mattpocock/skills"], "codebase-design") || !slices.Contains(r["mattpocock/skills"], "improve-codebase-architecture") {
-		t.Fatalf("modo mal aplicado: %v", r)
-	}
-}
-
-func TestComandoEsPorProyecto(t *testing.T) {
-	c := ComandoInstalar("mattpocock/skills", []string{"tdd", "handoff"})
-	if slices.Contains(c, "-g") || !slices.Contains(c, "handoff") {
-		t.Fatalf("%v", c)
+	if !slices.Contains(n, "vercel-react-best-practices") || !slices.Contains(n, "playwright-cli") || slices.Contains(n, "codebase-design") || !slices.Contains(n, "improve-codebase-architecture") {
+		t.Fatalf("%v", n)
 	}
 }
 
@@ -78,9 +67,6 @@ func TestCatalogoSinProhibidasYConDependencias(t *testing.T) {
 		if !nombres[s] {
 			t.Errorf("falta %s", s)
 		}
-	}
-	if w := ParaRol(ls, "worker"); len(w) == 0 || slices.ContainsFunc(w, func(s Skill) bool { return s.Nombre == "grilling" }) {
-		t.Fatalf("worker: %+v", w)
 	}
 }
 
@@ -106,5 +92,20 @@ func TestVerificarDetectaFaltaDepCambioYNunca(t *testing.T) {
 	ps = Verificar(root, ls[:1], map[string]Fijada{"grill-with-docs": {Huella: h}})
 	if !slices.ContainsFunc(ps, func(p Problema) bool { return p.Tipo == "CAMBIO" }) {
 		t.Fatalf("%+v", ps)
+	}
+}
+
+func TestCriticalityAccessor(t *testing.T) {
+	dir := t.TempDir()
+	if v, _ := Criticality(dir); v != "" {
+		t.Fatalf("sin nada: %q", v)
+	}
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"project":{"criticality":"high"}}`), 0o644)
+	if v, note := Criticality(dir); v != "high" || note == "" {
+		t.Fatalf("legado: %q %q", v, note)
+	}
+	os.WriteFile(filepath.Join(dir, "profile.json"), []byte(`{"criticality":"low"}`), 0o644)
+	if v, note := Criticality(dir); v != "low" || note != "" {
+		t.Fatalf("profile gana: %q %q", v, note)
 	}
 }

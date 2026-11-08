@@ -6,14 +6,15 @@ package gate
 
 import (
 	"fmt"
+	"orq/internal/lang"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
+	"orq/internal/admision"
 	"orq/internal/limits"
-	"orq/internal/state"
 )
 
 type Payload struct {
@@ -34,6 +35,12 @@ type Env struct {
 	IsWorktree func(string) bool
 	// Bundle devuelve el paquete del examen del slice abierto (rutas relativas a la raíz), si lo hay.
 	Bundle func(cwd string) []string
+	// Worktrees cuenta los worktrees que orq registró en el proyecto de cwd (max_worktrees).
+	Worktrees func(cwd string) (int, error)
+	// Rol es ORQ_ROL de la sesión: tester es de solo lectura; repairer no toca el examen fijado.
+	Rol string
+	// WorkerID es ORQ_WORKER_ID del agente: si lo hay, es un worker aunque su cwd sea el checkout principal.
+	WorkerID string
 }
 
 type Decision struct {
@@ -54,10 +61,20 @@ var launchRe = regexp.MustCompile(
 		`|claude(\s+\S+)*\s+(-p|--print)(\s|$))`)
 
 func Evaluate(p Payload, l limits.Limits, env Env) Decision {
+	if esWorker(p, env) {
+		if d, ok := workerLee(p); ok {
+			return d
+		}
+	}
 	if p.ToolName == "Bash" {
 		cmd, _ := p.ToolInput["command"].(string)
 		if pushPermitido(cmd, p.Cwd, l.PushRamas) {
 			return allow()
+		}
+		if esWorker(p, env) {
+			if d, ok := workerOrq(cmd); ok {
+				return d
+			}
 		}
 		p.ToolInput = map[string]any{"command": Normalizar(cmd)}
 	}
@@ -67,8 +84,11 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 	if d, ok := soloOrquestador(p, env); ok {
 		return d
 	}
+	if d, ok := soloLectura(p, env); ok {
+		return d
+	}
 	if target, ok := protectedTarget(p, l, env); ok {
-		return deny("orq: %q está protegido dentro de un worktree. Solo el orquestador, desde el checkout principal, lo edita.", target)
+		return deny(lang.T("orq: %q is protected inside a worktree. Only the orchestrator, from the main checkout, edits it.", "orq: %q está protegido dentro de un worktree. Solo el orquestador, desde el checkout principal, lo edita."), target)
 	}
 	if !isLaunch(p) {
 		return allow()
@@ -87,39 +107,17 @@ func isLaunch(p Payload) bool {
 	return false
 }
 
+// evaluateLaunch delega en admision, la misma puerta que usa `orq slice lanzar`.
 func evaluateLaunch(p Payload, l limits.Limits, env Env) Decision {
 	if p.AgentID != "" {
-		return deny("orq: un subagente no lanza workers. Devuelve el resultado al orquestador.")
+		return deny("%s", lang.T("orq: a subagent does not launch workers. Return your result to the orchestrator.", "orq: un subagente no lanza workers. Devuelve el resultado al orquestador."))
 	}
-	if reason, halted := state.ReadHalt(env.StateDir); halted {
-		return deny("orq: HALT activo (%s). Libera espacio y luego `orq halt --clear`.", reason)
+	ae := admision.Env{DiskFreeGB: env.DiskFreeGB, Workers: env.Workers, Now: env.Now, StateDir: env.StateDir}
+	if env.Worktrees != nil {
+		ae.Worktrees = func() (int, error) { return env.Worktrees(p.Cwd) }
 	}
-	for path, min := range l.MinFreeGB {
-		free, err := env.DiskFreeGB(path)
-		if err != nil {
-			return deny("orq: no pude medir el disco en %s (%v). Sin dato no hay lanzamiento.", path, err)
-		}
-		if free < min {
-			return deny("orq: %s tiene %.0f GB libres y el mínimo es %.0f GB. Libera espacio antes de lanzar.", path, free, min)
-		}
-	}
-	snap, err := state.LoadSnapshot(env.StateDir)
-	if err != nil {
-		return deny("orq: falta la medición de scratch. Ejecuta `orq watch` y vuelve a intentar.")
-	}
-	age := env.Now().Sub(snap.TS)
-	if age > time.Duration(*l.StateMaxAgeHours*float64(time.Hour)) {
-		return deny("orq: la medición de scratch tiene %.0f h. Ejecuta `orq watch` y vuelve a intentar.", age.Hours())
-	}
-	if snap.ScratchGB > *l.Scratch.QuotaGB {
-		return deny("orq: scratch ocupa %.0f GB y la cuota es %.0f GB. Limpia snapshots antes de lanzar.", snap.ScratchGB, *l.Scratch.QuotaGB)
-	}
-	n, err := env.Workers()
-	if err != nil {
-		return deny("orq: no pude contar workers (%v). Sin dato no hay lanzamiento.", err)
-	}
-	if n >= *l.MaxWorkers {
-		return deny("orq: hay %d worker(s) vivos y el tope es %d. Cierra paneles antes de lanzar otro.", n, *l.MaxWorkers)
+	if err := admision.Evaluar(l, ae); err != nil {
+		return deny("%s.", err.Error())
 	}
 	return allow()
 }
@@ -128,7 +126,7 @@ func evaluateLaunch(p Payload, l limits.Limits, env Env) Decision {
 // tanto con Edit/Write como con redirecciones, comandos e intérpretes en Bash.
 // Las rutas se resuelven de verdad: contra el cwd, tras `cd`, y siguiendo enlaces simbólicos.
 func protectedTarget(p Payload, l limits.Limits, env Env) (string, bool) {
-	if !env.IsWorktree(p.Cwd) {
+	if !env.IsWorktree(p.Cwd) && env.Rol != "repairer" {
 		return "", false
 	}
 	pats := append([]string{}, l.Protected...)
@@ -268,7 +266,7 @@ var (
 // Normalizar quita lo que sirve para esquivar los patrones: comillas (sh -c '...'),
 // rutas absolutas a binarios y opciones globales antes del subcomando.
 func Normalizar(cmd string) string {
-	c := comillasRe.ReplaceAllString(cmd, " ")
+	c := comillasRe.ReplaceAllString(strings.ReplaceAll(cmd, `\`, ""), " ")
 	c = rutaBinRe.ReplaceAllString(c, "$1$2")
 	c = gitOptRe.ReplaceAllString(c, "git")
 	c = orqOptRe.ReplaceAllString(c, "orq")
@@ -280,13 +278,14 @@ func Normalizar(cmd string) string {
 var destructivoRe = []struct {
 	re  *regexp.Regexp
 	por string
+	en  string
 }{
-	{regexp.MustCompile(`git\s+push\s+.*(--force|-f\b|--force-with-lease|\+\S+:)`), "push forzado"},
-	{regexp.MustCompile(`git\s+push\b`), "push: el harness es local, publicar lo decide el Owner"},
-	{regexp.MustCompile(`git\s+branch\s+.*(-D\b|--delete\s+--force|-d\s+-f|-df|-fd)`), "borrar una rama a la fuerza; usa -d o deja que `orq slice cerrar` la mande a cuarentena"},
-	{regexp.MustCompile(`git\s+worktree\s+(remove|prune)\s+.*(--force|-f\b)`), "quitar un worktree a la fuerza"},
-	{regexp.MustCompile(`git\s+(reset\s+.*--hard|clean\s+.*(-[a-zA-Z]*f|--force)|checkout\s+.*(-f\b|--force))`), "descartar trabajo sin respaldo"},
-	{regexp.MustCompile(`\brm\s+.*(worktrees|\.orq|\.git)\b`), "borrar worktrees, .orq o .git con rm"},
+	{regexp.MustCompile(`git\s+push\s+.*(--force|-f\b|--force-with-lease|\+\S+:)`), "push forzado", "forced push"},
+	{regexp.MustCompile(`git\s+push\b`), "push: el harness es local, publicar lo decide el Owner", "push: the harness is local; publishing is the Owner's call"},
+	{regexp.MustCompile(`git\s+branch\s+.*(-D\b|--delete\s+--force|-d\s+-f|-df|-fd)`), "borrar una rama a la fuerza; usa -d o deja que `orq slice cerrar` la mande a cuarentena", "force-deleting a branch; use -d or let `orq slice close` quarantine it"},
+	{regexp.MustCompile(`git\s+worktree\s+(remove|prune)\s+.*(--force|-f\b)`), "quitar un worktree a la fuerza", "force-removing a worktree"},
+	{regexp.MustCompile(`git\s+(reset\s+.*--hard|clean\s+.*(-[a-zA-Z]*f|--force)|checkout\s+.*(-f\b|--force))`), "descartar trabajo sin respaldo", "discarding work without a backup"},
+	{regexp.MustCompile(`\brm\s+.*(worktrees|\.orq|\.git)\b`), "borrar worktrees, .orq o .git con rm", "deleting worktrees, .orq or .git with rm"},
 }
 
 // pushRamaRe: un solo comando, sin comillas ni encadenados: `git [-C dir] push [-u] remoto rama`.
@@ -322,25 +321,64 @@ func destructivo(p Payload) (Decision, bool) {
 	cmd, _ := p.ToolInput["command"].(string)
 	for _, d := range destructivoRe {
 		if d.re.MatchString(cmd) {
-			return deny("orq: bloqueado (%s). Si de verdad hace falta, lo hace el Owner a mano.", d.por), true
+			return deny(lang.T("orq: blocked (%s). If it is really needed, the Owner does it by hand.", "orq: bloqueado (%s). Si de verdad hace falta, lo hace el Owner a mano."), lang.T(d.en, d.por)), true
 		}
 	}
 	return Decision{}, false
 }
 
 // soloOrqRe: transiciones que solo pide el Orquestador desde el checkout principal.
-var soloOrqRe = regexp.MustCompile(`(^|[\s;&|(])orq\s+(slice\s+(abrir|cerrar|reintentar|tomar|lanzar|juntar)|plan\s+(cargar|hecha|debatido)|sesion\s+(abrir|cerrar)|aprender\s+promover|msg\s+send\s+.*--tipo\s+cierre|halt\s+--clear)`)
+// Both the English names and their Spanish aliases.
+var soloOrqRe = regexp.MustCompile(`(^|[\s;&|(])orq\s+(slice\s+(abrir|cerrar|reintentar|tomar|lanzar|juntar|examen|alcance|open|close|retry|take|launch|merge|exam|scope)\b|plan(\s+--slice\s+\S+)?\s+(cargar|hecha|debatido|load|done|debated)\b|(sesion|session)\s+(abrir|cerrar|open|close)\b|(aprender|learn)\s+(promover|promote)\b|msg\s+send\s+.*--(tipo|type)(\s+|=)(cierre|closing)\b|halt\s+--clear|qa\s+run)`)
+
+// indirectoRe: en un worker, el nombre del comando no sale de una variable ni de eval, y orq no
+// se invoca a través de sh -c ni xargs (así no se esquiva soloOrqRe con o=orq; $o slice exam).
+var (
+	varComandoRe = regexp.MustCompile("(^|[;&|(`\\n]|\\$\\()\\s*(\\w+=\\S*\\s+)*(\\$|eval\\b)")
+	shellOrqRe   = regexp.MustCompile(`\b((ba|z|da|k)?sh\s+-\w*c\b|xargs\b|exec\b|env\b|command\b|nohup\b|timeout\b)[^;&|]*orq\b`)
+)
 
 func soloOrquestador(p Payload, env Env) (Decision, bool) {
 	if p.ToolName != "Bash" {
 		return Decision{}, false
 	}
 	cmd, _ := p.ToolInput["command"].(string)
+	worker := esWorker(p, env)
+	if worker && (varComandoRe.MatchString(cmd) || shellOrqRe.MatchString(cmd)) {
+		return deny("%s", lang.T("orq: a worker runs commands by name: no variable or eval as the command, and no orq through sh -c or xargs.", "orq: un worker corre comandos por su nombre: sin variable ni eval como comando, y sin orq a través de sh -c o xargs.")), true
+	}
 	if !soloOrqRe.MatchString(cmd) {
 		return Decision{}, false
 	}
-	if p.AgentID != "" || env.IsWorktree(p.Cwd) {
-		return deny("orq: un worker no abre, toma, reintenta ni cierra slices. Pide verificación al Orquestador con tu resultado."), true
+	if worker {
+		return deny("%s", lang.T("orq: a worker does not open, take, retry or close slices, nor change its exam or scope. Ask the Orchestrator for verification with your result.", "orq: un worker no abre, toma, reintenta ni cierra slices, ni cambia su examen o alcance. Pide verificación al Orquestador con tu resultado.")), true
+	}
+	return Decision{}, false
+}
+
+// escrituraRe: comandos que cambian el repo o el disco aunque no nombren un destino con >.
+var escrituraRe = regexp.MustCompile(`(^|[\s;&|(])(git\s+(add|commit|checkout|switch|restore|reset|rm|mv|apply|clean|stash|merge|rebase|cherry-pick|revert|tag|branch|worktree|am|pull|fetch)` +
+	`|mkdir|rmdir|chown|patch|npm\s+(i|install|ci|uninstall)|pnpm\s+(i|install|add)|yarn\s+add|pip3?\s+install|go\s+(get|mod\s+tidy)|gofmt\s+-w|prettier\s+--write|eslint\s+--fix)\b`)
+
+// soloLectura: el tester (ORQ_ROL=tester) lee, corre pruebas y registra hallazgos con orq; nunca escribe.
+func soloLectura(p Payload, env Env) (Decision, bool) {
+	if env.Rol != "tester" {
+		return Decision{}, false
+	}
+	no := deny("%s", lang.T("orq: the tester is read-only. Record what you find with `orq qa finding add`; the repairer repairs.", "orq: el tester es de solo lectura. Registra lo que encuentres con `orq qa finding add`; repara el repairer."))
+	switch p.ToolName {
+	case "Edit", "Write", "MultiEdit", "NotebookEdit":
+		return no, true
+	case "Bash":
+		cmd, _ := p.ToolInput["command"].(string)
+		for _, t := range shellWriteTargets(cmd, p.Cwd) {
+			if t != "/dev/null" {
+				return no, true
+			}
+		}
+		if escrituraRe.MatchString(cmd) || interpreteRe.MatchString(cmd) {
+			return no, true
+		}
 	}
 	return Decision{}, false
 }

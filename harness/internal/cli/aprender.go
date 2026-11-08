@@ -65,7 +65,7 @@ func runAprender(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "add":
-		fs := flag.NewFlagSet("aprender add", flag.ContinueOnError)
+		fs := nuevoFS("aprender add", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		ev := fs.String("evidencia", "", "recibo, commit o S-NN/aK que la respalda")
 		fuente := fs.String("fuente", "orquestador", "quién la aprendió")

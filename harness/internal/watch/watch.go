@@ -14,7 +14,8 @@ import (
 
 type Result struct {
 	Snapshot state.Snapshot
-	Halt     string // vacío si no hay motivo de HALT
+	Halt     string   // vacío si no hay motivo de HALT
+	Avisos   []string // disco bajo el mínimo de lanzamiento: avisa, no detiene
 }
 
 func Run(l limits.Limits, stateDir string, now time.Time) (Result, error) {
@@ -29,12 +30,16 @@ func Run(l limits.Limits, stateDir string, now time.Time) (Result, error) {
 		snap.ScratchGB += gb
 	}
 	var halt string
-	for path := range l.MinFreeGB {
+	var avisos []string
+	for path, min := range l.MinFreeGB {
 		free, err := sysinfo.FreeGB(path)
 		if err != nil {
 			continue
 		}
 		snap.DiskFreeGB[path] = free
+		if free < min {
+			avisos = append(avisos, fmt.Sprintf("disco bajo: %s con %.0f GB libres (mínimo para lanzar %.0f GB). Corre `orq gc`", path, free, min))
+		}
 		if free < *l.Scratch.CriticalFreeGB && halt == "" {
 			halt = fmt.Sprintf("disco crítico: %s con %.0f GB libres (crítico %.0f GB)", path, free, *l.Scratch.CriticalFreeGB)
 		}
@@ -50,5 +55,5 @@ func Run(l limits.Limits, stateDir string, now time.Time) (Result, error) {
 			return Result{}, err
 		}
 	}
-	return Result{Snapshot: snap, Halt: halt}, nil
+	return Result{Snapshot: snap, Halt: halt, Avisos: avisos}, nil
 }

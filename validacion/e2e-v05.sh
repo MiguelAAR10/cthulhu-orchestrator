@@ -4,14 +4,20 @@
 # relevo sin duplicar → cierre interrumpido de verdad en cada etapa y retomado.
 # Uso: validacion/e2e-v05.sh [carpeta-temporal]. No toca nada fuera de esa carpeta.
 set -u
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BASE="${1:-$(mktemp -d)}"
 mkdir -p "$BASE" && cd "$BASE" || exit 1
-export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID=""
+export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID="" ORQ_LANG=es   # asserts Spanish messages
+export XDG_CONFIG_HOME="$BASE/config" ORQ_TOKEN="" ORQ_WORKER_ID="" ORQ_SHIM=""   # token del Owner hermético
 mkdir -p "$BASE/bin" && printf '#!/bin/sh\nexit 1\n' > "$BASE/bin/claude" && chmod +x "$BASE/bin/claude"
 export PATH="$BASE/bin:$PATH"   # el escriba no responde: todo debe funcionar igual
+# Siempre prueba el código de este repo, nunca un orq viejo del PATH (ORQ_BIN lo sobrescribe).
+if [ -n "${ORQ_BIN:-}" ]; then cp "$ORQ_BIN" "$BASE/bin/orq"; else (cd "$REPO/harness" && go build -o "$BASE/bin/orq" ./cmd/orq) || exit 1; fi
+[ "$(command -v orq)" = "$BASE/bin/orq" ] || { echo "orq no es el binario del repo"; exit 1; }
 pasa=0; falla=0
 ok() { if [ "$1" = "$2" ]; then pasa=$((pasa+1)); echo "  ✓ $3"; else falla=$((falla+1)); echo "  ✗ $3 (esperaba $2, salió $1)"; fi; }
 q() { orq "$@" >/tmp/orq-e2e.$$ 2>&1; echo $?; }
+gate0() { printf '{"tool_name":"%s","cwd":"%s","tool_input":%s}' "$1" "$2" "$3" | orq gate >/dev/null 2>&1; echo $?; }
 
 git init -q -b main tienda && cd tienda && git config user.email t@t && git config user.name t
 examen() { # examen NN: TAP; pasa cuando vNN.txt dice ok
@@ -22,6 +28,10 @@ EOT
   git add -A && git commit -qm "test(S-$1): rojo"
 }
 orq init --modo=nuevo >/dev/null 2>&1; git add -A; git commit -qm "chore: orq init" >/dev/null
+orq token >/dev/null   # primera vez: crea el token y ancla el shell de este script como sesión del Owner
+export ORQ_TOKEN="$(orq token)"   # el script actúa como el Owner/Orquestador
+ok "$(q session register --pid $$)" 0 "el Owner ancla la sesión del script (sin TTY también vale)"
+ok "$(ORQ_TOKEN= q slice cerrar --aceptado)" 1 "sin el token del Owner no se cierra"
 
 echo "== S-01: rojo, trampa, reintento, recibo"
 examen 01
@@ -43,7 +53,18 @@ antes=$(git worktree list | wc -l)
 ok "$(q relevo --solo-archivo orquestador)" 0 "relevo escrito aunque el escriba falle"
 grep -q "no crear otro" .orq/relevo-orquestador.md; ok $? 0 "el relevo dice que siga en el mismo worktree"
 ok "$(git worktree list | wc -l)" "$antes" "el relevo no creó worktrees"
+echo "== S-01: QA independiente"
+ok "$(q slice cerrar --aceptado)" 1 "criticidad medium: sin recibo QA no cierra"
+grep -q '"qa"' .orq/config.json 2>/dev/null && { echo "config.json ya trae qa: ajusta el e2e"; exit 1; }
+printf '{"sync":"local","qa":{"layers":[{"name":"unit","cmd":"sh tests/s01.sh"},{"name":"mutation","cmd":"false","min_criticality":"high"}]}}\n' > .orq/config.json
+ok "$(ORQ_ROL=tester gate0 Write "$W" '{"file_path":"v01.txt"}')" 2 "gate: el tester no escribe"
+ok "$(ORQ_ROL=tester gate0 Bash "$W" '{"command":"sh tests/s01.sh"}')" 0 "gate: el tester sí prueba"
+ok "$(q qa finding add S-01 --requirement R1 --repro true)" 1 "hallazgo incompleto rechazado"
+ok "$(q qa finding add S-01 --requirement R1 --commit x --repro true --observed o --expected e --impact i)" 0 "hallazgo con repro que pasa: no confirmado"
+ok "$(q qa run S-01)" 0 "QA verde; mutation omitida en medium"
+grep -q '"skipped": true' .orq/qa/S-01/receipt.json; ok $? 0 "el recibo QA registra la capa omitida"
 ok "$(q slice cerrar --aceptado)" 0 "cierra aceptado"
+printf '{"sync":"local","criticality":"low"}\n' > .orq/config.json   # el resto del e2e prueba el cierre, no QA
 
 n=2
 for etapa in integrar integrado publicado limpiando; do

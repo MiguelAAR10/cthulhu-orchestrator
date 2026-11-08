@@ -6,20 +6,27 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"orq/internal/agentes"
+	"orq/internal/identidad"
+	"orq/internal/lang"
 	"orq/internal/plan"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"orq/internal/canal"
+	"orq/internal/config"
 	"orq/internal/escriba"
+	"orq/internal/gate"
 	"orq/internal/herdr"
 	"orq/internal/limits"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
+	"orq/internal/qa"
 	"orq/internal/slice"
 	"orq/internal/state"
 )
@@ -57,6 +64,9 @@ func (p proyecto) slices() slice.Repo {
 
 // excluir deja .orq fuera de git sin tocar archivos versionados del proyecto.
 func (p proyecto) excluir() error {
+	if cfg, _ := config.Load(p.dir); cfg.SyncMode() == "commit" {
+		return nil // sync=commit: .orq se versiona; .gitignore ya excluye lo efímero
+	}
 	path := filepath.Join(p.root, ".git", "info", "exclude")
 	raw, _ := os.ReadFile(path)
 	if strings.Contains(string(raw), "/.orq/") {
@@ -93,20 +103,25 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "add":
-		fs := flag.NewFlagSet("mem add", flag.ContinueOnError)
+		fs := nuevoFS("mem add", flag.ContinueOnError)
 		fs.SetOutput(stderr)
-		imp := fs.String("imp", "", strings.Join(memoria.Imps, "|"))
-		cat := fs.String("cat", "", strings.Join(memoria.Cats, "|"))
-		fuente := fs.String("fuente", os.Getenv("ORQ_ROL"), strings.Join(memoria.Fuentes, "|"))
+		imp := fs.String("imp", "", memoria.Opciones(memoria.Imps))
+		cat := fs.String("cat", "", memoria.Opciones(memoria.Cats))
+		fuente := fs.String("fuente", os.Getenv("ORQ_ROL"), memoria.Opciones(memoria.Fuentes))
 		sl := fs.String("slice", "", "S-NN")
-		tipo := fs.String("tipo", "", strings.Join(memoria.Tipos, "|"))
+		tipo := fs.String("tipo", "", memoria.Opciones(memoria.Tipos))
 		ev := fs.String("evidencia", "", "recibo, commit, archivo:línea o id de mensaje")
 		vence := fs.String("vence", "", "S-NN: deja de valer al cerrarse ese slice")
 		reemplaza := fs.String("reemplaza", "", "id que este hecho deja obsoleto")
 		if fs.Parse(args[1:]) != nil {
 			return 1
 		}
-		it, n, err := memoria.Add(p.memPath(), memoria.Item{Imp: *imp, Cat: *cat, Fuente: *fuente, Slice: *sl, Tipo: *tipo, Evidencia: *ev, Vence: *vence, Reemplaza: *reemplaza, Texto: texto(fs.Args(), stdin)}, time.Now())
+		por := p.rolPrivilegiado()
+		if err := fuentePermitida(*fuente, por); err != nil {
+			fmt.Fprintln(stderr, "orq mem:", err)
+			return 1
+		}
+		it, n, err := memoria.Add(p.memPath(), memoria.Item{Imp: *imp, Cat: *cat, Fuente: *fuente, Slice: *sl, Tipo: *tipo, Evidencia: *ev, Vence: *vence, Reemplaza: *reemplaza, Texto: texto(fs.Args(), stdin), Por: por}, time.Now())
 		if err != nil {
 			fmt.Fprintln(stderr, "orq mem:", err)
 			return 1
@@ -117,7 +132,7 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "ver":
-		fs := flag.NewFlagSet("mem ver", flag.ContinueOnError)
+		fs := nuevoFS("mem ver", flag.ContinueOnError)
 		cat := fs.String("cat", "", "filtra por categoría")
 		if fs.Parse(args[1:]) != nil {
 			return 1
@@ -165,7 +180,7 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "memoria compactada: %d → %d líneas (copia previa: %s)\n", len(items), len(res), bak)
 		return 0
 	}
-	fmt.Fprint(stderr, usage)
+	fmt.Fprint(stderr, usageText())
 	return 1
 }
 
@@ -187,7 +202,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "send":
-		fs := flag.NewFlagSet("msg send", flag.ContinueOnError)
+		fs := nuevoFS("msg send", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		para := fs.String("para", "", "atena|orquestador")
 		tipo := fs.String("tipo", "", strings.Join(canal.Tipos, "|"))
@@ -198,11 +213,28 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if fs.Parse(args[1:]) != nil {
 			return 1
 		}
+		// Un worker (por entorno, ancestro o worktree) solo pregunta, responde o informa estado,
+		// y firma como sí mismo: cierre, historia y plan son de los roles de sesión.
+		if r := p.rolStop(); strings.HasPrefix(r, "worker") {
+			if !slices.Contains([]string{"pregunta", "respuesta", "estado"}, *tipo) {
+				fmt.Fprintf(stderr, "orq msg: a worker (%s) only sends pregunta|respuesta|estado (question|answer|status), not %q\n", r, *tipo)
+				return 1
+			}
+			if id, ok := workerEfectivo(); ok && id != "worktree" && id != "shim" {
+				*de = id
+			} else {
+				*de = r
+			}
+		}
 		if *de == "" {
 			*de = os.Getenv("ORQ_ROL")
 		}
 		if *de == "" {
-			*de = canal.RolDePane(ses, herdr.CurrentPane())
+			*de = canal.RolDePane(ses, rn().Current())
+		}
+		if err := fuentePermitida(*de, p.rolPrivilegiado()); err != nil {
+			fmt.Fprintln(stderr, "orq msg:", err)
+			return 1
 		}
 		m := canal.Msg{TS: time.Now().UTC().Truncate(time.Second), De: *de, Para: *para, Tipo: *tipo, Texto: texto(fs.Args(), stdin), Ref: *ref, Clave: *clave}
 		var e *slice.Estado
@@ -246,7 +278,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "guardado como %s, pendiente; %s aún no tiene sesión (orq up)\n", m.ID, *para)
 			return 0
 		}
-		if err := herdr.Prompt(dest.Agente, m.Format()); err != nil {
+		if err := rn().Prompt(dest.Agente, m.Format()); err != nil {
 			if errors.Is(err, herdr.ErrTimeout) {
 				fmt.Fprintf(stderr, "%s guardado; herdr no respondió: puede haber llegado o no. Revisa y usa `orq msg reconciliar`, no lo reenvíes a ciegas\n", m.ID)
 			} else {
@@ -274,7 +306,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 					fmt.Fprintf(stderr, "%s no tiene sesión\n", m.Para)
 					return 1
 				}
-				if err := herdr.Prompt(dest.Agente, m.Format()); err != nil {
+				if err := rn().Prompt(dest.Agente, m.Format()); err != nil {
 					fmt.Fprintln(stderr, err)
 					return 4
 				}
@@ -295,12 +327,13 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "si el destino no lo recibió: orq msg reconciliar --reenviar ID")
 		return 3
 	case "leer":
-		fs := flag.NewFlagSet("msg leer", flag.ContinueOnError)
+		fs := nuevoFS("msg leer", flag.ContinueOnError)
 		n := fs.Int("n", 10, "últimos N")
 		if fs.Parse(args[1:]) != nil {
 			return 1
 		}
 		ms, err := canal.Load(p.canalPath())
+		ms = canal.Vigentes(ms)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -309,11 +342,11 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			ms = ms[len(ms)-*n:]
 		}
 		for _, m := range ms {
-			fmt.Fprintf(stdout, "%s %s→%s [%s] %s\n", m.TS.Local().Format("02-01 15:04"), m.De, m.Para, m.Tipo, m.Texto)
+			fmt.Fprintf(stdout, "%s %s→%s [%s] %s\n", m.TS.Local().Format("02-01 15:04"), verNombre(m.De), verNombre(m.Para), verNombre(m.Tipo), m.Texto)
 		}
 		return 0
 	}
-	fmt.Fprint(stderr, usage)
+	fmt.Fprint(stderr, usageText())
 	return 1
 }
 
@@ -325,43 +358,10 @@ type arranque struct {
 
 func flagsArranque(fs *flag.FlagSet) *arranque {
 	a := &arranque{}
-	fs.StringVar(&a.kind, "kind", "", "agente de herdr: claude|codex (por defecto, el del rol)")
+	fs.StringVar(&a.kind, "kind", "", "agente de orq.agents.json (por defecto, el del rol)")
 	fs.StringVar(&a.modelo, "modelo", "", "modelo (por defecto, el del rol)")
 	fs.StringVar(&a.esfuerzo, "esfuerzo", "", "esfuerzo (por defecto, el del rol)")
 	return a
-}
-
-// Cada rol tiene su agente por defecto. El Orquestador solo reparte: no necesita el modelo más caro.
-// El Planificador piensa el plan: Opus. Astra mejora el plan desde otro proveedor: gpt-6-astra.
-var porRol = map[string]arranque{
-	"orquestador":  {"claude", "sonnet", "medium"},
-	"planificador": {"claude", "opus", "high"},
-	"astra":        {"codex", "gpt-6-astra", "high"},
-	"atena":        {"claude", "opus", "medium"},
-}
-
-func (a *arranque) completar(rol string) {
-	d := porRol[rol]
-	if a.kind == "" {
-		a.kind = d.kind
-	}
-	if a.kind != d.kind && a.modelo == "" { // otro proveedor: su modelo por defecto
-		a.modelo = map[string]string{"claude": "opus", "codex": "gpt-6.1-sol"}[a.kind]
-	}
-	if a.modelo == "" {
-		a.modelo = d.modelo
-	}
-	if a.esfuerzo == "" {
-		a.esfuerzo = d.esfuerzo
-	}
-}
-
-// agentArgs traduce modelo y esfuerzo a cada CLI.
-func agentArgs(kind, modelo, esfuerzo, name string) []string {
-	if kind == "codex" {
-		return []string{"-m", modelo, "-c", "model_reasoning_effort=" + esfuerzo}
-	}
-	return []string{"--model", modelo, "--effort", esfuerzo, "-n", name}
 }
 
 // etiqueta es el nombre tipado de la pestaña de cada rol: «<rol> · <proyecto>».
@@ -390,39 +390,53 @@ func lanzar(p proyecto, ses map[string]canal.Sesion, rol string, a *arranque) (c
 	if gen > 1 {
 		name = fmt.Sprintf("%s-%d", name, gen)
 	}
-	a.completar(rol)
-	env := map[string]string{"ORQ_ROL": rol}
+	cfg, err := p.agentes()
+	if err != nil {
+		return canal.Sesion{}, err
+	}
+	el, err := a.eleccion(cfg, rol)
+	if err != nil {
+		return canal.Sesion{}, err
+	}
+	l, err := cfg.Launch(el, name, agentes.Contexto{GitCommon: gitCommon(p.root), Parent: filepath.Dir(p.root)}, "role")
+	if err != nil {
+		return canal.Sesion{}, err
+	}
+	env := map[string]string{"ORQ_ROL": rol, "ORQ_TOKEN": ""}
+	// Solo el Orquestador y Atena heredan el token, y solo si quien los abre ya lo presentó.
+	if (rol == "orquestador" || rol == "atena") && identidad.Valido() {
+		env["ORQ_TOKEN"] = os.Getenv("ORQ_TOKEN")
+	}
 	// Distribución fija: orq en su pestaña, plan en la suya; Astra al lado del Planificador.
 	var tab, pane string
-	var err error
 	if pl, ok := ses["planificador"]; rol == "astra" && ok && pl.Pane != "" {
 		tab = pl.Tab
-		pane, err = herdr.SplitDe(pl.Pane, p.root, env)
+		pane, err = rn().Split(pl.Pane, p.root, env)
 	} else {
-		tab, pane, err = herdr.Tab(etiqueta(rol, p), p.root, env)
+		tab, pane, err = rn().Open(etiqueta(rol, p), p.root, env)
 	}
 	if err != nil {
 		return canal.Sesion{}, err
 	}
-	if err := herdr.Start(name, a.kind, pane, rolArgs(a.kind, a.modelo, a.esfuerzo, name, p.root)); err != nil {
+	if err := rn().Start(name, l, pane); err != nil {
 		return canal.Sesion{}, fmt.Errorf("%v (el panel %s quedó abierto)", err, pane)
 	}
-	s := canal.Sesion{Agente: name, Pane: pane, Tab: tab, Desde: time.Now().UTC().Truncate(time.Second), Gen: gen}
+	s := canal.Sesion{Agente: name, Pane: pane, Tab: tab, Desde: time.Now().UTC().Truncate(time.Second), Gen: gen, Gate: gateDe(cfg, el.Agent)}
 	ses[rol] = s
 	if err := canal.SaveSesiones(p.sesPath(), ses); err != nil {
 		return s, err
 	}
-	return s, herdr.Prompt(name, fmt.Sprintf(arranqueRol, rol, skillDe(rol)))
+	return s, rn().Prompt(name, fmt.Sprintf(arranqueRol, rol, skillDe(rol)))
 }
 
 func runUp(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("up", flag.ContinueOnError)
+	fs := nuevoFS("up", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	a := flagsArranque(fs)
 	if fs.Parse(args) != nil {
 		return 1
 	}
-	if !herdr.Inside() {
+	if !rn().Inside() {
 		fmt.Fprintln(stderr, "orq up: corre esto desde un panel de herdr (falta HERDR_ENV). Orca llegará después.")
 		return 1
 	}
@@ -448,11 +462,15 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ya hay orquestador (%s, panel %s). Para una sesión fresca: orq relevo orquestador\n", o.Agente, o.Pane)
 		return 1
 	}
+	if !identidad.Valido() {
+		fmt.Fprintln(stderr, "warning: no valid ORQ_TOKEN in this pane; the Orchestrator will not get the Owner's token (export ORQ_TOKEN=\"$(orq token)\" before starting Atena)")
+	}
+	anclarLlamador("atena")
 	fname := "atena-" + orqdir.Slug(p.root)
-	if err := herdr.Rename(herdr.CurrentPane(), fname); err != nil {
+	if err := rn().Rename(rn().Current(), fname); err != nil {
 		fmt.Fprintf(stderr, "aviso: no se pudo nombrar este panel como %s (%v)\n", fname, err)
 	}
-	ses["atena"] = canal.Sesion{Agente: fname, Pane: herdr.CurrentPane(), Desde: time.Now().UTC().Truncate(time.Second), Gen: 1}
+	ses["atena"] = canal.Sesion{Agente: fname, Pane: rn().Current(), Desde: time.Now().UTC().Truncate(time.Second), Gen: 1}
 	o, err := lanzar(p, ses, "orquestador", a)
 	if err != nil {
 		fmt.Fprintln(stderr, "orq up:", err)
@@ -465,7 +483,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 const lineasRelevo = 25
 
 func runRelevo(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("relevo", flag.ContinueOnError)
+	fs := nuevoFS("relevo", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	a := flagsArranque(fs)
 	soloArchivo := fs.Bool("solo-archivo", false, "escribe el relevo sin abrir sesión nueva")
@@ -488,14 +506,17 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 	if *auto {
 		rol = p.rolActual()
 	}
+	if !*auto {
+		anclarLlamador(rol)
+	}
 	if !slices.Contains(canal.Roles, rol) {
 		fmt.Fprintln(stderr, "uso: orq relevo [--solo-archivo] atena|orquestador")
 		return 1
 	}
 	ses, _ := canal.LoadSesiones(p.sesPath())
 	// Una sola sesión por rol: si la anterior relevo ya abrió una sesión que sigue viva, no se abre otra.
-	if prev, ok := ses[rol]; ok && !*soloArchivo && !*forzar && prev.Gen > 1 && time.Since(prev.Desde) < 15*time.Minute && herdr.Inside() {
-		if _, err := herdr.Run("agent", "get", prev.Agente); err == nil {
+	if prev, ok := ses[rol]; ok && !*soloArchivo && !*forzar && prev.Gen > 1 && time.Since(prev.Desde) < 15*time.Minute && rn().Inside() {
+		if rn().Alive(prev.Agente) {
 			fmt.Fprintf(stderr, "orq relevo: %s ya tiene una sesión nueva viva (%s, hace %s). No se abre otra; usa --forzar si de verdad hace falta\n", rol, prev.Agente, time.Since(prev.Desde).Round(time.Second))
 			return 1
 		}
@@ -503,6 +524,7 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 	rv := p.datosRelevo(rol)
 	var msgs strings.Builder
 	ms, _ := canal.Load(p.canalPath())
+	ms = canal.Vigentes(ms)
 	for _, m := range ms[max(0, len(ms)-15):] {
 		if m.De == rol || m.Para == rol {
 			fmt.Fprintf(&msgs, "%s %s→%s [%s] %s\n", m.ID, m.De, m.Para, m.Tipo, m.Texto)
@@ -524,7 +546,7 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 	if *soloArchivo {
 		return 0
 	}
-	if !herdr.Inside() {
+	if !rn().Inside() {
 		fmt.Fprintln(stdout, "fuera de herdr: abre una sesión nueva y pídele que lea ese archivo.")
 		return 0
 	}
@@ -577,7 +599,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "abrir":
-		fs := flag.NewFlagSet("slice abrir", flag.ContinueOnError)
+		fs := nuevoFS("slice abrir", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		titulo := fs.String("titulo", "", "historia en pocas palabras")
 		test := fs.String("test", "", "ruta del examen de aceptación, relativa a la raíz")
@@ -591,6 +613,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		omitir := fs.Bool("permite-omitir", false, "acepta pruebas omitidas")
 		aislado := fs.Bool("aislado", false, "corre el examen en una copia limpia del commit")
 		timeout := fs.Int("timeout", 0, "segundos máximos del examen (0 = 600)")
+		estricto := fs.Bool("estricto", false, "--reporte/--formato obligatorios: sin contadores no hay verde (también limits.json conteo_estricto)")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *titulo == "" || *test == "" || *cmd == "" {
 			fmt.Fprintln(stderr, "uso: orq slice abrir NN --titulo \"...\" --test ruta --cmd \"...\" [--bundle a,b] [--sano \"cmd\"] [--reporte f --formato tap|junit|gotest-json] [--permite-omitir] [--aislado] [--timeout s] [--sin-scouts \"motivo\"]")
 			return 1
@@ -605,16 +628,22 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 				extra = append(extra, f)
 			}
 		}
-		e, out, err := r.Abrir(args[1], *titulo, *test, *cmd, slice.Opciones{Alcance: partir(*alcance), Bundle: extra, Sano: *sano, Reporte: *reporte, Formato: *formato, PermiteOmitir: *omitir, Aislado: *aislado, Timeout: *timeout}, time.Now())
+		e, out, err := r.Abrir(args[1], *titulo, *test, *cmd, slice.Opciones{Alcance: partir(*alcance), Bundle: extra, Sano: *sano, Reporte: *reporte, Formato: *formato, PermiteOmitir: *omitir, Aislado: *aislado, Timeout: *timeout, Estricto: *estricto || estrictoPorLimites()}, time.Now())
 		show(out)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
+		// H-06: si los workers por defecto son Claude, el worktree del slice lleva el hook del gate.
+		if cfg, err := p.agentes(); err == nil && cfg.Agents[cfg.Rol("worker.medium").Agent].TieneHooks() {
+			if err := asegurarHook(e.Worktree, p.root); err != nil {
+				fmt.Fprintf(stdout, "aviso H-06: %v. `orq slice lanzar` no abrirá workers Claude hasta arreglarlo\n", err)
+			}
+		}
 		fmt.Fprintf(stdout, "%s abierto en rojo sobre %s (%s). Worktree: %s\nPaquete protegido: %s\nAsigna el escritor: orq slice tomar <quien>\n", e.Attempt(), e.Base, e.SHARojo[:8], e.Worktree, strings.Join(e.Bundle, ", "))
 		return 0
 	case "tomar":
-		fs := flag.NewFlagSet("slice tomar", flag.ContinueOnError)
+		fs := nuevoFS("slice tomar", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		relevo := fs.Bool("relevo", false, "reemplaza al escritor actual en el mismo worktree")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil {
@@ -629,12 +658,17 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s: escribe %s en %s\n", e.Attempt(), e.Escritor, e.Worktree)
 		return 0
 	case "alcance":
-		fs := flag.NewFlagSet("slice alcance", flag.ContinueOnError)
+		fs := nuevoFS("slice alcance", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		aprobado := fs.String("aprobado", "", "quién lo aprobó y por qué (req o mem de Atena/Owner)")
 		zona := fs.String("zona", "", "también la suma a la zona de ese worker ya lanzado")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *aprobado == "" {
-			fmt.Fprintln(stderr, "uso: orq slice alcance RUTA[,RUTA] --aprobado \"req ATN-... de Atena: motivo\" [--zona back]")
+			fmt.Fprintln(stderr, lang.T("usage: orq slice scope PATH[,PATH] --approved \"mNN|cNN from Atena/Owner: reason\" [--zone back]",
+				"uso: orq slice alcance RUTA[,RUTA] --aprobado \"mNN|cNN de Atena/Owner: motivo\" [--zona back]"))
+			return 1
+		}
+		if err := p.cambioDeContrato(*aprobado, r, nn); err != nil {
+			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
 		e, err := r.Ampliar(nn, partir(args[1]))
@@ -645,7 +679,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(), Vence: e.ID(),
 			Texto: recortar(fmt.Sprintf("%s alcance + %s (%s)", e.ID(), args[1], *aprobado), memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s: alcance %s\n", e.ID(), strings.Join(e.Alcance, ", "))
 		return 0
@@ -678,7 +712,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(), Vence: e.ID(),
 			Texto: recortar(e.Attempt()+" huella reparada: "+motivo, memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s: huella tomada del rojo (%s), el examen es idéntico. Vuelve a verificar\n", e.Attempt(), e.SHARojo[:7])
 		return 0
@@ -693,7 +727,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(), Vence: e.ID(),
 			Texto: recortar(e.Attempt()+" reabierto: "+motivo, memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s reabierto en el mismo worktree, con su trabajo. El recibo ya no vale: lanza la reparación y vuelve a verificar\n", e.Attempt())
 		return 0
@@ -717,19 +751,41 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(), Vence: e.ID(),
 			Texto: recortar(e.Attempt()+": "+strings.Join(args[1:], " "), memoria.MaxTexto)}, time.Now())
 		p.aprenderSolo(strings.Join(resto, " "), "reintento", e.Attempt())
 		fmt.Fprintf(stdout, "%s abierto en el mismo worktree. Recibos anteriores ya no valen. Asigna escritor: orq slice tomar <quien>\n", e.Attempt())
 		return 0
 	case "cerrar":
-		fs := flag.NewFlagSet("slice cerrar", flag.ContinueOnError)
+		fs := nuevoFS("slice cerrar", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		ok := fs.Bool("aceptado", false, "el Owner aceptó la demo")
 		motivo := fs.String("rechazado", "", "motivo del rechazo en una línea")
 		if fs.Parse(args[1:]) != nil || *ok == (*motivo != "") {
 			fmt.Fprintln(stderr, "uso: orq slice cerrar --aceptado | --rechazado \"motivo\"")
 			return 1
+		}
+		if err := p.exigirToken("close a slice"); err != nil {
+			fmt.Fprintln(stderr, "orq slice:", err)
+			return 1
+		}
+		// Rigor proporcional: desde la criticidad configurada, aceptar exige un recibo QA verde.
+		if e, err := r.Load(nn); *ok && err == nil && e != nil {
+			cfg := qa.LoadConfig(p.dir)
+			if cfg.Note != "" {
+				fmt.Fprintln(stderr, "warning:", cfg.Note)
+			}
+			if err := qa.PuedeCerrar(p.dir, e.NN, cfg); err != nil {
+				fmt.Fprintln(stderr, "orq slice:", err)
+				return 1
+			}
+		}
+		// El examen se protegió con chmod en los worktrees de los workers; solo orq lo devuelve.
+		if e, err := r.Load(nn); err == nil && e != nil {
+			restaurarExamen(e.Worktree, e.Bundle)
+			for _, w := range e.Equipo {
+				restaurarExamen(w.Worktree, e.Bundle)
+			}
 		}
 		reg, cuarentena, out, err := r.Cerrar(nn, *ok, *motivo, time.Now())
 		show(out)
@@ -752,7 +808,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			p.aprenderSolo("El Owner rechazó: "+*motivo, "rechazo", "S-"+reg.NN)
 		}
 		memoria.Add(p.memPath(), mem, time.Now())
-		os.Remove(p.canalPath())
+		canal.Archivar(p.canalPath(), "S-"+reg.NN, time.Now()) // append-only: lo pendiente de otros slices sigue
 		os.Remove(p.planPath(reg.NN))
 		// Higiene: los paneles de los workers de este slice ya no tienen trabajo.
 		if ses, err := canal.LoadSesiones(p.sesPath()); err == nil {
@@ -763,17 +819,23 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		if err := p.escribirFicha(); err != nil {
 			fmt.Fprintf(stdout, "aviso: la ficha del proyecto no se actualizó (%v)\n", err)
 		} else {
-			fmt.Fprintf(stdout, "ficha del proyecto actualizada: %s\n", p.fichaPath())
+			fmt.Fprintf(stdout, lang.T("project card updated: %s\n", "ficha del proyecto actualizada: %s\n"), p.fichaPath())
 		}
-		fmt.Fprintf(stdout, "S-%s cerrado como %s. Canal limpio; memoria actualizada.\n", reg.NN, reg.Result)
+		// Higiene: lo que orq creó y ya no se usa se retira con el protocolo seguro.
+		if res, err := p.gc(false); err != nil {
+			fmt.Fprintf(stdout, "aviso: gc no corrió (%v)\n", err)
+		} else if len(res) > 0 {
+			mostrarGC(stdout, res)
+		}
+		fmt.Fprintf(stdout, "S-%s cerrado como %s. Mensajes de S-%s archivados; memoria actualizada.\n", reg.NN, reg.Result, reg.NN)
 		if !*ok {
 			fmt.Fprintf(stdout, "La rama %s se conserva para revisar.\n", "slice/"+reg.NN)
 		}
 		return 0
 	case "lanzar":
-		fs := flag.NewFlagSet("slice lanzar", flag.ContinueOnError)
+		fs := nuevoFS("slice lanzar", flag.ContinueOnError)
 		fs.SetOutput(stderr)
-		agente := fs.String("agente", "claude", "claude (Sonnet) | codex")
+		agente := fs.String("agente", "", "agente de orq.agents.json (por defecto, el de roles.worker por riesgo)")
 		zona := fs.String("zona", "", "front, back, test…: suma el worker al equipo del slice")
 		rutas := fs.String("rutas", "", "carpetas de esa zona, separadas por coma")
 		alcance := fs.String("alcance", "solo lo necesario para que el examen pase", "qué sí y qué no")
@@ -798,12 +860,17 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s trabajando en su worktree con el contrato. Mira el avance con `orq slice estado`.\n", nombre)
 		return 0
 	case "examen":
-		fs := flag.NewFlagSet("slice examen", flag.ContinueOnError)
+		fs := nuevoFS("slice examen", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		cmd := fs.String("cmd", "", "comando nuevo del examen si debe correr también los archivos sumados")
 		aprobado := fs.String("aprobado", "", "req de Atena u Owner que aprueba el examen nuevo")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *aprobado == "" {
-			fmt.Fprintln(stderr, "uso: orq slice examen [--slice NN] ARCHIVO[,ARCHIVO] --aprobado \"req ATN-...\" [--cmd \"...\"]")
+			fmt.Fprintln(stderr, lang.T("usage: orq slice exam [--slice NN] FILE[,FILE] --approved \"mNN|cNN from Atena/Owner\" [--cmd \"...\"]",
+				"uso: orq slice examen [--slice NN] ARCHIVO[,ARCHIVO] --aprobado \"mNN|cNN de Atena/Owner\" [--cmd \"...\"]"))
+			return 1
+		}
+		if err := p.cambioDeContrato(*aprobado, r, nn); err != nil {
+			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
 		e, err := r.SumarExamen(nn, partir(args[1]), *cmd, *aprobado)
@@ -842,8 +909,8 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			listas, _ := plan.Listas(pl)
 			fmt.Fprintf(stdout, "plan: %d pendientes; marca lo terminado con `orq plan hecha ID`; listas: %s\n", pl.Pendientes(), ids(listas))
 			// El Planificador vigila su plan: cada junta le pide revisarlo.
-			if ses, _ := canal.LoadSesiones(p.sesPath()); ses["planificador"].Agente != "" && herdr.Inside() {
-				herdr.Prompt(ses["planificador"].Agente, fmt.Sprintf("[orq] S-%s merged. Run `orq plan revisar --slice %s` and keep the plan minimal and current.", e.NN, e.NN))
+			if ses, _ := canal.LoadSesiones(p.sesPath()); ses["planificador"].Agente != "" && rn().Inside() {
+				rn().Prompt(ses["planificador"].Agente, fmt.Sprintf("[orq] S-%s merged. Run `orq plan revisar --slice %s` and keep the plan minimal and current.", e.NN, e.NN))
 			}
 		}
 		// Documentación barata en paralelo: Haiku actualiza la ficha sin frenar al equipo.
@@ -857,7 +924,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "contrato":
-		fs := flag.NewFlagSet("slice contrato", flag.ContinueOnError)
+		fs := nuevoFS("slice contrato", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		worker := fs.String("worker", "", "nombre del worker (por defecto, el escritor)")
 		alcance := fs.String("alcance", "solo lo necesario para que el examen pase", "qué sí y qué no")
@@ -876,7 +943,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	case "recibo":
 		e, err := r.Load(nn)
 		if err != nil || e == nil || e.Recibo == nil {
-			fmt.Fprintln(stdout, "sin recibo vigente; el historial está en .orq/recibos.jsonl")
+			fmt.Fprintln(stdout, lang.T("no current receipt; the history is in .orq/recibos.jsonl", "sin recibo vigente; el historial está en .orq/recibos.jsonl"))
 			return 0
 		}
 		raw, _ := json.MarshalIndent(e.Recibo, "", "  ")
@@ -915,7 +982,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprint(stderr, usage)
+	fmt.Fprint(stderr, usageText())
 	return 1
 }
 
@@ -954,12 +1021,123 @@ func partir(s string) []string {
 	return out
 }
 
-// rolArgs: un rol Codex (Astra) escribe rojos y planes en los repos hermanos del producto,
-// así que además del sandbox de worker puede escribir en la carpeta que los contiene.
-func rolArgs(kind, modelo, esfuerzo, name, root string) []string {
-	args := workerArgs(kind, modelo, esfuerzo, name, root)
-	if kind == "codex" {
-		args = append(args, "--add-dir", filepath.Dir(root))
+// cambioDeContrato: el examen y el alcance solo cambian desde el checkout principal (no desde un
+// worktree de worker, aunque falte el hook) y con una decisión registrada de Atena u Owner.
+func (p proyecto) cambioDeContrato(aprobado string, r slice.Repo, nn string) error {
+	// H-01 vale en cualquier modo de autonomía: un worker nunca cambia el contrato.
+	if wd, _ := os.Getwd(); gate.IsLinkedWorktree(wd) || gate.IsLinkedWorktree(p.root) {
+		return errors.New("desde un worktree de worker no se cambia el examen ni el alcance: lo pide el Orquestador")
 	}
-	return args
+	switch r := p.rolPrivilegiado(); {
+	case strings.HasPrefix(r, "worker"):
+		return errors.New("a worker cannot change the exam or scope (H-01, any autonomy mode): ask the Orchestrator")
+	case r != "owner" && r != "atena" && r != "orquestador" && r != "orchestrator":
+		return fmt.Errorf("cambiar el examen o el alcance exige ORQ_ROL=owner|atena|orquestador y ORQ_TOKEN (rol actual %q)", r)
+	}
+	e, err := r.Load(nn)
+	if err != nil || e == nil {
+		return errors.Join(err, errors.New("no hay slice abierto"))
+	}
+	return p.decisionDelSlice(aprobado, e.ID(), e.DesdeContrato())
+}
+
+// decisionRegistrada exige que --aprobado nombre un id existente: mNN de memoria con fuente
+// owner|atena, o cNN del canal enviado por atena. El texto libre no aprueba nada.
+func (p proyecto) decisionRegistrada(aprobado string) (string, error) {
+	f := strings.Fields(strings.NewReplacer(",", " ", ":", " ", ";", " ").Replace(aprobado))
+	if len(f) > 0 {
+		id := f[0]
+		if items, _ := memoria.Load(p.memPath()); strings.HasPrefix(id, "m") {
+			for _, it := range items {
+				if it.ID == id && (it.Fuente == "owner" || it.Fuente == "atena") && (it.Por == "owner" || it.Por == "atena") {
+					return id, nil
+				}
+			}
+		}
+		if ms, _ := canal.Load(p.canalPath()); strings.HasPrefix(id, "c") {
+			for _, m := range ms {
+				if m.ID == id && m.De == "atena" {
+					return id, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("--aprobado %q no nombra una decisión registrada: empieza por el id (mNN de `orq mem` con fuente owner|atena, o cNN de un mensaje de atena)", aprobado)
+}
+
+// decisionDelSlice liga --aprobado al slice: la decisión registrada (mNN de owner|atena o cNN de
+// atena) nombra el slice en su texto o en su campo slice/attempt, y es posterior a la apertura o
+// al último cambio de examen o alcance. Una decisión vieja o de otra historia no aprueba nada.
+func (p proyecto) decisionDelSlice(aprobado, id string, desde time.Time) error {
+	ref, err := p.decisionRegistrada(aprobado)
+	if err != nil {
+		return err
+	}
+	nombra := regexp.MustCompile(`(^|[^0-9A-Za-z])` + regexp.QuoteMeta(id) + `([^0-9]|$)`)
+	habla := func(campo, texto string, ts time.Time) error {
+		if !nombra.MatchString(campo) && !nombra.MatchString(texto) {
+			return fmt.Errorf("--aprobado %s no habla de %s: la decisión tiene que nombrar el slice (texto o --slice)", ref, id)
+		}
+		if ts.Before(desde.Truncate(time.Second)) {
+			return fmt.Errorf("--aprobado %s es de %s, anterior a la apertura o al último cambio de contrato de %s (%s): pide una decisión nueva", ref, ts.Format(time.RFC3339), id, desde.Format(time.RFC3339))
+		}
+		return nil
+	}
+	if strings.HasPrefix(ref, "m") {
+		items, _ := memoria.Load(p.memPath())
+		for _, it := range items {
+			if it.ID == ref {
+				return habla(it.Slice, it.Texto, it.TS)
+			}
+		}
+	}
+	ms, _ := canal.Load(p.canalPath())
+	for _, m := range ms {
+		if m.ID == ref {
+			return habla(m.Attempt, m.Texto, m.TS)
+		}
+	}
+	return fmt.Errorf("--aprobado %s no se encontró", ref)
+}
+
+// fuentePermitida: owner y atena solo los firma quien tiene ese rol validado (Atena registra al Owner).
+func fuentePermitida(fuente, rol string) error {
+	switch {
+	case fuente == "owner" && (rol == "owner" || rol == "atena"):
+	case fuente == "atena" && rol == "atena":
+	case fuente == "owner" || fuente == "atena":
+		return fmt.Errorf("--fuente %s exige ORQ_ROL=%s y ORQ_TOKEN (rol actual %q)", fuente, fuente, rol)
+	}
+	return nil
+}
+
+// estrictoPorLimites: limits.json puede volver obligatorio el conteo en todos los slices.
+func estrictoPorLimites() bool {
+	l, err := limits.Load(limits.DefaultPath())
+	return err == nil && l.ConteoEstricto
+}
+
+// verNombre muestra en inglés los tipos y roles guardados en español (el dato no cambia).
+func verNombre(x string) string {
+	if lang.ES() {
+		return x
+	}
+	en := map[string]string{"estado": "status", "historia": "story", "pregunta": "question", "respuesta": "answer", "cierre": "closing",
+		"orquestador": "orchestrator", "planificador": "planner", "verificador": "verifier", "vigia": "watchdog"}
+	if e, ok := en[x]; ok {
+		return e
+	}
+	return x
+}
+
+// anclarLlamador: `orq up` y `orq relevo`, si quien llama ya prueba su identidad (token + sesión
+// confiable), anclan su shell como sesión privilegiada para sus descendientes sin terminal.
+func anclarLlamador(rol string) {
+	if identidad.Tabla == nil || !identidad.Valido() {
+		return
+	}
+	if _, w := workerEfectivo(); w {
+		return
+	}
+	identidad.Anclar(identidad.Tabla, os.Getppid(), rol)
 }

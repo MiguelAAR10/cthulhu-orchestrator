@@ -29,6 +29,7 @@ type fakes struct {
 	workers int
 	now     time.Time
 	wt      bool
+	wtrees  int
 }
 
 func (f fakes) env(t *testing.T, stateDir string) Env {
@@ -38,6 +39,7 @@ func (f fakes) env(t *testing.T, stateDir string) Env {
 		Now:        func() time.Time { return f.now },
 		StateDir:   stateDir,
 		IsWorktree: func(string) bool { return f.wt },
+		Worktrees:  func(string) (int, error) { return f.wtrees, nil },
 	}
 }
 
@@ -70,25 +72,26 @@ func TestLaunchDecisions(t *testing.T) {
 		{"bash normal pasa aunque todo esté mal", bash("ls -la"), fakes{free: map[string]float64{"/": 1}, workers: 9, now: now}, 999, now, "", true, ""},
 		{"Agent con recursos pasa", Payload{ToolName: "Agent"}, ok, 5, now, "", true, ""},
 		{"herdr agent start con recursos pasa", bash("herdr agent start --name w1 codex"), ok, 5, now, "", true, ""},
-		{"codex suelto es lanzamiento", bash("cd x && codex --full-auto"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "worker(s) vivos"},
-		{"claude -p es lanzamiento", bash("claude --model sonnet -p 'hola'"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "worker(s) vivos"},
+		{"codex suelto es lanzamiento", bash("cd x && codex --full-auto"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "live worker(s)"},
+		{"claude -p es lanzamiento", bash("claude --model sonnet -p 'hola'"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "live worker(s)"},
 		// Orca: el usuario trabaja con herdr u Orca, y el guardia debe cubrir ambos.
-		{"orca agent launch es lanzamiento", bash("orca agent launch --agent claude --worktree w1 --prompt hola"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "worker(s) vivos"},
-		{"orca-ide worker-start es lanzamiento", bash("orca-ide orchestration worker-start --spec x --agent claude"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "worker(s) vivos"},
-		{"orca dispatch es lanzamiento", bash("orca orchestration dispatch --task t1 --to term1"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "worker(s) vivos"},
-		{"orca terminal create es lanzamiento", bash("cd x && orca terminal create --worktree w1"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "worker(s) vivos"},
-		{"orca worktree create es lanzamiento", bash("orca worktree create --name s02"), fakes{free: map[string]float64{"/": 40, "/mnt/c": 100}, now: now}, 5, now, "", false, "/ tiene 40 GB"},
+		{"orca agent launch es lanzamiento", bash("orca agent launch --agent claude --worktree w1 --prompt hola"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "live worker(s)"},
+		{"orca-ide worker-start es lanzamiento", bash("orca-ide orchestration worker-start --spec x --agent claude"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "live worker(s)"},
+		{"orca dispatch es lanzamiento", bash("orca orchestration dispatch --task t1 --to term1"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "live worker(s)"},
+		{"orca terminal create es lanzamiento", bash("cd x && orca terminal create --worktree w1"), fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "live worker(s)"},
+		{"orca worktree create es lanzamiento", bash("orca worktree create --name s02"), fakes{free: map[string]float64{"/": 40, "/mnt/c": 100}, now: now}, 5, now, "", false, "/ has 40 GB"},
 		{"orca agent launch con recursos pasa", bash("orca agent launch --agent claude --prompt hola"), ok, 5, now, "", true, ""},
 		{"orca status no es lanzamiento", bash("orca status"), fakes{free: map[string]float64{"/": 1}, workers: 9, now: now}, 999, now, "", true, ""},
 		{"orca terminal read no es lanzamiento", bash("orca-ide terminal read --terminal t1 --json"), fakes{free: map[string]float64{"/": 1}, workers: 9, now: now}, 999, now, "", true, ""},
 		{"orca worktree list no es lanzamiento", bash("orca worktree list --json"), fakes{free: map[string]float64{"/": 1}, workers: 9, now: now}, 999, now, "", true, ""},
-		{"subagente no lanza", Payload{ToolName: "Agent", AgentID: "a1"}, ok, 5, now, "", false, "subagente"},
-		{"HALT bloquea", Payload{ToolName: "Agent"}, ok, 5, now, "disco crítico", false, "HALT activo"},
-		{"disco raíz bajo", Payload{ToolName: "Agent"}, fakes{free: map[string]float64{"/": 40, "/mnt/c": 100}, now: now}, 5, now, "", false, "/ tiene 40 GB"},
-		{"disco C bajo aunque raíz sobre", Payload{ToolName: "Agent"}, fakes{free: map[string]float64{"/": 400, "/mnt/c": 20}, now: now}, 5, now, "", false, "/mnt/c tiene 20 GB"},
+		{"subagente no lanza", Payload{ToolName: "Agent", AgentID: "a1"}, ok, 5, now, "", false, "subagent"},
+		{"HALT bloquea", Payload{ToolName: "Agent"}, ok, 5, now, "disco crítico", false, "HALT active"},
+		{"disco raíz bajo", Payload{ToolName: "Agent"}, fakes{free: map[string]float64{"/": 40, "/mnt/c": 100}, now: now}, 5, now, "", false, "/ has 40 GB"},
+		{"disco C bajo aunque raíz sobre", Payload{ToolName: "Agent"}, fakes{free: map[string]float64{"/": 400, "/mnt/c": 20}, now: now}, 5, now, "", false, "/mnt/c has 20 GB"},
 		{"medición vieja", Payload{ToolName: "Agent"}, ok, 5, now.Add(-30 * time.Hour), "", false, "30 h"},
-		{"scratch sobre cuota", Payload{ToolName: "Agent"}, ok, 25, now, "", false, "cuota"},
-		{"tope de workers", Payload{ToolName: "Agent"}, fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "tope es 1"},
+		{"scratch sobre cuota", Payload{ToolName: "Agent"}, ok, 25, now, "", false, "quota"},
+		{"tope de worktrees (max_worktrees por defecto 12)", Payload{ToolName: "Agent"}, fakes{free: ok.free, wtrees: 12, now: now}, 5, now, "", false, "max_worktrees"},
+		{"tope de workers", Payload{ToolName: "Agent"}, fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "cap is 1"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -317,5 +320,55 @@ func TestPushDeRamasPermitido(t *testing.T) {
 	}
 	if d := Evaluate(en(repo, "git push origin dev"), baseLimits(), env); d.Allow {
 		t.Error("sin push_ramas el push sigue bloqueado")
+	}
+}
+
+// H-01: el contrato de aceptación (examen y alcance) no lo cambia un worker.
+func TestWorkerNoCambiaElExamenNiElAlcance(t *testing.T) {
+	wt := fakes{wt: true}.env(t, t.TempDir())
+	main := fakes{}.env(t, t.TempDir())
+	for _, c := range []string{`orq slice examen tests/x.sh --aprobado "req ATN-1" --cmd "true"`, `orq slice --slice 01 examen tests/x.sh --aprobado m1`, `orq slice alcance src --aprobado "m1"`} {
+		if d := Evaluate(bash(c), baseLimits(), wt); d.Allow {
+			t.Errorf("un worker pudo: %q", c)
+		}
+		p := bash(c)
+		p.AgentID = "sub-1"
+		if d := Evaluate(p, baseLimits(), main); d.Allow {
+			t.Errorf("un subagente pudo: %q", c)
+		}
+		if d := Evaluate(bash(c), baseLimits(), main); !d.Allow {
+			t.Errorf("el orquestador no pudo: %q (%s)", c, d.Reason)
+		}
+	}
+}
+
+// Exploit 3: un worker no esquiva el gate invocando orq de forma indirecta.
+func TestWorkerNoInvocaOrqIndirecto(t *testing.T) {
+	wt := fakes{wt: true}.env(t, t.TempDir())
+	main := fakes{}.env(t, t.TempDir())
+	malos := []string{
+		`o=orq; $o slice exam tests/x.sh --approved m1`,
+		`O=orq && ${O} slice scope src`,
+		`eval "orq slice close --accepted"`,
+		`sh -c 'orq slice exam t --approved m1'`,
+		`bash -lc "orq autonomy free --scope src"`,
+		`"orq" slice exam t`,
+		`o\rq slice exam t`,
+		`/home/u/bin/orq slice exam t`,
+		`echo slice exam t | xargs orq`,
+		`x=$(echo b3Jx | base64 -d); $x slice exam t`,
+	}
+	for _, c := range malos {
+		if d := Evaluate(bash(c), baseLimits(), wt); d.Allow {
+			t.Errorf("un worker pudo: %q", c)
+		}
+	}
+	for _, c := range []string{`go test ./... -run Close`, `sh tests/s01.sh`, `orq worker beat --phase running`, `echo $HOME`, `FOO=1 go test ./...`} {
+		if d := Evaluate(bash(c), baseLimits(), wt); !d.Allow {
+			t.Errorf("bloqueó trabajo normal: %q (%s)", c, d.Reason)
+		}
+	}
+	if d := Evaluate(bash(`o=orq; $o slice exam t`), baseLimits(), main); !d.Allow {
+		t.Errorf("fuera de un worker no aplica: %s", d.Reason)
 	}
 }

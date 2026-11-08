@@ -1,6 +1,7 @@
 package memoria
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -165,5 +166,49 @@ func TestAddConcurrenteNoPierdeLineasYNadieOcultaLoCritico(t *testing.T) {
 	}
 	if len(items) != 21 || len(ids) != 21 {
 		t.Fatalf("%d líneas, %d ids", len(items), len(ids))
+	}
+}
+
+// El contexto respeta el presupuesto: lo crítico primero, luego el slice activo, luego el resto.
+func TestPresupuestoPrimeroSliceActivo(t *testing.T) {
+	var items []Item
+	for i := 0; i < 40; i++ {
+		items = append(items, Item{ID: fmt.Sprintf("o%d", i), Imp: "alta", Cat: "decision", Texto: "otro", Slice: "S-01", TS: t0.Add(time.Duration(i) * time.Minute)})
+	}
+	items = append(items, Item{ID: "act", Imp: "media", Cat: "tecnico", Texto: "activo", Slice: "S-02", TS: t0})
+	items = append(items, Item{ID: "crit", Imp: "critica", Cat: "requisito", Texto: "regla", TS: t0})
+	sel, resto := Presupuesto(items, "S-02", 5)
+	if len(sel) != 5 || resto != 37 {
+		t.Fatalf("tope roto: %d líneas, %d fuera", len(sel), resto)
+	}
+	if sel[0].ID != "crit" || sel[1].ID != "act" {
+		t.Fatalf("orden: %v %v", sel[0].ID, sel[1].ID)
+	}
+	if s, r := Presupuesto(items[:3], "", 5); len(s) != 3 || r != 0 {
+		t.Fatalf("%d %d", len(s), r)
+	}
+}
+
+// mem add acepta los valores en inglés (y los españoles de siempre); se guardan en la forma canónica.
+func TestValoresEnIngles(t *testing.T) {
+	t.Setenv("ORQ_LANG", "")
+	p := filepath.Join(t.TempDir(), "mem.jsonl")
+	it, _, err := Add(p, Item{Imp: "high", Cat: "requirement", Fuente: "orchestrator", Tipo: "hypothesis", Texto: "x"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Imp != "alta" || it.Cat != "requisito" || it.Fuente != "orquestador" || it.Tipo != "hipotesis" {
+		t.Fatalf("no normalizó: %+v", it)
+	}
+	if _, _, err := Add(p, Item{Imp: "media", Cat: "riesgo", Fuente: "worker", Texto: "y"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = Add(p, Item{Imp: "huge", Cat: "risk", Fuente: "worker", Texto: "z"}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "critical|high|medium|low") || strings.Contains(err.Error(), "usa") {
+		t.Fatalf("mensaje: %v", err)
+	}
+	_, _, err = Add(p, Item{Imp: "low", Cat: "risk", Fuente: "worker", Tipo: "fact", Texto: "z"}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "needs --evidence") {
+		t.Fatalf("mensaje: %v", err)
 	}
 }

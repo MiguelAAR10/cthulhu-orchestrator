@@ -28,6 +28,31 @@ type Limits struct {
 	PushRamas []string `json:"push_ramas,omitempty"`
 	// MaxSlices: slices abiertos a la vez por repo; 0 = el tope por defecto del paquete slice.
 	MaxSlices int `json:"max_slices,omitempty"`
+	// ConteoEstricto: todo slice exige --reporte/--formato; sin contadores no hay verde (por defecto, laxo).
+	ConteoEstricto bool `json:"conteo_estricto,omitempty"`
+	// MaxWorktrees: worktrees vinculados que orq registró por proyecto; ausente = MaxWorktreesDefecto.
+	MaxWorktrees *int `json:"max_worktrees,omitempty"`
+	// MaxFronts: fronts (sub-orquestadores como dato) por plan; 0 = 3.
+	MaxFronts int `json:"max_fronts,omitempty"`
+}
+
+// TopeFronts devuelve max_fronts o 3 si falta.
+func (l Limits) TopeFronts() int {
+	if l.MaxFronts <= 0 {
+		return 3
+	}
+	return l.MaxFronts
+}
+
+// MaxWorktreesDefecto: con 344 worktrees WSL se trabó; 12 deja margen para 4 slices con equipo.
+const MaxWorktreesDefecto = 12
+
+// TopeWorktrees devuelve max_worktrees o el defecto si falta.
+func (l Limits) TopeWorktrees() int {
+	if l.MaxWorktrees == nil {
+		return MaxWorktreesDefecto
+	}
+	return *l.MaxWorktrees
 }
 
 // DefaultPath respeta ORQ_LIMITS para pruebas y usa ~/.config/orq/limits.json por defecto.

@@ -5,6 +5,8 @@
 package plan
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 	"strings"
 
 	"orq/internal/orqdir"
+	"orq/internal/stops"
 )
 
 var (
@@ -26,19 +29,26 @@ var (
 
 type Tarea struct {
 	ID         string   `json:"id"`
-	Zona       string   `json:"zona"`
-	Rutas      []string `json:"rutas"`
-	DependeDe  []string `json:"depende_de,omitempty"`
-	Dificultad string   `json:"dificultad,omitempty"` // baja | media | alta → modelo y esfuerzo
-	Que        string   `json:"que,omitempty"`        // una línea: qué deja hecho
-	Estado     string   `json:"estado,omitempty"`     // pendiente | en_curso | hecha
+	Zona       string   `json:"zone"`
+	Rutas      []string `json:"paths"`
+	DependeDe  []string `json:"depends_on,omitempty"`
+	Dificultad string   `json:"difficulty,omitempty"` // baja | media | alta → modelo y esfuerzo
+	Que        string   `json:"what,omitempty"`       // una línea: qué deja hecho
+	Estado     string   `json:"status,omitempty"`     // pendiente | en_curso | hecha
 	Worker     string   `json:"worker,omitempty"`
+	Front      string   `json:"front,omitempty"` // id del front (sub-orquestador como dato) al que pertenece
 }
 
 type Plan struct {
-	Slice    string  `json:"slice"`
-	Debatido bool    `json:"debatido,omitempty"` // un adversario lo atacó y se corrigió
-	Tareas   []Tarea `json:"tareas"`
+	Slice string `json:"slice"`
+	// Debatido se calcula al leer: vale solo si DebatidoRev es la revisión actual del plan.
+	Debatido    bool    `json:"-"`
+	DebatidoRev string  `json:"debated_rev,omitempty"` // revisión que el adversario atacó y aprobó
+	Tareas      []Tarea `json:"tasks"`
+	// Fronts: sub-orquestadores como DATO, no procesos. Opcional.
+	Fronts []Front `json:"fronts,omitempty"`
+	// Retenidas: tarea → motivo ("stop ST-NNNN") por un stopper blocking abierto. Lo llena Leer.
+	Retenidas map[string]string `json:"-"`
 }
 
 func Path(orqDir, nn string) string { return filepath.Join(orqDir, "planes", nn+".json") }
@@ -60,7 +70,56 @@ func Leer(path string) (*Plan, error) {
 			p.Tareas[i].Dificultad = "media"
 		}
 	}
+	p.Debatido = p.DebatidoRev != "" && p.DebatidoRev == p.Revision()
+	// planes/NN.json vive en .orq: los stoppers blocking del slice retienen sus tareas.
+	nn := strings.TrimSuffix(filepath.Base(path), ".json")
+	p.Retenidas = stops.HoldsFor(filepath.Dir(filepath.Dir(path)), "S-"+nn)
 	return &p, nil
+}
+
+// contrato de una tarea: lo que se le pidió (objetivo, dependencias, rutas, zona, dificultad).
+// El avance (estado, worker) no es contrato.
+func (t Tarea) contrato() []any {
+	return []any{t.ID, t.Zona, t.Rutas, t.DependeDe, t.Dificultad, t.Que}
+}
+
+// HashContrato identifica lo pedido a una tarea; si cambia, lo hecho antes no prueba lo nuevo.
+func (t Tarea) HashContrato() string { return hash(t.contrato()) }
+
+// Revision identifica el plan pedido (todas las tareas, sin su avance).
+func (p *Plan) Revision() string {
+	var c [][]any
+	for _, t := range p.Tareas {
+		c = append(c, t.contrato())
+	}
+	return hash(c)
+}
+
+// MarcarDebatido liga el consenso Planificador–Astra a esta revisión del plan.
+func (p *Plan) MarcarDebatido() { p.DebatidoRev, p.Debatido = p.Revision(), true }
+
+func hash(v any) string {
+	raw, _ := json.Marshal(v)
+	s := sha256.Sum256(raw)
+	return hex.EncodeToString(s[:8])
+}
+
+// Actualizar hace leer→cambiar→guardar bajo un candado de archivo (sección crítica corta):
+// dos procesos que reservan tareas a la vez no pierden ninguna reserva.
+func Actualizar(path string, f func(*Plan) error) (*Plan, error) {
+	soltar, err := orqdir.Candado(path)
+	if err != nil {
+		return nil, err
+	}
+	defer soltar()
+	p, err := Leer(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := f(p); err != nil {
+		return p, err
+	}
+	return p, Guardar(path, p)
 }
 
 func Guardar(path string, p *Plan) error {
@@ -206,6 +265,10 @@ func Listas(p *Plan) (listas []Tarea, bloqueadas map[string]string) {
 		if t.Estado != "pendiente" {
 			continue
 		}
+		if r, ok := p.Retenidas[t.ID]; ok {
+			bloqueadas[t.ID] = r
+			continue
+		}
 		var faltan []string
 		for _, d := range t.DependeDe {
 			if x := p.tarea(d); x == nil || x.Estado != "hecha" {
@@ -262,18 +325,30 @@ func Hecha(p *Plan, id string) (*Tarea, error) {
 	return t, nil
 }
 
-// Conservar lleva al plan recargado el avance del guardado: una tarea en curso o hecha no vuelve a pendiente.
-// Rehacer una tarea hecha es una tarea nueva, con otro id.
-func Conservar(nuevo, viejo *Plan) []string {
-	var kept []string
+// Conservar lleva al plan recargado el avance del guardado: una tarea en curso o hecha no vuelve
+// a pendiente. Excepción (H-05): una tarea hecha cuyo contrato cambió vuelve a pendiente, porque
+// lo hecho no prueba lo pedido ahora; se devuelve en reabiertas. Una en curso sigue en curso
+// (su worker recibe las rutas nuevas). El avance que traiga el archivo cargado no cuenta: toda
+// tarea entra pendiente salvo el avance registrado en el plan guardado (viejo puede ser nil).
+func Conservar(nuevo, viejo *Plan) (kept, reabiertas []string) {
 	for i := range nuevo.Tareas {
 		t := &nuevo.Tareas[i]
-		if v := viejo.tarea(t.ID); v != nil && v.Estado != "pendiente" && t.Estado == "pendiente" {
-			t.Estado, t.Worker = v.Estado, v.Worker
-			kept = append(kept, t.ID+" "+v.Estado)
+		t.Estado, t.Worker = "pendiente", ""
+		if viejo == nil {
+			continue
 		}
+		v := viejo.tarea(t.ID)
+		if v == nil || v.Estado == "pendiente" {
+			continue
+		}
+		if v.Estado == "hecha" && v.HashContrato() != t.HashContrato() {
+			reabiertas = append(reabiertas, t.ID)
+			continue
+		}
+		t.Estado, t.Worker = v.Estado, v.Worker
+		kept = append(kept, t.ID+" "+v.Estado)
 	}
-	return kept
+	return kept, reabiertas
 }
 
 // Soltar devuelve a pendiente una tarea en curso cuyo worker no llegó a trabajar (arranque fallido).
@@ -299,29 +374,7 @@ func (p *Plan) Pendientes() int {
 	return n
 }
 
-// Modelo traduce dificultad a modelo y esfuerzo por agente. Lo barato donde la tarea es fácil;
-// lo potente donde es core. Tabla heredada del protocolo de OdontoFlow (2026-10).
-func Modelo(agente, dificultad string) (modelo, esfuerzo string) {
-	if dificultad == "" {
-		dificultad = "media"
-	}
-	if agente == "codex" {
-		switch dificultad {
-		case "baja":
-			return "gpt-6-luna", "medium"
-		case "alta":
-			return "gpt-6.1-sol", "high"
-		}
-		return "gpt-6.1-sol", "medium"
-	}
-	switch dificultad {
-	case "baja":
-		return "haiku", "medium"
-	case "alta":
-		return "opus", "high"
-	}
-	return "sonnet", "medium"
-}
+// El modelo por dificultad ya no vive aquí: es dato de orq.agents.json (roles.worker.by_risk).
 
 // Desvio compara el plan con lo que de verdad cambió en el slice. Es lo que el Planificador
 // mira para mantener el plan mínimo y al día, sin reescribirlo entero.

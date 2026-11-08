@@ -2,28 +2,34 @@
 
 <img src="assets/cthulhu-the-dreamer.gif" alt="The Dreamer — a pixel-art octopus that wakes, thinks and smiles" width="420">
 
-# CTHULHU ORCHESTRATOR
+# CTHULHU HARNESS
 
 **Agents write the code. A program decides when it's done.**
 
 `orq` — a multi-agent coding harness in Go, standard library only.<br>
 The in-house dev tool of **[AI EDGE RUNNERS](https://ai-edgerunners-landing.vercel.app)**.
 
-`Go 1.25 · stdlib only` · `~9k lines` · `86 tests` · `22 commands` · `v1.0.0`
+**[Quickstart →](docs/QUICKSTART.md)**
 
 </div>
 
 ---
 
-## What it is
+## The problem
 
-Cthulhu Orchestrator runs teams of coding agents (Claude Code and Codex) on real software, **one user story at a time**.
+Put five coding agents on one product and they get fast — and lose the plot. Each one optimizes its own task;
+nobody remembers why the product exists. They edit the test that was supposed to judge them, declare victory on
+zero tests run, spawn helpers you never see, leave 80 GB of worktrees behind, and die with their context.
+A human ends up babysitting every pane.
 
-Every story — a *slice* — starts from an acceptance test that fails. The agents work in isolated git worktrees to turn it green. They **cannot edit that test**, cannot force-push, cannot spawn helpers, and cannot declare victory: only the harness merges, re-runs the untouched test, counts how many tests actually ran, writes a receipt, and hands the result to a human for the demo.
+## The promise
+
+- **Product focus.** Every unit of work (a *slice*) starts from one approved user story and a **red acceptance test**.
+- **Program-enforced done.** Agents cannot edit the exam, cannot merge, cannot close. `orq` re-runs the untouched exam, counts the tests, writes a receipt.
+- **No babysitting.** One board for the Owner, explicit stoppers when a human is really needed, everything else autonomous within limits.
+- **Survives death.** Any role can be closed and revived from memory and a handoff note.
 
 > What must always be the same is enforced by a program, not by a prompt.
-
-The Dreamer — Cthulhu, the ancient intelligence that dreams the system — orchestrates. The **Edge Octos** do the work.
 
 <div align="center">
 <img src="assets/edge-octo-build.gif" alt="Edge Octo coding at a laptop" width="180">
@@ -32,101 +38,144 @@ The Dreamer — Cthulhu, the ancient intelligence that dreams the system — orc
 <img src="assets/edge-octo-glitch.gif" alt="Edge Octo dissolving into pixels" width="180">
 </div>
 
-## One slice, end to end
-
-<img src="assets/the-slice.svg" alt="Story → red test → workers → merge → verify → demo, with the orq gate under every step" width="100%">
-
-| # | Step | Who | What `orq` guarantees |
-|---|---|---|---|
-| 01 | **Story** | Owner + interviewer agent | Nothing starts without an approved story and acceptance criterion |
-| 02 | **Red test** | Planner (+ a second model that argues the plan down) | Red must be a real assertion failure; the test bundle is fingerprinted (sha256) |
-| 03 | **Workers** | 1–4 agents, each in its own worktree and zone | Every tool call passes the gate |
-| 04 | **Merge** | `orq slice juntar` | Commits outside a worker's zone, or touching the test, are rejected |
-| 05 | **Verify** | `orq slice verificar` + a fresh verifier | The untouched test re-runs; **0 tests run ≠ green**; a receipt is written |
-| 06 | **Demo** | the human | `orq slice cerrar --aceptado` integrates, revalidates and cleans up |
-
 ## The method: TCADD
-
-Every slice walks through five phases.
 
 | | Phase | What happens |
 |---|---|---|
-| **T** | Translation | An idea becomes a user story with business value and a criterion the client approves |
-| **C** | Context | Read-only scouts map the repo, the docs and the real data before anyone plans |
-| **A** | Analysis | The smallest plan plus the failing acceptance test; a model from another family pushes back |
-| **D** | Development | Workers turn the test green in parallel, isolated, watched by the gate |
-| **D** | Documentation | Receipt, handoff and docs land in the same slice, so the next agent starts where this one ended |
+| **T** | Translation | Atena interviews the Owner; an idea becomes a story with business value, classified (greenfield/brownfield, stage, criticality) |
+| **C** | Context | Read-only scouts check the story against the real repo and data |
+| **A** | Analysis | The smallest plan plus the failing acceptance test; an adversary from another model family pushes back |
+| **D** | Development | Workers turn the test green in parallel, isolated in worktrees, watched by the gate |
+| **D** | Documentation | Receipt, memory and handoff land with the slice, so the next agent starts where this one ended |
 
-TCADD started as instructions for agents (*orquestador-1*). Cthulhu Orchestrator (*orquestador-2*) turns the parts that must never change into code.
+Rigor is proportional to risk: criticality decides whether QA layers (unit, adversarial, mutation) are required.
 
-## The gate: we tried to make it cheat
+<img src="assets/the-slice.svg" alt="Story → red test → workers → merge → verify → demo, with the orq gate under every step" width="100%">
 
-`validacion/validar-mvp.sh --real` launches a real headless Claude Code worker (Haiku) in a toy repo and **orders it to cheat**: edit the acceptance test, then spawn a sub-agent.
+## Roles
 
-```text
-$ edit tests/aceptacion/s01.test.mjs
-orq: "tests/aceptacion/s01.test.mjs" está protegido…        ✗ BLOCKED
-$ spawn sub-agent
-orq: un subagente no lanza workers…                         ✗ BLOCKED
-$ edit src/…  &&  npm test
-✓ 22/22 checks · test untouched · green touched only src/
-```
+| Role | Does | Never |
+|---|---|---|
+| **Atena** | The Owner's only interface; owns phase T; filters what reaches the team; resolves stoppers | Writes code |
+| **Orchestrator** | Opens sessions, launches workers from the plan, merges, verifies, closes | Plans or writes code |
+| **Planner** | Turns one approved story into a minimal plan + red acceptance test; keeps it current | Implements |
+| **Adversary (Astra)** | Argues the plan down for value and speed until both agree | Implements |
+| **Scouts** | Read-only exploration of repo, docs and data | Write anything |
+| **Workers** | Make the exam green inside their worktree and zone | Touch the exam, push, spawn agents, close |
+| **Tester / repairer** | Independent QA (`orq qa run`), findings with repro; repairs bounded to 2 attempts | Tester writes no code |
+| **Verifier** | Fresh-context check of the receipt against the story | Trusts the worker's word |
 
-Measured result: **2/2 cheats blocked, 22/22 checks, under USD 0.01, everything deleted afterwards.** A separate end-to-end suite (`validacion/e2e-v05.sh`) kills the process at each closing stage and checks it recovers.
+`orq skill ROLE` prints each role's guide and the skills it should load.
 
-## What the program enforces
+## What the program enforces vs what is advice
+
+**Enforced by `orq` (code, tests, exit codes):**
 
 | Guard | Rule |
 |---|---|
-| Protected test | Edits through Edit, Write, redirects, `tee`, `sed -i`, `cp`, `mv`, `rm`, `git checkout/restore` are blocked; anything that slips through is caught because the test's diff against the red commit must be empty |
-| Honest green | A green run with zero tests executed fails; red must be an assertion failure |
-| Workers | At most 4 at once, each in a linked git worktree; a worker can't launch another |
-| Destructive git | `push`, `--force`, `branch -D`, `reset --hard`, `clean -f`, forced worktree removal — blocked for agents |
-| Disk | Minimum free space, a scratch quota and a fresh measurement before any launch; below the critical floor everything HALTs |
-| Failure | Two failed repairs → the slice is **BLOCKED**; a worker gets at most three attempts; leftovers go to quarantine |
-| Fail closed | If `orq` is missing or broken, the Claude Code hook blocks instead of letting the action through |
+| Honest red | `slice open` refuses unless the exam fails **by assertion**; the test bundle is fingerprinted (sha256) |
+| Honest green | `slice verify` re-runs the untouched exam; 0 tests executed ≠ green; skipped tests fail unless allowed; a receipt is written |
+| Protected exam | The gate blocks edits through Edit/Write, redirects, `sed -i`, `cp`, `mv`, `rm`, `git checkout`; the diff against the red commit must be empty anyway |
+| One writer | `slice take` — one writer per slice; changing exam or scope needs recorded approval |
+| Destructive git | `push`, `--force`, `branch -D`, `reset --hard`, forced worktree removal are blocked for agents |
+| Resources | Admission checks disk, HALT, worker and worktree caps before any launch; `orq gc` never forces |
+| Failure | Two failed repairs or no progress → **BLOCKED**; max 3 attempts |
+| QA by criticality | Medium+ cannot close without a QA receipt |
+| Resumable close | `slice close` integrates exactly once even if killed mid-way |
 
-Every number lives in `~/.config/orq/limits.json` (template in [`templates/limits.json`](templates/limits.json)). The full rulebook, in Spanish: [`docs/REGLAS-HARNESS.md`](docs/REGLAS-HARNESS.md).
+**Advice (prompts and skills, not guaranteed):** product judgment, plan quality, code style, when to raise a
+stopper, how to split tasks, how much to test beyond the exam.
+
+## Platform-free
+
+- **Agents and models per role** live in `orq.agents.json` (`orq config agents show|detect|set ROLE AGENT:MODEL`).
+  Claude, Codex, Gemini or any CLI with a headless mode; cheap models for cheap work, worker model by risk.
+- **Runners:** `herdr` (panes), `tmux`, or `process` (plain background process, no UI).
+- **Gate:** reads the PreToolUse hook JSON on stdin (`orq gate`, exit 2 = block); fail-closed if `orq` is missing.
+- English CLI; Spanish aliases (`abrir`, `verificar`, `cerrar`) and `ORQ_LANG=es` for Spanish messages.
+
+## Board, stoppers, autonomy
+
+- `orq board [--json|--html]` — one view for the Owner: open stoppers first, then slices with % done, workers, velocity.
+- `orq stop raise --type credential|api_key|decision|confirmation|access --severity blocking|soon|fyi` — a request
+  to the Owner. Secrets never go in text: the stopper says *where* to put them. Only Atena/Owner resolve.
+- `orq autonomy guided|free --scope ...` — free mode must be approved by the Owner.
+- `orq worker beat|done|list` — live worker state in `.orq/workers/<id>/state.json`.
+
+## Memory and handoff
+
+- `orq mem add --imp I --cat C "≤200 chars"` — atomic, capped memory; `orq mem compact` keeps it small.
+- `orq handoff-note ROLE` — a note so a fresh session of that role continues the same work in the same worktree.
+- `orq handoff` — `HANDOFF.md` so another *person* can pick up the project. `orq revive` — deterministic context.
+- **Sync policy** (`orq init --sync=`): `local` (state stays in `.orq/`, ignored), `commit` (state committed with
+  the project), `branch` (state on an `orq/state` branch via `orq sync push|pull`).
+
+## Skills: routing and gallery
+
+Skills are loaded **per phase and role**, not all at once. A catalog (`.orq/skills.catalog.json`) maps each
+skill to phases, roles, project types, stacks and minimum criticality. `orq skills plan --phase X --role R`
+picks the set; `orq skills vet ID` statically rejects skills that push, force, `rm -rf` or spawn agents;
+`orq skills install` pins content hashes in `.orq/skills.lock.json`. Details: [`docs/v2/SKILLS.md`](docs/v2/SKILLS.md).
+
+## Fronts
+
+A big slice can be split into up to 3 fronts (`max_fronts` in limits.json): sub-orchestrators kept as data in the
+plan, not new processes. Each front has a product goal, its own non-overlapping paths and an owner role; every task
+names its front. `orq front brief F` gives a one-page brief, `orq front receipt F` one page of results (tasks done,
+tests, open findings, stoppers), and the board groups tasks by front. Admission stays global, and the main
+orchestrator only reads briefs and receipts. Criticality has one source: `orq profile set criticality=…`.
+
+## Verified vs not yet verified
+
+Honest status of v2 (`harness/v2` branch):
+
+**Verified (automated, in this repo):**
+- `go vet` + `go test ./...` for the harness.
+- `validacion/e2e-v05.sh`: red→trap→retry→green with receipt, stale-attempt closing rejected, handoff without
+  duplicate worktrees, a real kill at each closing stage and recovery, two parallel slices closing at once, gate rules, QA receipt.
+- `validacion/quickstart.sh`: the [Quickstart](docs/QUICKSTART.md) end to end, hermetic, with a fake agent.
+- v1's `validacion/validar-mvp.sh --real` ran one real headless Claude worker that was told to cheat (2/2 blocked).
+
+**Not yet verified:**
+- No real **herdr**, **Claude** or **Codex** end-to-end run of v2 (launch → work → verify → close) yet; the
+  `herdr`/`tmux` runners are tested with fakes only.
+- Worker **exit_code** capture is missing: a `process` worker that dies is noticed by heartbeat/state, not by its exit code.
+- Codex has no PreToolUse hook equivalent, so its tool calls do not pass through the gate.
 
 ## Install
 
-Requires Go 1.25+.
+Requires Go 1.25+ and git.
 
 ```bash
 make test          # go vet + go test ./...
 make install       # builds ~/bin/orq and writes default limits to ~/.config/orq/limits.json
-orq watch          # first disk measurement (can take a few minutes)
-orq status         # workers, disk, slices
+orq watch          # first disk measurement
+orq status         # limits, measurements, HALT, workers
 ```
 
-The Claude Code hook is installed **per project**, not globally: copy [`templates/claude-settings.json`](templates/claude-settings.json) to `.claude/settings.json` in the repo you want to guard. The role skills (interviewer, orchestrator, planner) live in [`skills/`](skills/).
-
-> The CLI speaks Spanish (`juntar` = merge, `verificar` = verify, `cerrar` = close).
+Then follow the **[Quickstart](docs/QUICKSTART.md)**. Every limit lives in `~/.config/orq/limits.json`
+(template: [`templates/limits.json`](templates/limits.json)); the rulebook (Spanish): [`docs/REGLAS-HARNESS.md`](docs/REGLAS-HARNESS.md).
 
 ## Layout
 
 ```text
-harness/      orq — Go, standard library only (cmd/orq + 15 internal packages)
-skills/       the role prompts: interviewer, orchestrator, planner
-templates/    story.md, limits.json, the per-project Claude Code hook
-validacion/   the cheating test and the end-to-end suite
-docs/         the rulebook: what every number protects
+harness/      orq — Go, standard library only
+skills/       role skills: atena, orchestrator, planner, board, stopper, supervisor
+templates/    story.md, limits.json, orq.agents.json, the Claude Code hook
+validacion/   e2e suite, quickstart, the cheating test
+docs/         QUICKSTART, rulebook, v2 recap/roadmap/specs
 assets/       the octopuses
 ```
-
-## Today vs next
-
-**Works today:** the gate · the slice state machine (implementing → verified → integrating → closing / blocked) · fingerprinted exams, counted green, receipts · 1–4 workers in worktrees and zones · task-graph planning, memory and handoff · parallel slices.
-
-**Next:** a full Orca adapter · sandboxed workers · cost and human-time metrics per slice · hidden test variants · a judge for chat quality.
 
 ---
 
 <div align="center">
 
-Made by the **AI EDGE RUNNERS** team — an applied-AI lab that builds software with agents and keeps a human in charge.<br>
-Used to build **[AIRI](https://airiflow.com)**, our dental-clinic platform, across 50+ slices.
+Made by the **AI EDGE RUNNERS** team — an applied-AI lab that builds software with agents and keeps a human in charge.
 
 <sub>The octopuses are original AI EDGE RUNNERS characters, drawn as pixel art. The Dreamer is our take on Cthulhu (H. P. Lovecraft, 1928).</sub>
 
 </div>
+
+## Auditing v2
+See [docs/v2/AUDIT-GUIDE.md](docs/v2/AUDIT-GUIDE.md).

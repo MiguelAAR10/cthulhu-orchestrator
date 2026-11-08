@@ -6,33 +6,42 @@ import (
 	"fmt"
 	"io"
 	"orq/internal/slice"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"orq/internal/gate"
+	"orq/internal/lang"
 	"orq/internal/limits"
 	"orq/internal/state"
 	"orq/internal/sysinfo"
 	"orq/internal/watch"
+	"orq/internal/worktrees"
 )
 
 const Version = "1.0.0"
 
-const usage = `orq ` + Version + ` · harness de orquestador-2
+const usageES = `orq ` + Version + ` · harness de orquestador-2
 
   orq gate            hook PreToolUse: lee el JSON por stdin; exit 2 = bloquea
   orq watch           mide scratch y disco; escribe HALT si corresponde
+  orq gc [--dry-run]  retira worktrees de orq sin perder nada (nunca --force); lo dudoso a cuarentena
   orq status          muestra límites, medición, HALT y workers
   orq halt            muestra HALT
   orq halt --clear    quita HALT (solo tras liberar espacio)
   orq halt --set MSG  pone HALT a mano
 
   orq init [--modo=mejora|nuevo] detecta modo y stack, instala hooks y lista skills
-  orq skills [instalar [NOMBRE...]|fijar|verificar]   skills del proyecto por rol, solo en su .claude/skills;
-                                 fijar guarda su huella; verificar avisa FALTA/DEP/CAMBIO/NUNCA
-  orq skill ROL                  guía del rol (atena|orquestador|scout|worker|verificador) y sus skills
+  orq profile [set type=greenfield|brownfield|legacy criticality=trivial|low|medium|high stage=development|production stacks=a,b]
+                                 multi-signal detection (code, git age/commits/authors, tests, CI, manifests);
+                                 Owner-forced values persist in .orq/profile.json and win; contradictions warn
+  orq skills [plan --phase X --role R | install [ID...] | vet ID [--file F] | fijar | verificar]
+                                 curated gallery (skills.catalog.json + .orq/skills.catalog.json): minimal set per
+                                 phase×role by stakes; install pins hashes in .orq/skills.lock.json and refuses
+                                 the never-list; vet records validated|rejected in .orq/skills.gallery.json
+  orq skill ROL                  guía del rol (atena|orquestador|scout|worker|verificador) y sus skills de fase×rol
   orq fase                       T·Traducción, C·Contexto, A·Análisis, D1·Desarrollo, D2·Documentación
   orq contexto                   hook SessionStart: rol, fase, relevo y memoria
   orq doc                        ficha viva del proyecto (.orq/PROYECTO.md) con un modelo barato
@@ -55,9 +64,9 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq slice alcance RUTA[,RUTA] --aprobado "req…"   amplía el alcance con aprobación de Atena
   orq slice verificar            corre el examen intacto, cuenta pruebas y deja un recibo
                                  (2 reparaciones o sin progreso → BLOQUEADO)
-  orq slice lanzar [--slice NN] --agente claude|codex [--tarea ID|siguiente] [--dificultad baja|media|alta]
+  orq slice lanzar [--slice NN] [--agente A] [--tarea ID|siguiente] [--dificultad baja|media|alta]
                                  [--zona front --rutas web,ui] [--alcance "..."]
-                                 abre el worker en su panel de herdr con su contrato. Con --zona se suma
+                                 abre el worker en su panel (runner: herdr|tmux|process) con su contrato. Con --zona se suma
                                  al EQUIPO del slice (front, back, test… a la vez, hasta 4), cada uno en su
                                  rama y worktree; se hablan con orq msg send --para worker-<zona>-sNN
   orq slice juntar [--slice NN]  integra lo commiteado de cada worker del equipo; rechaza lo que salga
@@ -82,14 +91,46 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq slice estado               fase, intento, escritor, recibo y sobrantes
                                  Con varios slices abiertos (hasta 4), cada comando lleva --slice NN
   orq metricas [--desde AAAA-MM-DD] [--json]   aceptados, intentos, sin progreso, cuarentena
+  orq config agents [show | detect | set ROL AGENTE:MODELO]
+                                 agentes y modelos por rol desde datos (orq.agents.json sobre
+                                 ~/.config/orq/agents.json). detect busca claude, codex, cursor-agent,
+                                 gemini, opencode y aider en el PATH y escribe una propuesta; el Owner gana.
+                                 El adversario es de otra familia que el planificador (lo impone orq)
+  orq worker beat|done|list      estado vivo del worker (.orq/workers/<id>/state.json, ORQ_WORKER_ID)
+  orq token                      token del Owner (export ORQ_TOKEN="$(orq token)"); nunca llega a un worker
+  orq session register [--pid N] [--role R]   ancla la shell del Owner (firmada con el token) para
+                                 que sus descendientes valgan como privilegiados sin terminal
+  orq stop raise|list|resolve|cancel   pedidos al Owner (credential|api_key|decision|confirmation|access,
+                                 blocking|soon|fyi); solo atena/owner resuelven; nunca un secreto en texto
+  orq autonomy [ver|guided|free --scope ...]   autonomía; free lo aprueba el Owner
+  orq board [--json|--html [--out F]]   tablero del Owner: stoppers, slices, workers, velocidad
+  orq handoff [--out F]          HANDOFF.md para que otra persona retome el proyecto
+  orq sync push|pull [--theirs]  memoria en la rama orq/state (orq init --sync=local|commit|branch)
+  orq qa run S-NN                pirámide de pruebas (unit → integration → e2e; mutation/adversarial solo si
+                                 criticidad ≥ high) y recibo QA. Solo el Orquestador. Cerrar aceptado lo exige
+                                 desde criticidad medium (qa.require_receipt_from)
+  orq qa finding add S-NN --requirement R --commit SHA --repro CMD --observed O --expected E --impact I
+                                 confirmado solo si orq re-ejecuta el repro y falla · orq qa ver S-NN
+  orq evidence add S-NN --kind target|before|after --file PNG [--note "..."] [--pulir]
+                                 docs/slices/S-NN/: PNG, diff % after vs target y README ≤40 líneas
   orq version
 `
 
 // Run devuelve el código de salida. En `gate`, cualquier pánico termina en 2 (bloquear).
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	slice.Version = "orq " + Version
+	// Messages are English by default: stderr always, stdout unless it carries user content.
+	errW := lang.Writer(stderr)
+	defer errW.Flush()
+	stderr = errW
+	if !conContenido(normalizeArgs(args)) {
+		outW := lang.Writer(stdout)
+		defer outW.Flush()
+		stdout = outW
+	}
+	usage := usageText()
 	if len(args) == 0 {
-		fmt.Fprint(stderr, usage)
+		fmt.Fprint(stderr, usageText())
 		return 1
 	}
 	defer func() {
@@ -98,17 +139,28 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 			code = 2
 		}
 	}()
+	if limiteDeWorker(args, stderr) {
+		return 2
+	}
+	args = normalizeArgs(args)
 	switch args[0] {
+	case "help", "-h", "--help":
+		fmt.Fprint(stdout, usage)
+		return 0
 	case "gate":
 		return runGate(stdin, stderr)
 	case "watch":
 		return runWatch(stdout, stderr)
+	case "gc":
+		return runGC(args[1:], stdout, stderr)
 	case "status":
 		return runStatus(stdout, stderr)
 	case "halt":
 		return runHalt(args[1:], stdout, stderr)
 	case "init":
 		return runInit(args[1:], stdout, stderr)
+	case "profile":
+		return runProfile(args[1:], stdout, stderr)
 	case "skills":
 		return runSkills(args[1:], stdout, stderr)
 	case "fase":
@@ -130,22 +182,49 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	case "slice":
 		return runSlice(args[1:], stdout, stderr)
 	case "sesion":
+		if len(args) > 1 && args[1] == "registrar" {
+			return runSesionRegistrar(args[2:], stdout, stderr)
+		}
 		return runSesion(args[1:], stdout, stderr)
 	case "plan":
 		return runPlan(args[1:], stdout, stderr)
+	case "front":
+		return runFront(args[1:], stdout, stderr)
 	case "aprender":
 		return runAprender(args[1:], stdout, stderr)
 	case "alinear":
 		return runAlinear(args[1:], stdout, stderr)
+	case "worker":
+		return runWorker(args[1:], stdout, stderr)
+	case "stop":
+		return runStop(args[1:], stdout, stderr)
+	case "autonomy":
+		return runAutonomy(args[1:], stdout, stderr)
+	case "board":
+		return runBoard(args[1:], stdout, stderr)
+	case "revive":
+		return runRevive(args[1:], stdout, stderr)
+	case "handoff":
+		return runHandoff(args[1:], stdout, stderr)
+	case "sync":
+		return runSync(args[1:], stdout, stderr)
 	case "metricas":
 		return runMetricas(args[1:], stdout, stderr)
 	case "skill", "--skill":
 		return runSkill(args[1:], stdout, stderr)
+	case "config":
+		return runConfig(args[1:], stdout, stderr)
+	case "qa":
+		return runQA(args[1:], stdout, stderr)
+	case "evidence":
+		return runEvidence(args[1:], stdout, stderr)
+	case "token":
+		return runToken(stdout, stderr)
 	case "version":
 		fmt.Fprintln(stdout, Version)
 		return 0
 	default:
-		fmt.Fprint(stderr, usage)
+		fmt.Fprint(stderr, usageText())
 		return 1
 	}
 }
@@ -157,6 +236,9 @@ func realEnv() gate.Env {
 		StateDir:   state.Dir(),
 		IsWorktree: gate.IsLinkedWorktree,
 		Bundle:     bundleAbierto,
+		Worktrees:  worktreesDe,
+		Rol:        os.Getenv("ORQ_ROL"),
+		WorkerID:   os.Getenv("ORQ_WORKER_ID"),
 	}
 }
 
@@ -211,6 +293,10 @@ func runGate(stdin io.Reader, stderr io.Writer) int {
 }
 
 func runWatch(stdout, stderr io.Writer) int {
+	// El vigía de workers corre aunque falten los límites de disco.
+	if p, err := abrirProyecto(); err == nil {
+		p.vigilarWorkers(stdout)
+	}
 	l, err := limits.Load(limits.DefaultPath())
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -227,6 +313,19 @@ func runWatch(stdout, stderr io.Writer) int {
 	}
 	for p, gb := range r.Snapshot.DiskFreeGB {
 		fmt.Fprintf(stdout, "libre %-6s %.0f GB (mínimo %.0f, crítico %.0f)\n", p, gb, l.MinFreeGB[p], *l.Scratch.CriticalFreeGB)
+	}
+	for _, a := range r.Avisos {
+		fmt.Fprintf(stdout, "AVISO %s\n", a)
+	}
+	// Dentro de un proyecto con .orq, watch también retira lo seguro y cuenta worktrees.
+	if p, err := abrirProyecto(); err == nil {
+		if res, err := p.gc(false); err != nil {
+			fmt.Fprintf(stdout, "gc: %v\n", err)
+		} else if len(res) > 0 {
+			mostrarGC(stdout, res)
+		}
+		n, _ := worktrees.Contar(p.dir)
+		fmt.Fprintf(stdout, "worktrees de orq: %d (tope max_worktrees %d)\n", n, l.TopeWorktrees())
 	}
 	if r.Halt != "" {
 		fmt.Fprintf(stdout, "HALT escrito: %s\n", r.Halt)
@@ -297,6 +396,36 @@ func runHalt(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprint(stderr, usage)
+	fmt.Fprint(stderr, usageText())
 	return 1
+}
+
+// conContenido: commands whose stdout carries messages, memory, plans, guides or JSON
+// written by people and agents; orq does not translate those.
+func conContenido(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	for _, a := range args {
+		if a == "--json" || a == "--html" {
+			return true
+		}
+	}
+	sub := ""
+	if len(args) > 1 {
+		sub = args[1]
+	}
+	switch args[0] {
+	case "help", "-h", "--help", "contexto", "skill", "--skill", "handoff", "doc", "fase", "aprender", "board", "gate", "token":
+		return true
+	case "msg":
+		return sub == "leer"
+	case "mem":
+		return sub != "add" && sub != "compactar"
+	case "plan":
+		return strings.Contains(strings.Join(args, " "), " ver")
+	case "slice":
+		return strings.Contains(strings.Join(args, " "), " recibo") || strings.Contains(strings.Join(args, " "), " contrato")
+	}
+	return false
 }
