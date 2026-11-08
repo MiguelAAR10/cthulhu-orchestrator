@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"orq/internal/lang"
 	"orq/internal/orqdir"
 )
 
@@ -67,26 +68,71 @@ func confirma(fuente string) bool {
 	return fuente == "owner" || fuente == "atena" || fuente == "filtro"
 }
 
+// alias: valores en inglés que mem add acepta junto a los españoles; se guarda la forma canónica.
+var alias = map[string]string{
+	"critical": "critica", "high": "alta", "medium": "media", "low": "baja",
+	"requirement": "requisito", "domain": "dominio", "technical": "tecnico", "risk": "riesgo", "learning": "aprendizaje",
+	"fact": "hecho", "hypothesis": "hipotesis",
+	"orchestrator": "orquestador", "planner": "planificador", "scribe": "escriba",
+}
+
+// en: la lista de valores como la ve quien usa orq en inglés.
+var en = map[string]string{}
+
+func init() {
+	for k, v := range alias {
+		en[v] = k
+	}
+}
+
+func canon(v string) string {
+	if c, ok := alias[strings.ToLower(v)]; ok {
+		return c
+	}
+	return v
+}
+
+func Opciones(xs []string) string {
+	if lang.ES() {
+		return strings.Join(xs, "|")
+	}
+	out := make([]string, len(xs))
+	for i, x := range xs {
+		out[i] = x
+		if e, ok := en[x]; ok {
+			out[i] = e
+		}
+	}
+	return strings.Join(out, "|")
+}
+
+// Normalizar pasa los valores en inglés a la forma canónica guardada.
+func (it *Item) Normalizar() {
+	it.Imp, it.Cat, it.Fuente, it.Tipo = canon(it.Imp), canon(it.Cat), canon(it.Fuente), canon(it.Tipo)
+}
+
 func (it Item) Validate() error {
+	it.Normalizar()
+	T := lang.T
 	switch {
 	case !slices.Contains(Imps, it.Imp):
-		return fmt.Errorf("imp %q: usa %s", it.Imp, strings.Join(Imps, "|"))
+		return fmt.Errorf(T("imp %q: use %s", "imp %q: usa %s"), it.Imp, Opciones(Imps))
 	case !slices.Contains(Cats, it.Cat):
-		return fmt.Errorf("cat %q: usa %s", it.Cat, strings.Join(Cats, "|"))
+		return fmt.Errorf(T("cat %q: use %s", "cat %q: usa %s"), it.Cat, Opciones(Cats))
 	case !slices.Contains(Fuentes, it.Fuente):
-		return fmt.Errorf("fuente %q: usa %s", it.Fuente, strings.Join(Fuentes, "|"))
+		return fmt.Errorf(T("source %q: use %s", "fuente %q: usa %s"), it.Fuente, Opciones(Fuentes))
 	case strings.TrimSpace(it.Texto) == "":
-		return errors.New("texto vacío")
+		return errors.New(T("empty text", "texto vacío"))
 	case len([]rune(it.Texto)) > MaxTexto:
-		return fmt.Errorf("texto de %d caracteres; máximo %d: una idea por línea", len([]rune(it.Texto)), MaxTexto)
+		return fmt.Errorf(T("text of %d characters; maximum %d: one idea per line", "texto de %d caracteres; máximo %d: una idea por línea"), len([]rune(it.Texto)), MaxTexto)
 	case it.Imp == "critica" && !confirma(it.Fuente):
-		return errors.New("solo el Owner o el Atena marcan algo como crítico; un agente lo propone al Atena")
+		return errors.New(T("only the Owner or Atena mark something critical; an agent proposes it to Atena", "solo el Owner o el Atena marcan algo como crítico; un agente lo propone al Atena"))
 	case it.Tipo != "" && !slices.Contains(Tipos, it.Tipo):
-		return fmt.Errorf("tipo %q: usa %s", it.Tipo, strings.Join(Tipos, "|"))
+		return fmt.Errorf(T("type %q: use %s", "tipo %q: usa %s"), it.Tipo, Opciones(Tipos))
 	case it.Tipo == "hipotesis" && it.Imp == "critica":
-		return errors.New("una hipótesis no puede ser crítica: compruébala primero")
+		return errors.New(T("a hypothesis cannot be critical: check it first", "una hipótesis no puede ser crítica: compruébala primero"))
 	case it.Tipo == "hecho" && !confirma(it.Fuente) && it.Fuente != "escriba" && strings.TrimSpace(it.Evidencia) == "":
-		return errors.New("un hecho de agente necesita --evidencia (recibo, commit, archivo:línea); si no la tienes, es --tipo hipotesis")
+		return errors.New(T("an agent's fact needs --evidence (receipt, commit, file:line); without it, use --type hypothesis", "un hecho de agente necesita --evidencia (recibo, commit, archivo:línea); si no la tienes, es --tipo hipotesis"))
 	}
 	return nil
 }
@@ -131,6 +177,7 @@ func Save(path string, items []Item) error {
 
 // Add valida, asigna id y agrega. Devuelve el ítem guardado y cuántas líneas hay.
 func Add(path string, it Item, now time.Time) (Item, int, error) {
+	it.Normalizar()
 	if err := it.Validate(); err != nil {
 		return it, 0, err
 	}
@@ -146,10 +193,10 @@ func Add(path string, it Item, now time.Time) (Item, int, error) {
 	if it.Reemplaza != "" {
 		i := slices.IndexFunc(items, func(o Item) bool { return o.ID == it.Reemplaza })
 		if i < 0 {
-			return it, 0, fmt.Errorf("no existe %s para reemplazar", it.Reemplaza)
+			return it, 0, fmt.Errorf(lang.T("%s does not exist; nothing to replace", "no existe %s para reemplazar"), it.Reemplaza)
 		}
 		if (items[i].Imp == "critica" || items[i].Conf == "confirmado") && !confirma(it.Fuente) {
-			return it, 0, fmt.Errorf("%s lo confirmó el Owner o el Atena: solo ellos lo reemplazan; propónselo al Atena", it.Reemplaza)
+			return it, 0, fmt.Errorf(lang.T("%s was confirmed by the Owner or Atena: only they replace it; propose it to Atena", "%s lo confirmó el Owner o el Atena: solo ellos lo reemplazan; propónselo al Atena"), it.Reemplaza)
 		}
 	}
 	it.Conf = "inferido"

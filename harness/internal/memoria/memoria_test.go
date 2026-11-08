@@ -188,3 +188,27 @@ func TestPresupuestoPrimeroSliceActivo(t *testing.T) {
 		t.Fatalf("%d %d", len(s), r)
 	}
 }
+
+// mem add acepta los valores en inglés (y los españoles de siempre); se guardan en la forma canónica.
+func TestValoresEnIngles(t *testing.T) {
+	t.Setenv("ORQ_LANG", "")
+	p := filepath.Join(t.TempDir(), "mem.jsonl")
+	it, _, err := Add(p, Item{Imp: "high", Cat: "requirement", Fuente: "orchestrator", Tipo: "hypothesis", Texto: "x"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Imp != "alta" || it.Cat != "requisito" || it.Fuente != "orquestador" || it.Tipo != "hipotesis" {
+		t.Fatalf("no normalizó: %+v", it)
+	}
+	if _, _, err := Add(p, Item{Imp: "media", Cat: "riesgo", Fuente: "worker", Texto: "y"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = Add(p, Item{Imp: "huge", Cat: "risk", Fuente: "worker", Texto: "z"}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "critical|high|medium|low") || strings.Contains(err.Error(), "usa") {
+		t.Fatalf("mensaje: %v", err)
+	}
+	_, _, err = Add(p, Item{Imp: "low", Cat: "risk", Fuente: "worker", Tipo: "fact", Texto: "z"}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "needs --evidence") {
+		t.Fatalf("mensaje: %v", err)
+	}
+}
