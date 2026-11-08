@@ -46,11 +46,11 @@ func TestEnglishFormsEquallyRestricted(t *testing.T) {
 func TestGateMessagesEnglishByDefaultSpanishWithOrqLang(t *testing.T) {
 	wt := fakes{wt: true}.env(t, t.TempDir())
 	t.Setenv("ORQ_LANG", "")
-	if d := Evaluate(bash("orq slice exam x"), baseLimits(), wt); d.Allow || !strings.Contains(d.Reason, "worker does not open") {
+	if d := Evaluate(bash("orq slice exam x"), baseLimits(), wt); d.Allow || !strings.Contains(d.Reason, "a worker only runs") {
 		t.Errorf("english: %q", d.Reason)
 	}
 	t.Setenv("ORQ_LANG", "es")
-	if d := Evaluate(bash("orq slice examen x"), baseLimits(), wt); d.Allow || !strings.Contains(d.Reason, "un worker no abre") {
+	if d := Evaluate(bash("orq slice examen x"), baseLimits(), wt); d.Allow || !strings.Contains(d.Reason, "un worker solo corre") {
 		t.Errorf("spanish: %q", d.Reason)
 	}
 }

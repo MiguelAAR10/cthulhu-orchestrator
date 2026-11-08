@@ -39,6 +39,8 @@ type Env struct {
 	Worktrees func(cwd string) (int, error)
 	// Rol es ORQ_ROL de la sesión: tester es de solo lectura; repairer no toca el examen fijado.
 	Rol string
+	// WorkerID es ORQ_WORKER_ID del agente: si lo hay, es un worker aunque su cwd sea el checkout principal.
+	WorkerID string
 }
 
 type Decision struct {
@@ -63,6 +65,11 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 		cmd, _ := p.ToolInput["command"].(string)
 		if pushPermitido(cmd, p.Cwd, l.PushRamas) {
 			return allow()
+		}
+		if esWorker(p, env) {
+			if d, ok := workerOrq(cmd); ok {
+				return d
+			}
 		}
 		p.ToolInput = map[string]any{"command": Normalizar(cmd)}
 	}
@@ -331,7 +338,7 @@ func soloOrquestador(p Payload, env Env) (Decision, bool) {
 		return Decision{}, false
 	}
 	cmd, _ := p.ToolInput["command"].(string)
-	worker := p.AgentID != "" || env.IsWorktree(p.Cwd) || env.Rol == "tester" || env.Rol == "repairer"
+	worker := esWorker(p, env)
 	if worker && (varComandoRe.MatchString(cmd) || shellOrqRe.MatchString(cmd)) {
 		return deny("%s", lang.T("orq: a worker runs commands by name: no variable or eval as the command, and no orq through sh -c or xargs.", "orq: un worker corre comandos por su nombre: sin variable ni eval como comando, y sin orq a través de sh -c o xargs.")), true
 	}
