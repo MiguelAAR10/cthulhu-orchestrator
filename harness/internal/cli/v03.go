@@ -45,7 +45,7 @@ func (p proyecto) rolActual() string {
 const hookSettings = `{
   "hooks": {
     "PreToolUse": [
-      {"matcher": "Bash|Agent|Task|Edit|Write|MultiEdit|NotebookEdit",
+      {"matcher": "Bash|Agent|Task|Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob",
        "hooks": [{"type": "command", "command": "$HOME/bin/orq gate", "timeout": 5, "onFailure": "block"}]}
     ],
     "SessionStart": [

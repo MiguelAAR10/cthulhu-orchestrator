@@ -1,7 +1,9 @@
 package gate
 
 import (
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -114,6 +116,12 @@ var (
 		regexp.MustCompile(`\bgit\b[^;&|]*(\s-c\s*alias\.|\sconfig\b[^;&|]*\balias\.)`),
 		regexp.MustCompile(`(^|[\s;&|(])(ln|cp|install|mv|rsync|tee|cat\s*>)\b[^;&|]*(\borq\b|\$\()`),
 		regexp.MustCompile(`owner\.token|\.config/orq|XDG_CONFIG_HOME|/environ\b`),
+		// globs sobre la config o una carpeta oculta del home: ~/.config/*/own?r.tok*, ~/.c?nfig
+		regexp.MustCompile(`\.config\S*[*?\[]|(~|\$HOME|\$\{HOME\}|/home/[^/\s]+)/\.[^\s/]*[*?\[]`),
+		// ${!ORQ@}, ${!ORQ*}, ${ORQ...}: enumerar o expandir la identidad
+		regexp.MustCompile(`[!{]ORQ`),
+		// unset/export que nombran ORQ de forma indirecta: $(printf "ORQ_%s=..."), $(compgen | grep ORQ)
+		regexp.MustCompile(`\b(unset|export|declare|typeset|readonly)\b[^;&]*ORQ`),
 	}
 )
 
@@ -131,6 +139,10 @@ func workerOrq(cmd string) (Decision, bool) {
 			return no()
 		}
 	}
+	if escapaDelArbol(c) {
+		return deny("%s", lang.T("orq: a worker does not detach from its process tree (setsid, nohup, disown, systemd-run, at, tmux new, herdr): orq recognises workers by their ancestors.",
+			"orq: un worker no se separa de su árbol de procesos (setsid, nohup, disown, systemd-run, at, tmux new, herdr): orq reconoce a los workers por sus ancestros.")), true
+	}
 	for _, seg := range segOrqRe.Split(c, -1) {
 		f := strings.Fields(seg)
 		for i, tok := range f {
@@ -141,6 +153,79 @@ func workerOrq(cmd string) (Decision, bool) {
 				return no()
 			}
 			break
+		}
+	}
+	return Decision{}, false
+}
+
+// sueltaArbol: comandos que lanzan un proceso fuera del árbol del worker (otro padre, otra sesión).
+var sueltaArbol = set("setsid", "nohup", "disown", "systemd-run", "at", "batch", "daemonize", "start-stop-daemon", "screen", "herdr", "orca", "orca-ide")
+
+// escapaDelArbol mira el comando de cada segmento (tras VAR=valor y sudo/env/exec).
+func escapaDelArbol(c string) bool {
+	for _, seg := range segOrqRe.Split(c, -1) {
+		f := strings.Fields(seg)
+		for len(f) > 0 && (strings.Contains(f[0], "=") || f[0] == "exec" || f[0] == "command" || f[0] == "builtin" || f[0] == "sudo" || f[0] == "env") {
+			f = f[1:]
+		}
+		if len(f) == 0 {
+			continue
+		}
+		cmd := path.Base(f[0])
+		if sueltaArbol[cmd] {
+			return true
+		}
+		if cmd == "tmux" {
+			for _, a := range f[1:] {
+				if strings.HasPrefix(a, "-") {
+					continue
+				}
+				for _, x := range []string{"new", "split", "run", "respawn"} {
+					if strings.HasPrefix(a, x) {
+						return true
+					}
+				}
+				break
+			}
+		}
+	}
+	return false
+}
+
+// workerLee: Read/Grep/Glob de un worker no tocan la config de orq ni el entorno de otros procesos.
+func workerLee(p Payload) (Decision, bool) {
+	switch p.ToolName {
+	case "Read", "Grep", "Glob", "LS", "NotebookRead":
+	default:
+		return Decision{}, false
+	}
+	home, _ := os.UserHomeDir()
+	cfg, _ := os.UserConfigDir()
+	var rutas []string
+	for _, k := range []string{"file_path", "path", "notebook_path"} {
+		if v, _ := p.ToolInput[k].(string); v != "" {
+			rutas = append(rutas, v)
+		}
+	}
+	if p.ToolName == "Glob" {
+		if v, _ := p.ToolInput["pattern"].(string); v != "" {
+			rutas = append(rutas, v)
+		}
+	}
+	for _, r := range rutas {
+		if strings.HasPrefix(r, "~") && home != "" {
+			r = home + r[1:]
+		}
+		if !filepath.IsAbs(r) && p.Cwd != "" {
+			r = filepath.Join(p.Cwd, r)
+		}
+		r = filepath.Clean(r)
+		malo := strings.Contains(r, "/.config") || strings.Contains(r, "owner.token") ||
+			(cfg != "" && (r == cfg || strings.HasPrefix(r, cfg+"/"))) ||
+			r == "/proc" || (strings.HasPrefix(r, "/proc/") && (strings.Contains(r, "environ") || strings.ContainsAny(r, "*?[")))
+		if malo {
+			return deny("%s", lang.T("orq: a worker does not read orq's config directory or another process's environment.",
+				"orq: un worker no lee la carpeta de config de orq ni el entorno de otro proceso.")), true
 		}
 	}
 	return Decision{}, false

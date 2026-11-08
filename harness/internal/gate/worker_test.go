@@ -1,6 +1,9 @@
 package gate
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 // Evaluador B: cada vía conocida para esquivar la lista negra queda negada a un worker.
 func TestWorkerAllowlistDeOrq(t *testing.T) {
@@ -117,5 +120,59 @@ func TestWorkerMsgSoloTiposDeWorker(t *testing.T) {
 		if !OrqPermitidoAWorker(a) {
 			t.Errorf("negó %v", a)
 		}
+	}
+}
+
+// Defensa en profundidad para workers: la carpeta de config y /proc/*/environ no se leen con
+// Read/Grep/Glob, y en Bash no hay globs sobre .config, expansiones ${!ORQ@}, ni escapes del árbol
+// de procesos (setsid, nohup &, disown, systemd-run, at, tmux new, herdr).
+func TestWorkerDefensaEnProfundidad(t *testing.T) {
+	w := fakes{}.env(t, t.TempDir())
+	w.WorkerID = "w1"
+	home, _ := os.UserHomeDir()
+	lee := []Payload{
+		{ToolName: "Read", ToolInput: map[string]any{"file_path": home + "/.config/orq/owner.token"}},
+		{ToolName: "Read", ToolInput: map[string]any{"file_path": "/proc/4242/environ"}},
+		{ToolName: "Grep", ToolInput: map[string]any{"pattern": ".", "path": "~/.config"}},
+		{ToolName: "Glob", ToolInput: map[string]any{"pattern": "~/.config/*/own*"}},
+		{ToolName: "Glob", ToolInput: map[string]any{"pattern": "*/environ", "path": "/proc"}},
+	}
+	for _, p := range lee {
+		p.Cwd = t.TempDir()
+		if d := Evaluate(p, baseLimits(), w); d.Allow {
+			t.Errorf("un worker leyó %v", p.ToolInput)
+		}
+	}
+	malos := []string{
+		`T=$(cat ~/.config/*/own?r.tok*); unset "${!ORQ@}"; export $(printf "ORQ_%s=%s ORQ_%s=%s" ROL owner TOKEN $T); ` + "`echo orq`" + ` mem add --source owner x`,
+		`cat ~/.c?nfig/o*/*`,
+		`ls ~/.config/*`,
+		`unset "${!ORQ@}"`,
+		`for v in ${!ORQ*}; do echo $v; done`,
+		`export $(printf "ORQ_%s=x" ROL)`,
+		`unset $(compgen -v | grep ORQ)`,
+		`setsid sh -c 'orq token'`,
+		`nohup sh -c x &`,
+		`sleep 1 & disown`,
+		`systemd-run --user sh -c x`,
+		`echo x | at now`,
+		`tmux new -d sh`,
+		`tmux split-window sh`,
+		`herdr pane split --current`,
+	}
+	for _, c := range malos {
+		if d := Evaluate(bash(c), baseLimits(), w); d.Allow {
+			t.Errorf("un worker pudo: %q", c)
+		}
+	}
+	for _, c := range []string{`echo look at this`, `go test ./... &`, `cat README.md`, `ls ~/project/*.go`, `grep -r ORQ_ROL docs`} {
+		if d := Evaluate(bash(c), baseLimits(), w); !d.Allow {
+			t.Errorf("bloqueó %q: %s", c, d.Reason)
+		}
+	}
+	// El Owner/Orquestador no recibe estas restricciones.
+	m := fakes{}.env(t, t.TempDir())
+	if d := Evaluate(Payload{ToolName: "Read", Cwd: "/", ToolInput: map[string]any{"file_path": home + "/.config/orq/owner.token"}}, baseLimits(), m); !d.Allow {
+		t.Error("el Owner no lee su config")
 	}
 }

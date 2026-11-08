@@ -61,6 +61,11 @@ var launchRe = regexp.MustCompile(
 		`|claude(\s+\S+)*\s+(-p|--print)(\s|$))`)
 
 func Evaluate(p Payload, l limits.Limits, env Env) Decision {
+	if esWorker(p, env) {
+		if d, ok := workerLee(p); ok {
+			return d
+		}
+	}
 	if p.ToolName == "Bash" {
 		cmd, _ := p.ToolInput["command"].(string)
 		if pushPermitido(cmd, p.Cwd, l.PushRamas) {
