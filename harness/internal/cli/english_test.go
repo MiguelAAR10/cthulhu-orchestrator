@@ -39,7 +39,7 @@ func TestEnglishFlagsAndSubcommands(t *testing.T) {
 	t.Setenv("ORQ_ROL", "")
 	t.Setenv("ORQ_WORKER_ID", "w1")
 	_, errs, code := run(t, "slice", "exam", "tests/x.sh", "--approved", "m1")
-	if code == 0 || !strings.Contains(errs, "H-01") {
+	if code == 0 || !(strings.Contains(errs, "H-01") || strings.Contains(errs, "a worker cannot run")) {
 		t.Fatalf("exam: %d %s", code, errs)
 	}
 	t.Setenv("ORQ_WORKER_ID", "")

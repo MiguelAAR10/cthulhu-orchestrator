@@ -54,6 +54,7 @@ Slices (with several open slices, pass --slice NN)
 
 Owner visibility
   orq worker beat|done|list      live worker state (.orq/workers/<id>/state.json, ORQ_WORKER_ID)
+  orq token                      the Owner's token (export ORQ_TOKEN="$(orq token)"); never reaches a worker
   orq stop raise|list|resolve|cancel   requests to the Owner (credential|api_key|decision|confirmation|access;
                                  blocking|soon|fyi); only atena/owner resolve; never a secret in text
   orq autonomy [show|guided|free --scope ...]   free mode is approved by the Owner

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"orq/internal/agentes"
+	"orq/internal/identidad"
 	"orq/internal/plan"
 	"os"
 	"os/exec"
@@ -387,7 +388,11 @@ func lanzar(p proyecto, ses map[string]canal.Sesion, rol string, a *arranque) (c
 	if err != nil {
 		return canal.Sesion{}, err
 	}
-	env := map[string]string{"ORQ_ROL": rol}
+	env := map[string]string{"ORQ_ROL": rol, "ORQ_TOKEN": ""}
+	// Solo el Orquestador y Atena heredan el token, y solo si quien los abre ya lo presentó.
+	if (rol == "orquestador" || rol == "atena") && identidad.Valido() {
+		env["ORQ_TOKEN"] = os.Getenv("ORQ_TOKEN")
+	}
 	// Distribución fija: orq en su pestaña, plan en la suya; Astra al lado del Planificador.
 	var tab, pane string
 	if pl, ok := ses["planificador"]; rol == "astra" && ok && pl.Pane != "" {
@@ -738,6 +743,10 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "uso: orq slice cerrar --aceptado | --rechazado \"motivo\"")
 			return 1
 		}
+		if err := p.exigirToken("close a slice"); err != nil {
+			fmt.Fprintln(stderr, "orq slice:", err)
+			return 1
+		}
 		// Rigor proporcional: desde la criticidad configurada, aceptar exige un recibo QA verde.
 		if e, err := r.Load(nn); *ok && err == nil && e != nil {
 			cfg := qa.LoadConfig(p.dir)
@@ -1000,7 +1009,7 @@ func (p proyecto) cambioDeContrato(aprobado string, r slice.Repo, nn string) err
 	case strings.HasPrefix(r, "worker"):
 		return errors.New("a worker cannot change the exam or scope (H-01, any autonomy mode): ask the Orchestrator")
 	case r != "owner" && r != "atena" && r != "orquestador" && r != "orchestrator":
-		return fmt.Errorf("cambiar el examen o el alcance exige ORQ_ROL=owner|atena|orquestador (rol actual %q)", r)
+		return fmt.Errorf("cambiar el examen o el alcance exige ORQ_ROL=owner|atena|orquestador y ORQ_TOKEN (rol actual %q)", r)
 	}
 	e, err := r.Load(nn)
 	if err != nil || e == nil {
@@ -1074,7 +1083,7 @@ func fuentePermitida(fuente, rol string) error {
 	case fuente == "owner" && (rol == "owner" || rol == "atena"):
 	case fuente == "atena" && rol == "atena":
 	case fuente == "owner" || fuente == "atena":
-		return fmt.Errorf("--fuente %s exige ORQ_ROL=%s (rol actual %q)", fuente, fuente, rol)
+		return fmt.Errorf("--fuente %s exige ORQ_ROL=%s y ORQ_TOKEN (rol actual %q)", fuente, fuente, rol)
 	}
 	return nil
 }

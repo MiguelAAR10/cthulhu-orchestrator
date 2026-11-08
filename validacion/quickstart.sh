@@ -4,7 +4,8 @@
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BASE="$(mktemp -d)"; trap 'rm -rf "$BASE"' EXIT
-export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID="" ORQ_WORKER_ID=""
+export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID="" ORQ_WORKER_ID="" ORQ_SHIM=""
+export XDG_CONFIG_HOME="$BASE/config" ORQ_TOKEN=""   # hermetic Owner token
 mkdir -p "$BASE/bin"
 printf '#!/bin/sh\nexit 1\n' > "$BASE/bin/claude"; chmod +x "$BASE/bin/claude"   # fake agent: never launched
 export PATH="$BASE/bin:$PATH"
@@ -21,6 +22,7 @@ echo out.tap > .gitignore; git add -A && git commit -qm "test: failing acceptanc
 
 step "orq init"                 orq init --mode=new
 git add -A && git commit -qm "chore: orq init" >/dev/null
+export ORQ_TOKEN="$(orq token)"   # the Owner, at their terminal, presents the token for privileged steps
 step "orq profile set"          orq profile set type=greenfield
 step "orq profile"              orq profile; has greenfield
 step "orq slice open (red exam)" orq slice open 01 --title greeting --test tests/acceptance.sh --cmd "sh tests/acceptance.sh" \

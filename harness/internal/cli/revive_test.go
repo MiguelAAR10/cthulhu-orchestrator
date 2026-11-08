@@ -46,6 +46,18 @@ func TestLanzarDejaEstadoDelWorkerYExportaID(t *testing.T) {
 	if len(f.Envs) == 0 || f.Envs[len(f.Envs)-1]["ORQ_WORKER_ID"] != "worker-codex-s01" || f.Envs[len(f.Envs)-1]["ORQ_ROL"] != "worker-codex-s01" {
 		t.Fatalf("env: %v", f.Envs)
 	}
+	// Evaluador A/C: el worker no recibe el token y su PATH empieza por el shim de orq.
+	env := f.Envs[len(f.Envs)-1]
+	if tok, ok := env["ORQ_TOKEN"]; !ok || tok != "" {
+		t.Fatalf("el worker heredaría ORQ_TOKEN: %v", env)
+	}
+	shim := filepath.Join(root, ".orq", "workers", "worker-codex-s01", "bin")
+	if !strings.HasPrefix(env["PATH"], shim+":") {
+		t.Fatalf("PATH sin shim: %q", env["PATH"])
+	}
+	if _, err := os.Stat(filepath.Join(shim, "orq")); err != nil {
+		t.Fatal(err)
+	}
 	out, _, _ := run(t, "board", "--json")
 	var b struct{ Workers []json.RawMessage }
 	if json.Unmarshal([]byte(out), &b) != nil || len(b.Workers) == 0 {

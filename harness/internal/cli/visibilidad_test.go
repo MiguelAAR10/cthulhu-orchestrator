@@ -139,7 +139,7 @@ func TestAccFreeModeWorkerCannotChangeExam(t *testing.T) {
 	t.Setenv("ORQ_ROL", "")
 	t.Setenv("ORQ_WORKER_ID", "w1")
 	_, errs, code := run(t, "slice", "examen", "tests/x.sh", "--aprobado", "m1")
-	if code == 0 || !strings.Contains(errs, "H-01") {
+	if code == 0 || !(strings.Contains(errs, "H-01") || strings.Contains(errs, "a worker cannot run")) {
 		t.Fatalf("%d %s", code, errs)
 	}
 }
@@ -220,9 +220,11 @@ func TestAccWorkerBeatWatchDone(t *testing.T) {
 	plan.Actualizar(plan.Path(orq, "04"), func(p *plan.Plan) error { _, err := plan.Tomar(p, "T1", "w-s04-t1"); return err })
 	t.Setenv("ORQ_WORKER_ID", "w-s04-t1")
 	t.Setenv("HOME", t.TempDir()) // sin límites: el vigía de workers corre igual
+	t.Setenv("ORQ_WORKER_ID", "") // el vigía lo corre el Orquestador, no el worker
 	for i := 0; i < 2; i++ {
 		run(t, "watch")
 	}
+	t.Setenv("ORQ_WORKER_ID", "w-s04-t1")
 	log, _ := os.ReadFile(filepath.Join(orq, "watch.jsonl"))
 	canal, _ := os.ReadFile(filepath.Join(orq, "canal.jsonl"))
 	if strings.Count(string(log), `"stuck"`) != 1 || strings.Count(string(canal), `"de":"vigia"`) != 1 {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"orq/internal/identidad"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -104,6 +105,14 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	}
 	if len(args) > 0 && args[0] == "--hooks" {
 		fmt.Fprint(stdout, hookSettings)
+	}
+	// El token del Owner se crea aquí, fuera del repo; init lo corre el Owner en su terminal.
+	if os.Getenv("ORQ_WORKER_ID") == "" {
+		if _, err := identidad.Asegurar(); err != nil {
+			fmt.Fprintln(stderr, "orq init:", err)
+		} else {
+			fmt.Fprintf(stdout, "owner token: %s (privileged actions need export ORQ_TOKEN=\"$(orq token)\")\n", identidad.Path())
+		}
 	}
 	return runSkills(nil, stdout, stderr)
 }

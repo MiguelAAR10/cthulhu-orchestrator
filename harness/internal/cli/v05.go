@@ -330,7 +330,14 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 	ses, _ := canal.LoadSesiones(p.sesPath())
 	registrarLlamador(ses, os.Getenv("ORQ_ROL"), run.Current(), time.Now())
 	// ORQ_WORKER_ID y ORQ_ROL hacen del panel un worker: nunca resuelve stoppers ni cambia la autonomía.
-	env := map[string]string{"ORQ_ROL": nombre, "ORQ_WORKER_ID": nombre}
+	// ORQ_TOKEN vacío: el token del Owner nunca llega a un worker. PATH antepone el shim de orq,
+	// que mantiene la identidad del worker y rechaza lo privilegiado aunque el agente no tenga hook (Codex).
+	env := map[string]string{"ORQ_ROL": nombre, "ORQ_WORKER_ID": nombre, "ORQ_TOKEN": ""}
+	if bin, err := escribirShim(p.dir, nombre); err == nil {
+		env["PATH"] = bin + string(os.PathListSeparator) + os.Getenv("PATH")
+	} else {
+		fmt.Fprintf(os.Stderr, "orq: worker shim not written: %v\n", err)
+	}
 	var pane, tab string
 	if otro, ok := panelDelSlice(ses, e.NN); ok {
 		tab = otro.Tab

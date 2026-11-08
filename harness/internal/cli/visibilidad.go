@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"orq/internal/identidad"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,11 +50,28 @@ func (p proyecto) rolStop() string {
 // rolPrivilegiado: el rol para acciones que cambian el contrato, la autonomía o resuelven stoppers.
 // Un worker sigue siendo worker; fuera de eso hace falta un rol explícito (ORQ_ROL o el panel
 // registrado). Sin rol devuelve "": el cwd del checkout principal nunca equivale a Owner.
+// Además, el rol reclamado solo vale con el token del Owner (ORQ_TOKEN): ORQ_ROL sale del entorno y
+// cualquiera lo escribe; el token vive fuera del repo y orq nunca se lo pasa a un worker.
 func (p proyecto) rolPrivilegiado() string {
 	if r := p.rolStop(); strings.HasPrefix(r, "worker") {
 		return r
 	}
-	return p.rolActual()
+	r := p.rolActual()
+	if r != "" && !identidad.Valido() {
+		return r + " without ORQ_TOKEN"
+	}
+	return r
+}
+
+// exigirToken: acciones del Orquestador o del Owner (cerrar un slice) piden el token, nunca un worker.
+func (p proyecto) exigirToken(accion string) error {
+	if r := p.rolStop(); strings.HasPrefix(r, "worker") {
+		return fmt.Errorf("a worker cannot %s (role %q): ask the Orchestrator", accion, r)
+	}
+	if !identidad.Valido() {
+		return fmt.Errorf("%s requires the Owner's token: export ORQ_TOKEN=\"$(orq token)\" in the Owner's or Orchestrator's terminal", accion)
+	}
+	return nil
 }
 
 func nnDe(sliceID string) string { return strings.TrimPrefix(sliceID, "S-") }

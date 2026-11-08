@@ -97,6 +97,7 @@ const usageES = `orq ` + Version + ` · harness de orquestador-2
                                  gemini, opencode y aider en el PATH y escribe una propuesta; el Owner gana.
                                  El adversario es de otra familia que el planificador (lo impone orq)
   orq worker beat|done|list      estado vivo del worker (.orq/workers/<id>/state.json, ORQ_WORKER_ID)
+  orq token                      token del Owner (export ORQ_TOKEN="$(orq token)"); nunca llega a un worker
   orq stop raise|list|resolve|cancel   pedidos al Owner (credential|api_key|decision|confirmation|access,
                                  blocking|soon|fyi); solo atena/owner resuelven; nunca un secreto en texto
   orq autonomy [ver|guided|free --scope ...]   autonomía; free lo aprueba el Owner
@@ -136,6 +137,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 			code = 2
 		}
 	}()
+	if limiteDeWorker(args, stderr) {
+		return 2
+	}
 	args = normalizeArgs(args)
 	switch args[0] {
 	case "help", "-h", "--help":
@@ -209,6 +213,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runQA(args[1:], stdout, stderr)
 	case "evidence":
 		return runEvidence(args[1:], stdout, stderr)
+	case "token":
+		return runToken(stdout, stderr)
 	case "version":
 		fmt.Fprintln(stdout, Version)
 		return 0
@@ -227,6 +233,7 @@ func realEnv() gate.Env {
 		Bundle:     bundleAbierto,
 		Worktrees:  worktreesDe,
 		Rol:        os.Getenv("ORQ_ROL"),
+		WorkerID:   os.Getenv("ORQ_WORKER_ID"),
 	}
 }
 
@@ -404,7 +411,7 @@ func conContenido(args []string) bool {
 		sub = args[1]
 	}
 	switch args[0] {
-	case "help", "-h", "--help", "contexto", "skill", "--skill", "handoff", "doc", "fase", "aprender", "board", "gate":
+	case "help", "-h", "--help", "contexto", "skill", "--skill", "handoff", "doc", "fase", "aprender", "board", "gate", "token":
 		return true
 	case "msg":
 		return sub == "leer"

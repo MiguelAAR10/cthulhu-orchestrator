@@ -8,6 +8,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BASE="${1:-$(mktemp -d)}"
 mkdir -p "$BASE" && cd "$BASE" || exit 1
 export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID="" ORQ_LANG=es   # asserts Spanish messages
+export XDG_CONFIG_HOME="$BASE/config" ORQ_TOKEN="" ORQ_WORKER_ID="" ORQ_SHIM=""   # token del Owner hermético
 mkdir -p "$BASE/bin" && printf '#!/bin/sh\nexit 1\n' > "$BASE/bin/claude" && chmod +x "$BASE/bin/claude"
 export PATH="$BASE/bin:$PATH"   # el escriba no responde: todo debe funcionar igual
 # Siempre prueba el código de este repo, nunca un orq viejo del PATH (ORQ_BIN lo sobrescribe).
@@ -27,6 +28,8 @@ EOT
   git add -A && git commit -qm "test(S-$1): rojo"
 }
 orq init --modo=nuevo >/dev/null 2>&1; git add -A; git commit -qm "chore: orq init" >/dev/null
+export ORQ_TOKEN="$(orq token)"   # el script actúa como el Owner/Orquestador en su terminal
+ok "$(ORQ_TOKEN= q slice cerrar --aceptado)" 1 "sin el token del Owner no se cierra"
 
 echo "== S-01: rojo, trampa, reintento, recibo"
 examen 01

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"orq/internal/identidad"
 	"os"
 	"strings"
 	"testing"
@@ -12,6 +13,16 @@ func TestMain(m *testing.M) {
 	if os.Getenv("ORQ_LANG") == "" {
 		os.Setenv("ORQ_LANG", "es")
 	}
+	// Identidad hermética: el token del Owner vive en una carpeta temporal y las pruebas actúan
+	// como el Owner (ORQ_TOKEN). Las que prueban suplantación lo vacían.
+	cfg, _ := os.MkdirTemp("", "orq-cfg")
+	os.Setenv("XDG_CONFIG_HOME", cfg)
+	tok, err := identidad.Asegurar()
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("ORQ_TOKEN", tok)
+	os.Unsetenv("ORQ_SHIM")
 	os.Exit(m.Run())
 }
 
