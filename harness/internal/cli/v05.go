@@ -58,6 +58,7 @@ func (p proyecto) datosRelevo(rol string) Relevo {
 	rv := Relevo{Rol: rol, Objetivo: "(sin historia en curso)", Comprobado: "nada todavía",
 		Referencias: []string{"orq slice estado", "orq slice recibo", "orq mem ver", "orq msg leer"}}
 	ms, _ := canal.Load(p.canalPath())
+	ms = canal.Vigentes(ms)
 	for _, m := range ms {
 		if m.Tipo == "historia" {
 			rv.Objetivo = recortar(strings.ReplaceAll(m.Texto, "\n", " "), 300) + " (" + m.ID + ")"
@@ -282,10 +283,8 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 	}
 	arranco := false
 	if tareaPl != nil {
-		if _, err := plan.Tomar(pl, tareaPl.ID, nombre); err != nil {
-			return "", err
-		}
-		if err := plan.Guardar(p.planPath(e.NN), pl); err != nil {
+		// Reserva bajo candado: otro lanzar concurrente no pisa esta reserva (H-04c).
+		if _, err := plan.Actualizar(p.planPath(e.NN), func(pl *plan.Plan) error { _, err := plan.Tomar(pl, tareaPl.ID, nombre); return err }); err != nil {
 			return "", err
 		}
 		// Si el worker no llega a arrancar, la tarea vuelve a pendiente: si no, nadie puede relanzarla.
@@ -293,11 +292,7 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 			if arranco {
 				return
 			}
-			if pl2, err := plan.Leer(p.planPath(e.NN)); err == nil {
-				if _, err := plan.Soltar(pl2, tareaPl.ID); err == nil {
-					plan.Guardar(p.planPath(e.NN), pl2)
-				}
-			}
+			plan.Actualizar(p.planPath(e.NN), func(pl2 *plan.Plan) error { _, err := plan.Soltar(pl2, tareaPl.ID); return err })
 		}()
 	}
 	contrato, err := p.contrato(e.NN, nombre, alcance, suite, pres)

@@ -252,6 +252,7 @@ func (p proyecto) fase() (string, string) {
 		return "D1·Desarrollo", e.Attempt() + " en rojo: un escritor con TDD, scouts si falta contexto"
 	}
 	ms, _ := canal.Load(p.canalPath())
+	ms = canal.Vigentes(ms)
 	historia := false
 	for _, m := range ms {
 		historia = historia || m.Tipo == "historia"
@@ -300,13 +301,17 @@ func runContexto(stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "\n%s\n", strings.TrimSpace(string(raw)))
 		}
 	}
-	items := p.memVigente()
-	if len(items) > 0 {
-		lines := strings.Split(strings.TrimSpace(memoria.Render(items, "")), "\n")
-		if len(lines) > 25 {
-			lines = append(lines[:25], fmt.Sprintf("… %d más: orq mem ver", len(lines)-25))
+	// Presupuesto de memoria: lo crítico, luego el slice activo, luego el resto; nunca más de 25 líneas.
+	activo := ""
+	if e, err := p.slices().Load(); err == nil && e != nil {
+		activo = e.ID()
+	}
+	if sel, fuera := memoria.Presupuesto(p.memVigente(), activo, presupuestoMem); len(sel) > 0 {
+		txt := strings.TrimSpace(memoria.Render(sel, ""))
+		if fuera > 0 {
+			txt += fmt.Sprintf("\n… %d más: orq mem ver", fuera)
 		}
-		fmt.Fprintf(stdout, "\n## Memoria\n%s\n", strings.Join(lines, "\n"))
+		fmt.Fprintf(stdout, "\n## Memoria\n%s\n", txt)
 	}
 	fmt.Fprint(stdout, p.lecciones())
 	if _, err := os.Stat(p.fichaPath()); err == nil {
@@ -314,6 +319,8 @@ func runContexto(stdout, stderr io.Writer) int {
 	}
 	return 0
 }
+
+const presupuestoMem = 25
 
 func def(s, d string) string {
 	if s == "" {

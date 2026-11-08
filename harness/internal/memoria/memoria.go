@@ -213,6 +213,26 @@ func SinVencer(items []Item, cerrados map[string]bool) []Item {
 	return out
 }
 
+// Presupuesto elige qué memoria entra al contexto con un tope de n líneas: lo crítico primero,
+// luego lo del slice activo, luego el resto por importancia y recencia. Devuelve cuántas quedaron fuera.
+func Presupuesto(items []Item, activo string, n int) ([]Item, int) {
+	orden := Sorted(Vigentes(items))
+	grupo := func(it Item) int {
+		switch {
+		case it.Imp == "critica":
+			return 0
+		case activo != "" && it.Slice == activo:
+			return 1
+		}
+		return 2
+	}
+	sort.SliceStable(orden, func(i, j int) bool { return grupo(orden[i]) < grupo(orden[j]) })
+	if len(orden) <= n {
+		return orden, 0
+	}
+	return orden[:n], len(orden) - n
+}
+
 // Render es la vista compacta que cada sesión lee al arrancar: solo lo vigente.
 func Render(items []Item, filtroCat string) string {
 	var b strings.Builder

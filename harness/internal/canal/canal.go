@@ -119,6 +119,61 @@ func MarcarEntregado(path, id string, now time.Time) error {
 	return err
 }
 
+// delSlice: el intento S-NN/aK (o S-NN) pertenece al slice S-NN; S-010 no es S-01.
+func delSlice(attempt, id string) bool {
+	return attempt == id || strings.HasPrefix(attempt, id+"/")
+}
+
+// DeSlice filtra los mensajes de un slice.
+func DeSlice(ms []Msg, id string) []Msg {
+	var out []Msg
+	for _, m := range ms {
+		if delSlice(m.Attempt, id) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// Vigentes quita lo archivado al cerrar su slice.
+func Vigentes(ms []Msg) []Msg {
+	var out []Msg
+	for _, m := range ms {
+		if m.Estado != "archivado" {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// Archivar marca como archivados los mensajes ya entregados del slice (y los entregados sin
+// slice, que son charla resuelta del proyecto). Nunca toca lo pendiente ni borra el canal:
+// el archivo es append-only y otros slices siguen usándolo.
+func Archivar(path, id string, now time.Time) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return err
+	}
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	ms, err := Load(path)
+	if err != nil {
+		return err
+	}
+	var b bytes.Buffer
+	for _, m := range ms {
+		if m.Estado == "entregado" && (m.Attempt == "" || delSlice(m.Attempt, id)) {
+			line, _ := json.Marshal(evento{ID: m.ID, Evento: "archivado", TS: now.UTC().Truncate(time.Second)})
+			b.Write(append(line, '\n'))
+		}
+	}
+	_, err = f.Write(b.Bytes())
+	return err
+}
+
 // Pendientes son los mensajes guardados cuya entrega no se confirmó.
 func Pendientes(ms []Msg) []Msg {
 	var out []Msg
@@ -145,8 +200,8 @@ func Load(path string) ([]Msg, error) {
 	for sc.Scan() {
 		var ev evento
 		if json.Unmarshal(sc.Bytes(), &ev) == nil && ev.Evento != "" {
-			if i, ok := pos[ev.ID]; ok && ev.Evento == "entregado" {
-				out[i].Estado = "entregado"
+			if i, ok := pos[ev.ID]; ok && (ev.Evento == "entregado" || ev.Evento == "archivado") {
+				out[i].Estado = ev.Evento
 			}
 			continue
 		}

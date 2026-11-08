@@ -3,8 +3,11 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"orq/internal/orqdir"
 	"orq/internal/plan"
 )
 
@@ -59,9 +62,16 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		pl.Slice = e.NN
-		var kept []string
+		os.MkdirAll(filepath.Dir(p.planPath(e.NN)), 0o755)
+		soltar, err := orqdir.Candado(p.planPath(e.NN)) // mismo candado que plan.Actualizar
+		if err != nil {
+			fmt.Fprintln(stderr, "orq plan:", err)
+			return 1
+		}
+		defer soltar()
+		var kept, reabiertas []string
 		if viejo, err := plan.Leer(p.planPath(e.NN)); err == nil {
-			kept = plan.Conservar(pl, viejo)
+			kept, reabiertas = plan.Conservar(pl, viejo)
 		}
 		if err := plan.Validar(pl, e.Alcance); err != nil {
 			fmt.Fprintf(stderr, "orq plan: el plan no sirve así:\n%s\n", err)
@@ -75,6 +85,12 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "S-%s: plan de %d tareas guardado; %d listas para despachar: orq slice lanzar --tarea ID\n", e.NN, len(pl.Tareas), len(listas))
 		if len(kept) > 0 {
 			fmt.Fprintf(stdout, "avance conservado: %s\n", strings.Join(kept, ", "))
+		}
+		if len(reabiertas) > 0 {
+			fmt.Fprintf(stdout, "vuelven a pendiente (su contrato cambió; lo hecho no prueba lo nuevo): %s\n", strings.Join(reabiertas, ", "))
+		}
+		if !pl.Debatido {
+			fmt.Fprintln(stdout, "plan sin debatir en esta revisión: Planificador y Astra deben acordarlo (orq plan debatido)")
 		}
 		// Una tarea ya lanzada que creció: su worker recibe las rutas nuevas, o juntar las rechaza.
 		for _, t := range pl.Tareas {
@@ -99,17 +115,17 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		pl, path, err := p.planDe(nn)
+		_, path, err := p.planDe(nn)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		t, err := plan.Hecha(pl, args[1])
+		var t *plan.Tarea
+		pl, err := plan.Actualizar(path, func(pl *plan.Plan) (err error) { t, err = plan.Hecha(pl, args[1]); return err })
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		plan.Guardar(path, pl)
 		listas, _ := plan.Listas(pl)
 		fmt.Fprintf(stdout, "%s hecha (%s). Quedan %d; listas ahora: %s\n", t.ID, t.Worker, pl.Pendientes(), ids(listas))
 		return 0
@@ -118,17 +134,17 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		pl, path, err := p.planDe(nn)
+		_, path, err := p.planDe(nn)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		t, err := plan.Soltar(pl, args[1])
+		var t *plan.Tarea
+		_, err = plan.Actualizar(path, func(pl *plan.Plan) (err error) { t, err = plan.Soltar(pl, args[1]); return err })
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		plan.Guardar(path, pl)
 		fmt.Fprintf(stdout, "%s vuelve a pendiente; relánzala con orq slice lanzar --tarea %s\n", t.ID, t.ID)
 		return 0
 	case "revisar":
@@ -157,14 +173,17 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "update the plan minimally (orq plan cargar), or tell the Orchestrator it's drift (orq msg send --para orquestador --tipo plan)")
 		return 3
 	case "debatido":
-		pl, path, err := p.planDe(nn)
+		_, path, err := p.planDe(nn)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		pl.Debatido = true
-		plan.Guardar(path, pl)
-		fmt.Fprintln(stdout, "plan marcado como debatido")
+		pl, err := plan.Actualizar(path, func(pl *plan.Plan) error { pl.MarcarDebatido(); return nil })
+		if err != nil {
+			fmt.Fprintln(stderr, "orq plan:", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "plan marcado como debatido (revisión %s); cambiar el plan lo borra\n", pl.Revision())
 		return 0
 	}
 	fmt.Fprintln(stderr, uso)

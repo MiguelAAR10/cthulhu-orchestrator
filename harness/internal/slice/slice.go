@@ -533,6 +533,7 @@ func (r Repo) Verificar(nn string, now time.Time) (*Estado, string, error) {
 	if err != nil {
 		return e, "", err
 	}
+	rev := e.Revision() // la corrida es larga y sin candado: al final se compara con esto
 	dir := e.Worktree
 	if e.Aislado {
 		if dir, err = copiaAislada(e.Worktree, head); err != nil {
@@ -566,11 +567,14 @@ func (r Repo) Verificar(nn string, now time.Time) (*Estado, string, error) {
 		return e, out, err
 	}
 	defer soltar()
-	if ahora, err := r.Load(e.NN); err != nil || ahora.Intento != e.Intento || ahora.Fase != e.Fase {
+	ahora, err := r.Load(e.NN)
+	if err != nil || ahora == nil || ahora.Intento != e.Intento || ahora.Fase != e.Fase {
 		return e, out, fmt.Errorf("%s cambió mientras se verificaba (relevo, reintento o cierre); recibo descartado, vuelve a verificar", e.Attempt())
-	} else {
-		e.Escritor = ahora.Escritor
 	}
+	if ahora.Revision() != rev {
+		return ahora, out, fmt.Errorf("%s: el contrato (alcance, examen o huella) cambió mientras se verificaba; resultado descartado, no verificado: vuelve a verificar", e.Attempt())
+	}
+	e = ahora // se actualiza el estado ACTUAL, no la copia leída antes de correr
 	appendJSON(r.recibosPath(), rec)
 	if ok {
 		e.Fase, e.Recibo = Verificado, rec
@@ -1527,6 +1531,13 @@ func (e *Estado) invalidarRecibos() {
 	if e.Fase == Verificado {
 		e.Fase = Implementando
 	}
+}
+
+// Revision resume el contrato del intento: si cambia, un resultado calculado antes no vale.
+func (e *Estado) Revision() string {
+	raw, _ := json.Marshal([]any{e.Intento, e.Alcance, e.Bundle, e.Cmd, e.Huella, e.SHAExamen, e.ContratoTS, e.Estricto, e.Omitir})
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:8])
 }
 
 // DesdeContrato: una decisión que aprueba un cambio de contrato tiene que ser posterior a esto.
