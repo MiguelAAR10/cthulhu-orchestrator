@@ -158,8 +158,8 @@ func TestAprobadoLigadoAlSlice(t *testing.T) {
 	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Por: "atena", Texto: "S-07 suma examen x"}, despues)         // m4 bien por texto
 	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "atena", Por: "atena", Slice: "S-07", Texto: "alcance api"}, despues) // m5 bien por campo
 	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Por: "atena", Texto: "S-070 otra cosa"}, despues)            // m6 id parecido
-	canal.Append(can, &canal.Msg{De: "atena", Para: "orquestador", Tipo: "respuesta", Texto: "sí para S-07", TS: antes})        // c1 vieja
-	canal.Append(can, &canal.Msg{De: "atena", Para: "orquestador", Tipo: "respuesta", Texto: "sí para S-07", TS: despues})      // c2 bien
+	canal.Append(can, &canal.Msg{De: "atena", Para: "orquestador", Tipo: "respuesta", Texto: "sí para S-07", TS: antes})                      // c1 vieja
+	canal.Append(can, &canal.Msg{De: "atena", Para: "orquestador", Tipo: "respuesta", Texto: "sí para S-07", TS: despues})                    // c2 bien
 	p := proyecto{root, filepath.Join(root, ".orq")}
 	for _, mal := range []string{"m1", "m2", "m3", "m6", "c1"} {
 		if err := p.decisionDelSlice(mal, "S-07", desde); err == nil {
