@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"syscall"
 	"time"
 
 	"orq/internal/lang"
 	"orq/internal/limits"
+	"orq/internal/orqdir"
 	"orq/internal/state"
 )
 
@@ -155,14 +155,4 @@ func guardar(dir string, rs []reserva) error {
 	return os.Rename(tmp, path(dir))
 }
 
-func candado(dir string) (func(), error) {
-	f, err := os.OpenFile(filepath.Join(dir, "admision.lock"), os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		return nil, err
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
-		return nil, err
-	}
-	return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
-}
+func candado(dir string) (func(), error) { return orqdir.Candado(filepath.Join(dir, "admision")) }

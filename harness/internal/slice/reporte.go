@@ -8,10 +8,10 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"orq/internal/orqdir"
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -108,8 +108,8 @@ func RunCmdT(dir, cmd string, limite time.Duration) (string, int, bool) {
 	defer cancel()
 	c := exec.CommandContext(ctx, "sh", "-c", cmd)
 	c.Dir = dir
-	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	c.Cancel = func() error { return syscall.Kill(-c.Process.Pid, syscall.SIGKILL) }
+	c.SysProcAttr = orqdir.GrupoPropio()
+	c.Cancel = func() error { return orqdir.MatarGrupo(c.Process.Pid) }
 	c.WaitDelay = 2 * time.Second
 	var buf bytes.Buffer
 	c.Stdout, c.Stderr = &buf, &buf

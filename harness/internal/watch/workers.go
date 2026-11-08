@@ -2,11 +2,10 @@ package watch
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
+	"orq/internal/orqdir"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"orq/internal/workers"
@@ -44,10 +43,7 @@ func WatchLogPath(orqDir string) string { return filepath.Join(orqDir, "watch.js
 func memPath(orqDir, id string) string  { return filepath.Join(workers.Dir(orqDir), id, "watch.json") }
 
 // PIDAlive: kill(pid, 0) sin enviar señal.
-func PIDAlive(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
-}
+func PIDAlive(pid int) bool { return orqdir.PIDVivo(pid) }
 
 // Judge aplica la tabla del spec. act=true cuando el timeout pasa de 1.5× el presupuesto.
 func Judge(st workers.State, prevHead string, havePrev bool, now time.Time, staleMin int, host string, alive func(int) bool) (verdict, reason string, act bool) {

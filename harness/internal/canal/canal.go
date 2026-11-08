@@ -11,7 +11,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"orq/internal/orqdir"
@@ -87,10 +86,10 @@ func Append(path string, m *Msg) error {
 		return err
 	}
 	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := orqdir.Bloquear(f); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer orqdir.Desbloquear(f)
 	prev, err := Load(path)
 	if err != nil {
 		return err
@@ -157,10 +156,10 @@ func Archivar(path, id string, now time.Time) error {
 		return err
 	}
 	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := orqdir.Bloquear(f); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer orqdir.Desbloquear(f)
 	ms, err := Load(path)
 	if err != nil {
 		return err

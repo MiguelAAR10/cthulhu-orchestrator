@@ -3,12 +3,12 @@ package runner
 import (
 	"encoding/json"
 	"fmt"
+	"orq/internal/orqdir"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"orq/internal/herdr"
@@ -281,7 +281,7 @@ func spawnReal(pr Proc) (int, error) {
 	cmd := exec.Command(pr.Argv[0], pr.Argv[1:]...)
 	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = pr.Dir, pr.Env, log, log
 	cmd.Stdin = strings.NewReader(pr.Stdin)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = orqdir.GrupoPropio()
 	if err := cmd.Start(); err != nil {
 		return 0, err
 	}
@@ -304,7 +304,7 @@ func (p *Process) Alive(target string) bool {
 	if p.leer("agente-"+target, &a) != nil || a.PID == 0 {
 		return false
 	}
-	return syscall.Kill(a.PID, 0) == nil
+	return orqdir.PIDVivo(a.PID)
 }
 
 // Close mata los procesos de los agentes de ese panel y borra su registro.
@@ -315,7 +315,7 @@ func (p *Process) Close(pane string) error {
 		raw, _ := os.ReadFile(m)
 		if json.Unmarshal(raw, &a) == nil && a.Pane == pane {
 			if a.PID > 0 {
-				syscall.Kill(-a.PID, syscall.SIGTERM)
+				orqdir.MatarGrupoTerm(a.PID)
 			}
 			os.Remove(m)
 		}

@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 // Root devuelve la raíz del checkout principal. ORQ_ROOT la fija para pruebas.
@@ -75,9 +74,9 @@ func Candado(path string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := Bloquear(f); err != nil {
 		f.Close()
 		return nil, err
 	}
-	return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+	return func() { Desbloquear(f); f.Close() }, nil
 }

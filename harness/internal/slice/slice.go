@@ -15,7 +15,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"orq/internal/orqdir"
@@ -304,11 +303,11 @@ func (r Repo) candado(nombre string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := orqdir.Bloquear(f); err != nil {
 		f.Close()
 		return nil, err
 	}
-	return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+	return func() { orqdir.Desbloquear(f); f.Close() }, nil
 }
 
 func appendJSON(path string, v any) error {

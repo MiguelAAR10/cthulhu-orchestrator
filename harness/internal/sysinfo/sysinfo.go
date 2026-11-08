@@ -8,17 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 )
-
-// FreeGB devuelve los GB disponibles para el usuario en el sistema de archivos de path.
-func FreeGB(path string) (float64, error) {
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(path, &st); err != nil {
-		return 0, err
-	}
-	return float64(st.Bavail) * float64(st.Bsize) / 1e9, nil
-}
 
 // Proc es lo mínimo que el gate necesita de un proceso.
 type Proc struct {
@@ -104,11 +94,11 @@ func DirSizeBytes(root string) (int64, error) {
 		if err != nil {
 			return nil
 		}
-		if st, ok := info.Sys().(*syscall.Stat_t); ok && st.Nlink > 1 {
-			if seen[st.Ino] {
+		if ino, ok := enlaceDuro(info); ok {
+			if seen[ino] {
 				return nil
 			}
-			seen[st.Ino] = true
+			seen[ino] = true
 		}
 		total += info.Size()
 		return nil
