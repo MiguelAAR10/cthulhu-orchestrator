@@ -74,6 +74,7 @@ func TestNormalizeArgs(t *testing.T) {
 		{"msg send --to atena --type closing hi", "msg send --para atena --tipo cierre hi"},
 		{"msg read", "msg leer"},
 		{"learn promote L1", "aprender promover L1"},
+		{"mem add --type fact --source scout x", "mem add --tipo hecho --fuente scout x"},
 		{"metrics --since 2026-01-01", "metricas --desde 2026-01-01"},
 		{"handoff-note orchestrator", "relevo orquestador"},
 		{"slice abrir 01 --titulo x", "slice abrir 01 --titulo x"},

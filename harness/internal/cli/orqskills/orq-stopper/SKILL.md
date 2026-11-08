@@ -16,7 +16,7 @@ A stopper is a short, typed request to the Owner. Only the tasks you name wait o
 Do not raise one for something that you or the Orchestrator can decide from the plan, the story, or memory.
 
 ## Severity
-- `blocking`: the named `--tasks` cannot continue. Only those tasks are held (`orq plan listas` shows `stop ST-NNNN`).
+- `blocking`: the named `--tasks` cannot continue. Only those tasks are held (`orq plan ready` shows `stop ST-NNNN`).
 - `soon`: needed before the slice closes. It holds nothing.
 - `fyi`: the Owner should know. It holds nothing.
 

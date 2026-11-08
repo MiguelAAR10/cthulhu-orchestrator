@@ -12,7 +12,7 @@ var cmdEN = map[string]string{
 
 var subEN = map[string]map[string]string{
 	"slice": {"open": "abrir", "close": "cerrar", "launch": "lanzar", "merge": "juntar", "verify": "verificar",
-		"retry": "reintentar", "take": "tomar", "exam": "examen", "scope": "alcance", "status": "estado",
+		"retry": "reintentar", "take": "tomar", "exam": "examen", "scope": "alcance", "status": "estado", "fact": "hecho", "hypothesis": "hipotesis",
 		"receipt": "recibo", "reopen": "reabrir", "refingerprint": "rehuella", "prune": "podar", "contract": "contrato"},
 	"plan":     {"load": "cargar", "show": "ver", "done": "hecha", "release": "soltar", "ready": "listas", "review": "revisar", "debated": "debatido"},
 	"sesion":   {"show": "ver", "open": "abrir", "close": "cerrar"},
@@ -30,7 +30,7 @@ var flagEN = map[string]map[string]string{
 		"report": "reporte", "format": "formato", "allow-skip": "permite-omitir", "isolated": "aislado",
 		"handoff": "relevo"},
 	"msg":      {"to": "para", "type": "tipo", "attempt": "intento", "key": "clave", "resend": "reenviar", "from": "de"},
-	"mem":      {"source": "fuente", "evidence": "evidencia", "expires": "vence", "replaces": "reemplaza"},
+	"mem":      {"type": "tipo", "source": "fuente", "evidence": "evidencia", "expires": "vence", "replaces": "reemplaza"},
 	"aprender": {"source": "fuente", "evidence": "evidencia"},
 	"relevo":   {"file-only": "solo-archivo", "force": "forzar"},
 	"metricas": {"since": "desde"},
@@ -41,7 +41,7 @@ var valueEN = map[string]string{
 	"low": "baja", "medium": "media", "high": "alta",
 	"story": "historia", "question": "pregunta", "answer": "respuesta", "closing": "cierre",
 	"planner": "planificador", "orchestrator": "orquestador", "verifier": "verificador",
-	"improve": "mejora", "new": "nuevo", "status": "estado",
+	"improve": "mejora", "new": "nuevo", "status": "estado", "fact": "hecho", "hypothesis": "hipotesis",
 }
 
 // flags whose values (and positional role arguments) are translated.
