@@ -465,6 +465,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	if !identidad.Valido() {
 		fmt.Fprintln(stderr, "warning: no valid ORQ_TOKEN in this pane; the Orchestrator will not get the Owner's token (export ORQ_TOKEN=\"$(orq token)\" before starting Atena)")
 	}
+	anclarLlamador("atena")
 	fname := "atena-" + orqdir.Slug(p.root)
 	if err := rn().Rename(rn().Current(), fname); err != nil {
 		fmt.Fprintf(stderr, "aviso: no se pudo nombrar este panel como %s (%v)\n", fname, err)
@@ -504,6 +505,9 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 	rol := fs.Arg(0)
 	if *auto {
 		rol = p.rolActual()
+	}
+	if !*auto {
+		anclarLlamador(rol)
 	}
 	if !slices.Contains(canal.Roles, rol) {
 		fmt.Fprintln(stderr, "uso: orq relevo [--solo-archivo] atena|orquestador")
@@ -1122,4 +1126,16 @@ func verNombre(x string) string {
 		return e
 	}
 	return x
+}
+
+// anclarLlamador: `orq up` y `orq relevo`, si quien llama ya prueba su identidad (token + sesión
+// confiable), anclan su shell como sesión privilegiada para sus descendientes sin terminal.
+func anclarLlamador(rol string) {
+	if identidad.Tabla == nil || !identidad.Valido() {
+		return
+	}
+	if _, w := workerEfectivo(); w {
+		return
+	}
+	identidad.Anclar(identidad.Tabla, os.Getppid(), rol)
 }

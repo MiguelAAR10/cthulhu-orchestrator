@@ -22,6 +22,12 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("ORQ_TOKEN", tok)
+	// Las pruebas no dependen de tener una terminal: el proceso de prueba es una sesión anclada.
+	if identidad.Tabla != nil {
+		if _, err := identidad.Anclar(identidad.Tabla, os.Getpid(), "owner"); err != nil {
+			panic(err)
+		}
+	}
 	os.Unsetenv("ORQ_SHIM")
 	os.Exit(m.Run())
 }

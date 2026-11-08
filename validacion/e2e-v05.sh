@@ -28,7 +28,9 @@ EOT
   git add -A && git commit -qm "test(S-$1): rojo"
 }
 orq init --modo=nuevo >/dev/null 2>&1; git add -A; git commit -qm "chore: orq init" >/dev/null
-export ORQ_TOKEN="$(orq token)"   # el script actúa como el Owner/Orquestador en su terminal
+orq token >/dev/null   # primera vez: crea el token y ancla el shell de este script como sesión del Owner
+export ORQ_TOKEN="$(orq token)"   # el script actúa como el Owner/Orquestador
+ok "$(q session register --pid $$)" 0 "el Owner ancla la sesión del script (sin TTY también vale)"
 ok "$(ORQ_TOKEN= q slice cerrar --aceptado)" 1 "sin el token del Owner no se cierra"
 
 echo "== S-01: rojo, trampa, reintento, recibo"

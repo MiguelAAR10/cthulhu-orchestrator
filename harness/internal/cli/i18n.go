@@ -15,7 +15,7 @@ var subEN = map[string]map[string]string{
 		"retry": "reintentar", "take": "tomar", "exam": "examen", "scope": "alcance", "status": "estado", "fact": "hecho", "hypothesis": "hipotesis",
 		"receipt": "recibo", "reopen": "reabrir", "refingerprint": "rehuella", "prune": "podar", "contract": "contrato"},
 	"plan":     {"load": "cargar", "show": "ver", "done": "hecha", "release": "soltar", "ready": "listas", "review": "revisar", "debated": "debatido"},
-	"sesion":   {"show": "ver", "open": "abrir", "close": "cerrar"},
+	"sesion":   {"show": "ver", "open": "abrir", "close": "cerrar", "register": "registrar"},
 	"mem":      {"show": "ver", "compact": "compactar"},
 	"msg":      {"read": "leer", "reconcile": "reconciliar"},
 	"aprender": {"show": "ver", "confirm": "confirmar", "refute": "refutar", "promote": "promover"},

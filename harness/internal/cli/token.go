@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -22,12 +23,81 @@ func runToken(stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "orq token: only the Owner, from a terminal outside any worker, gets the token")
 		return 1
 	}
-	t, err := identidad.Asegurar()
+	// Primer arranque: quien crea el token es el Owner, y su shell (el padre) queda anclado como
+	// sesión privilegiada. Con el token ya creado, solo lo obtiene una sesión confiable (ancla o
+	// terminal de persona): un proceso huérfano sin TTY no lo vuelve a pedir.
+	if identidad.Leer() != "" {
+		if err := identidad.ConfiableAqui(); err != nil {
+			fmt.Fprintln(stderr, "orq token:", err)
+			return 1
+		}
+	}
+	t, err := tokenInicial()
 	if err != nil {
 		fmt.Fprintln(stderr, "orq token:", err)
 		return 1
 	}
 	fmt.Fprintln(stdout, t)
+	return 0
+}
+
+// tokenInicial asegura el token; si lo crea ahora (primer arranque, `orq init` o `orq token`), quien
+// lo crea es el Owner y su shell (el padre) queda anclado como sesión privilegiada.
+func tokenInicial() (string, error) {
+	nuevo := identidad.Leer() == ""
+	t, err := identidad.Asegurar()
+	if err == nil && nuevo && identidad.Tabla != nil {
+		if _, w := workerEfectivo(); !w {
+			_, err = identidad.Anclar(identidad.Tabla, os.Getppid(), "owner")
+		}
+	}
+	return t, err
+}
+
+// runSesionRegistrar: `orq session register [--pid N] [--role owner|atena|orchestrator]`.
+// Ancla un proceso (por defecto, el shell que llama) como sesión privilegiada: sus descendientes
+// pueden ejercer roles privilegiados con el token aunque no tengan terminal. Exige lo mismo que
+// una acción privilegiada: token y sesión confiable, y que el proceso anclado no sea un worker.
+func runSesionRegistrar(args []string, stdout, stderr io.Writer) int {
+	fs := nuevoFS("session register", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	pid := fs.Int("pid", os.Getppid(), "process to anchor (default: the calling shell)")
+	rol := fs.String("role", os.Getenv("ORQ_ROL"), "owner|atena|orchestrator")
+	if fs.Parse(args) != nil {
+		return 1
+	}
+	if *rol == "" {
+		*rol = "owner"
+	}
+	wd, _ := os.Getwd()
+	if _, w := workerEfectivo(); w || gate.IsLinkedWorktree(wd) || !rolesConToken[*rol] {
+		fmt.Fprintln(stderr, "orq session register: only the Owner, Atena or the Orchestrator register a session, never a worker")
+		return 1
+	}
+	if err := identidad.Autorizado(); err != nil {
+		fmt.Fprintln(stderr, "orq session register:", err)
+		return 1
+	}
+	if identidad.Tabla == nil {
+		fmt.Fprintln(stderr, "orq session register: no process table on this platform; the token alone is checked")
+		return 1
+	}
+	if id, ok := identidad.WorkerAncestro(identidad.Tabla, *pid); ok {
+		fmt.Fprintf(stderr, "orq session register: process %d descends from worker %q\n", *pid, id)
+		return 1
+	}
+	if env, err := identidad.Tabla.Environ(*pid); err == nil {
+		if id, ok := identidad.MarcaWorker(env); ok {
+			fmt.Fprintf(stderr, "orq session register: process %d is worker %q\n", *pid, id)
+			return 1
+		}
+	}
+	a, err := identidad.Anclar(identidad.Tabla, *pid, *rol)
+	if err != nil {
+		fmt.Fprintln(stderr, "orq session register:", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "registered %s session: pid %d (start %d)\n", a.Rol, a.PID, a.Start)
 	return 0
 }
 

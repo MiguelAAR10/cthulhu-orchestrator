@@ -57,8 +57,10 @@ func (p proyecto) rolPrivilegiado() string {
 		return r
 	}
 	r := p.rolActual()
-	if r != "" && !identidad.Valido() {
-		return r + " without ORQ_TOKEN"
+	if r != "" {
+		if err := identidad.Autorizado(); err != nil {
+			return r + " without a valid ORQ_TOKEN (" + err.Error() + ")"
+		}
 	}
 	return r
 }
@@ -68,8 +70,8 @@ func (p proyecto) exigirToken(accion string) error {
 	if r := p.rolStop(); strings.HasPrefix(r, "worker") {
 		return fmt.Errorf("a worker cannot %s (role %q): ask the Orchestrator", accion, r)
 	}
-	if !identidad.Valido() {
-		return fmt.Errorf("%s requires the Owner's token: export ORQ_TOKEN=\"$(orq token)\" in the Owner's or Orchestrator's terminal", accion)
+	if err := identidad.Autorizado(); err != nil {
+		return fmt.Errorf("%s requires the Owner's token from a trusted session (%v): export ORQ_TOKEN=\"$(orq token)\" in the Owner's or Orchestrator's terminal", accion, err)
 	}
 	return nil
 }

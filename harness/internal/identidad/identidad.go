@@ -72,8 +72,20 @@ func Asegurar() (string, error) {
 	return t, nil
 }
 
-// Valido: ORQ_TOKEN del entorno coincide con el token guardado.
-func Valido() bool { return Coincide(os.Getenv("ORQ_TOKEN")) }
+// Valido: ORQ_TOKEN del entorno coincide con el token guardado Y este proceso es confiable
+// (desciende de una sesión anclada o de una terminal de persona, nunca de un worker). Falla cerrado.
+func Valido() bool { return Autorizado() == nil }
+
+// Autorizado explica por qué no vale la identidad privilegiada (nil si vale).
+func Autorizado() error {
+	if !Coincide(os.Getenv("ORQ_TOKEN")) {
+		return errors.New("missing or wrong ORQ_TOKEN")
+	}
+	if err := ConfiableAqui(); err != nil {
+		return errors.New("ORQ_TOKEN presented but " + err.Error())
+	}
+	return nil
+}
 
 // Coincide compara en tiempo constante con el token guardado.
 func Coincide(t string) bool {

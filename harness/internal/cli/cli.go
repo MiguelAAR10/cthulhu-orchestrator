@@ -180,6 +180,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	case "slice":
 		return runSlice(args[1:], stdout, stderr)
 	case "sesion":
+		if len(args) > 1 && args[1] == "registrar" {
+			return runSesionRegistrar(args[2:], stdout, stderr)
+		}
 		return runSesion(args[1:], stdout, stderr)
 	case "plan":
 		return runPlan(args[1:], stdout, stderr)

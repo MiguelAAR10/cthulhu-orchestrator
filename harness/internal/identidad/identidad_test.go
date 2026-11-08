@@ -27,6 +27,11 @@ func TestTokenPrivadoYValidacion(t *testing.T) {
 		t.Fatal("token falso aceptado")
 	}
 	t.Setenv("ORQ_TOKEN", tok)
+	if Tabla != nil { // sesión anclada: la prueba no depende de correr bajo una terminal
+		if _, err := Anclar(Tabla, os.Getpid(), "owner"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if !Valido() {
 		t.Fatal("token verdadero rechazado")
 	}

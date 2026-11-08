@@ -139,7 +139,7 @@ func workerOrq(cmd string) (Decision, bool) {
 			return no()
 		}
 	}
-	if escapaDelArbol(c) {
+	if escapaDelArbol(c) || interpreteEscapa(c) {
 		return deny("%s", lang.T("orq: a worker does not detach from its process tree (setsid, nohup, disown, systemd-run, at, tmux new, herdr): orq recognises workers by their ancestors.",
 			"orq: un worker no se separa de su árbol de procesos (setsid, nohup, disown, systemd-run, at, tmux new, herdr): orq reconoce a los workers por sus ancestros.")), true
 	}
@@ -159,7 +159,25 @@ func workerOrq(cmd string) (Decision, bool) {
 }
 
 // sueltaArbol: comandos que lanzan un proceso fuera del árbol del worker (otro padre, otra sesión).
-var sueltaArbol = set("setsid", "nohup", "disown", "systemd-run", "at", "batch", "daemonize", "start-stop-daemon", "screen", "herdr", "orca", "orca-ide")
+// script/unbuffer/expect/socat abren un pseudo-terminal nuevo: orq acepta una terminal de persona
+// como prueba del Owner, así que un worker tampoco se fabrica una.
+var sueltaArbol = set("setsid", "nohup", "disown", "systemd-run", "at", "batch", "daemonize", "start-stop-daemon", "screen", "herdr", "orca", "orca-ide",
+	"script", "unbuffer", "expect", "socat")
+
+var (
+	// interpCodigoRe: un intérprete con código en línea (-c/-e/-r/--eval) o leído de stdin/heredoc.
+	interpCodigoRe = regexp.MustCompile(`(^|[\s;&|(/])(python[0-9.]*|perl|node|nodejs|ruby|php|deno|bun|lua|tclsh)\b[^;&|]*(\s-\w*[cer]\b|\s--eval\b|\s-\s|\s-$|<<|\seval\b)`)
+	// codigoEscapaRe: lo que ese código no necesita en un worker: separarse del árbol, fabricar una
+	// terminal o llamar a orq por debajo del gate.
+	codigoEscapaRe = regexp.MustCompile(`setsid|\bfork|daemon|start_new_session|detached|\bpty\b|openpty|forkpty|nohup|disown|` +
+		`(os\.system|subprocess|popen|Popen|child_process|exec\w*|spawn\w*|system|\x60|qx)[^\n]*\borq\b|\borq\b[^\n]*(subprocess|system|spawn|exec)`)
+)
+
+// interpreteEscapa: python/perl/node/ruby... con código en línea que hace fork/setsid/daemon,
+// abre un pty o lanza orq. Defensa en profundidad: el control que vale es el ancla en orq.
+func interpreteEscapa(c string) bool {
+	return interpCodigoRe.MatchString(c) && codigoEscapaRe.MatchString(c)
+}
 
 // escapaDelArbol mira el comando de cada segmento (tras VAR=valor y sudo/env/exec).
 func escapaDelArbol(c string) bool {

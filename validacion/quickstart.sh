@@ -20,9 +20,11 @@ if grep -qx hello greeting.txt 2>/dev/null; then echo 'ok 1 greeting' > out.tap;
 T
 echo out.tap > .gitignore; git add -A && git commit -qm "test: failing acceptance test"
 
+orq token >/dev/null   # first run: creates the Owner's token and anchors this script's shell as the Owner's session
 step "orq init"                 orq init --mode=new
 git add -A && git commit -qm "chore: orq init" >/dev/null
-export ORQ_TOKEN="$(orq token)"   # the Owner, at their terminal, presents the token for privileged steps
+export ORQ_TOKEN="$(orq token)"   # the Owner presents the token for privileged steps
+step "orq session register"     orq session register --pid $$   # explicit anchor (works with no TTY, e.g. CI)
 step "orq profile set"          orq profile set type=greenfield
 step "orq profile"              orq profile; has greenfield
 step "orq slice open (red exam)" orq slice open 01 --title greeting --test tests/acceptance.sh --cmd "sh tests/acceptance.sh" \

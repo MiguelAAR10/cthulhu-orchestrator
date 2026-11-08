@@ -159,13 +159,23 @@ func TestWorkerDefensaEnProfundidad(t *testing.T) {
 		`tmux new -d sh`,
 		`tmux split-window sh`,
 		`herdr pane split --current`,
+		`python3 -c "import os; os.fork() or (os.setsid(), os.execv('/bin/sh',['sh']))"`,
+		`python -c 'import subprocess; subprocess.Popen(["sh"], start_new_session=True)'`,
+		`python3 - <<'EOF'` + "\nimport os\nos.setsid()\nEOF",
+		`perl -e 'fork and exit; setsid(); exec "sh"'`,
+		`node -e "require('child_process').spawn('sh',{detached:true})"`,
+		`python3 -c "import os; os.system('or' 'q token')"; python3 -c 'import subprocess; subprocess.run(["orq","token"])'`,
+		`python3 -c "import pty; pty.spawn('sh')"`,
+		`script -qc sh /dev/null`,
+		`ruby -e 'Process.daemon'`,
 	}
 	for _, c := range malos {
 		if d := Evaluate(bash(c), baseLimits(), w); d.Allow {
 			t.Errorf("un worker pudo: %q", c)
 		}
 	}
-	for _, c := range []string{`echo look at this`, `go test ./... &`, `cat README.md`, `ls ~/project/*.go`, `grep -r ORQ_ROL docs`} {
+	for _, c := range []string{`echo look at this`, `go test ./... &`, `cat README.md`, `ls ~/project/*.go`, `grep -r ORQ_ROL docs`,
+		`python3 -c "print(1+1)"`, `node -e "console.log(2)"`, `python3 -m pytest tests`, `python3 scripts/fork_report.py`} {
 		if d := Evaluate(bash(c), baseLimits(), w); !d.Allow {
 			t.Errorf("bloqueó %q: %s", c, d.Reason)
 		}
