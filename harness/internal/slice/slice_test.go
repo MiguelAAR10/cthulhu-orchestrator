@@ -692,6 +692,45 @@ func TestAmpliarAlcance(t *testing.T) {
 	}
 }
 
+// H-04b: una ampliación de alcance mientras corre el examen no se pierde, y el resultado se descarta.
+func TestVerificarNoPisaAmpliacionConcurrente(t *testing.T) {
+	r := repoDeJuguete(t)
+	sync := t.TempDir()
+	corre, sigue := filepath.Join(sync, "corre"), filepath.Join(sync, "sigue")
+	os.WriteFile(sigue, nil, 0o644)
+	cmd := "touch " + corre + "; while [ ! -f " + sigue + " ]; do sleep 0.02; done; " + examen
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", cmd, Opciones{Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}}, t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	os.Remove(sigue)
+	os.Remove(corre)
+	hecho := make(chan error, 1)
+	go func() {
+		for {
+			if _, err := os.Stat(corre); err == nil {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		_, err := r.Ampliar("01", []string{"db/m.txt"}) // no debe esperar a la corrida
+		os.WriteFile(sigue, nil, 0o644)
+		hecho <- err
+	}()
+	_, _, err = r.Verificar("01", t0)
+	if errA := <-hecho; errA != nil {
+		t.Fatal(errA)
+	}
+	if err == nil || !strings.Contains(err.Error(), "contrato") {
+		t.Fatalf("debió descartar el resultado: %v", err)
+	}
+	ahora, _ := r.Load("01")
+	if len(ahora.Alcance) != 2 || ahora.Recibo != nil || ahora.Fase != Implementando {
+		t.Fatalf("se pisó la ampliación: %+v", ahora)
+	}
+}
+
 // Sin alcance el slice toca todo: ampliar no puede encogerlo a las rutas sumadas.
 func TestAmpliarSinAlcanceNoEncoge(t *testing.T) {
 	r := repoDeJuguete(t)

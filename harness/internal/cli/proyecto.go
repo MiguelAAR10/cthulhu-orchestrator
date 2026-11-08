@@ -303,6 +303,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 1
 		}
 		ms, err := canal.Load(p.canalPath())
+		ms = canal.Vigentes(ms)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -505,6 +506,7 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 	rv := p.datosRelevo(rol)
 	var msgs strings.Builder
 	ms, _ := canal.Load(p.canalPath())
+	ms = canal.Vigentes(ms)
 	for _, m := range ms[max(0, len(ms)-15):] {
 		if m.De == rol || m.Para == rol {
 			fmt.Fprintf(&msgs, "%s %s→%s [%s] %s\n", m.ID, m.De, m.Para, m.Tipo, m.Texto)
@@ -652,7 +654,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(), Vence: e.ID(),
 			Texto: recortar(fmt.Sprintf("%s alcance + %s (%s)", e.ID(), args[1], *aprobado), memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s: alcance %s\n", e.ID(), strings.Join(e.Alcance, ", "))
 		return 0
@@ -685,7 +687,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(), Vence: e.ID(),
 			Texto: recortar(e.Attempt()+" huella reparada: "+motivo, memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s: huella tomada del rojo (%s), el examen es idéntico. Vuelve a verificar\n", e.Attempt(), e.SHARojo[:7])
 		return 0
@@ -700,7 +702,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(), Vence: e.ID(),
 			Texto: recortar(e.Attempt()+" reabierto: "+motivo, memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s reabierto en el mismo worktree, con su trabajo. El recibo ya no vale: lanza la reparación y vuelve a verificar\n", e.Attempt())
 		return 0
@@ -724,7 +726,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(), Vence: e.ID(),
 			Texto: recortar(e.Attempt()+": "+strings.Join(args[1:], " "), memoria.MaxTexto)}, time.Now())
 		p.aprenderSolo(strings.Join(resto, " "), "reintento", e.Attempt())
 		fmt.Fprintf(stdout, "%s abierto en el mismo worktree. Recibos anteriores ya no valen. Asigna escritor: orq slice tomar <quien>\n", e.Attempt())
@@ -759,7 +761,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			p.aprenderSolo("El Owner rechazó: "+*motivo, "rechazo", "S-"+reg.NN)
 		}
 		memoria.Add(p.memPath(), mem, time.Now())
-		os.Remove(p.canalPath())
+		canal.Archivar(p.canalPath(), "S-"+reg.NN, time.Now()) // append-only: lo pendiente de otros slices sigue
 		os.Remove(p.planPath(reg.NN))
 		// Higiene: los paneles de los workers de este slice ya no tienen trabajo.
 		if ses, err := canal.LoadSesiones(p.sesPath()); err == nil {
@@ -772,7 +774,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		} else {
 			fmt.Fprintf(stdout, "ficha del proyecto actualizada: %s\n", p.fichaPath())
 		}
-		fmt.Fprintf(stdout, "S-%s cerrado como %s. Canal limpio; memoria actualizada.\n", reg.NN, reg.Result)
+		fmt.Fprintf(stdout, "S-%s cerrado como %s. Mensajes de S-%s archivados; memoria actualizada.\n", reg.NN, reg.Result, reg.NN)
 		if !*ok {
 			fmt.Fprintf(stdout, "La rama %s se conserva para revisar.\n", "slice/"+reg.NN)
 		}
