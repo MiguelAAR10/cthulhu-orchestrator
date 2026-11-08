@@ -341,3 +341,34 @@ func TestWorkerNoCambiaElExamenNiElAlcance(t *testing.T) {
 		}
 	}
 }
+
+// Exploit 3: un worker no esquiva el gate invocando orq de forma indirecta.
+func TestWorkerNoInvocaOrqIndirecto(t *testing.T) {
+	wt := fakes{wt: true}.env(t, t.TempDir())
+	main := fakes{}.env(t, t.TempDir())
+	malos := []string{
+		`o=orq; $o slice exam tests/x.sh --approved m1`,
+		`O=orq && ${O} slice scope src`,
+		`eval "orq slice close --accepted"`,
+		`sh -c 'orq slice exam t --approved m1'`,
+		`bash -lc "orq autonomy free --scope src"`,
+		`"orq" slice exam t`,
+		`o\rq slice exam t`,
+		`/home/u/bin/orq slice exam t`,
+		`echo slice exam t | xargs orq`,
+		`x=$(echo b3Jx | base64 -d); $x slice exam t`,
+	}
+	for _, c := range malos {
+		if d := Evaluate(bash(c), baseLimits(), wt); d.Allow {
+			t.Errorf("un worker pudo: %q", c)
+		}
+	}
+	for _, c := range []string{`go test ./... -run Close`, `sh tests/s01.sh`, `orq worker beat --phase running`, `echo $HOME`, `FOO=1 go test ./...`} {
+		if d := Evaluate(bash(c), baseLimits(), wt); !d.Allow {
+			t.Errorf("bloqueó trabajo normal: %q (%s)", c, d.Reason)
+		}
+	}
+	if d := Evaluate(bash(`o=orq; $o slice exam t`), baseLimits(), main); !d.Allow {
+		t.Errorf("fuera de un worker no aplica: %s", d.Reason)
+	}
+}

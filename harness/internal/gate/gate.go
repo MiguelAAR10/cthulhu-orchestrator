@@ -254,7 +254,7 @@ var (
 // Normalizar quita lo que sirve para esquivar los patrones: comillas (sh -c '...'),
 // rutas absolutas a binarios y opciones globales antes del subcomando.
 func Normalizar(cmd string) string {
-	c := comillasRe.ReplaceAllString(cmd, " ")
+	c := comillasRe.ReplaceAllString(strings.ReplaceAll(cmd, `\`, ""), " ")
 	c = rutaBinRe.ReplaceAllString(c, "$1$2")
 	c = gitOptRe.ReplaceAllString(c, "git")
 	c = orqOptRe.ReplaceAllString(c, "orq")
@@ -319,15 +319,26 @@ func destructivo(p Payload) (Decision, bool) {
 // Both the English names and their Spanish aliases.
 var soloOrqRe = regexp.MustCompile(`(^|[\s;&|(])orq\s+(slice\s+(abrir|cerrar|reintentar|tomar|lanzar|juntar|examen|alcance|open|close|retry|take|launch|merge|exam|scope)\b|plan(\s+--slice\s+\S+)?\s+(cargar|hecha|debatido|load|done|debated)\b|(sesion|session)\s+(abrir|cerrar|open|close)\b|(aprender|learn)\s+(promover|promote)\b|msg\s+send\s+.*--(tipo|type)(\s+|=)(cierre|closing)\b|halt\s+--clear|qa\s+run)`)
 
+// indirectoRe: en un worker, el nombre del comando no sale de una variable ni de eval, y orq no
+// se invoca a través de sh -c ni xargs (así no se esquiva soloOrqRe con o=orq; $o slice exam).
+var (
+	varComandoRe = regexp.MustCompile("(^|[;&|(`\\n]|\\$\\()\\s*(\\w+=\\S*\\s+)*(\\$|eval\\b)")
+	shellOrqRe   = regexp.MustCompile(`\b((ba|z|da|k)?sh\s+-\w*c\b|xargs\b|exec\b|env\b|command\b|nohup\b|timeout\b)[^;&|]*orq\b`)
+)
+
 func soloOrquestador(p Payload, env Env) (Decision, bool) {
 	if p.ToolName != "Bash" {
 		return Decision{}, false
 	}
 	cmd, _ := p.ToolInput["command"].(string)
+	worker := p.AgentID != "" || env.IsWorktree(p.Cwd) || env.Rol == "tester" || env.Rol == "repairer"
+	if worker && (varComandoRe.MatchString(cmd) || shellOrqRe.MatchString(cmd)) {
+		return deny("%s", lang.T("orq: a worker runs commands by name: no variable or eval as the command, and no orq through sh -c or xargs.", "orq: un worker corre comandos por su nombre: sin variable ni eval como comando, y sin orq a través de sh -c o xargs.")), true
+	}
 	if !soloOrqRe.MatchString(cmd) {
 		return Decision{}, false
 	}
-	if p.AgentID != "" || env.IsWorktree(p.Cwd) || env.Rol == "tester" || env.Rol == "repairer" {
+	if worker {
 		return deny("%s", lang.T("orq: a worker does not open, take, retry or close slices, nor change its exam or scope. Ask the Orchestrator for verification with your result.", "orq: un worker no abre, toma, reintenta ni cierra slices, ni cambia su examen o alcance. Pide verificación al Orquestador con tu resultado.")), true
 	}
 	return Decision{}, false
