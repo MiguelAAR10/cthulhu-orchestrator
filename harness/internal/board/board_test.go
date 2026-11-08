@@ -122,7 +122,7 @@ func TestUnknownWorkerFieldsAreNull(t *testing.T) {
 		t.Fatal(string(raw))
 	}
 	txt := Text(b, false)
-	if !strings.Contains(txt, "tests unknown") || !strings.Contains(txt, "context unknown") || !strings.Contains(txt, "budget: none") {
+	if !strings.Contains(txt, "tests unknown") || !strings.Contains(txt, "context unknown") || !strings.Contains(txt, "time limit: none") {
 		t.Fatal(txt)
 	}
 }
@@ -268,5 +268,73 @@ func TestRechazadoConPlanYAceptadoSinPlan(t *testing.T) {
 	}
 	if *b.Overall.Pct != 50 {
 		t.Fatalf("%+v", b.Overall)
+	}
+}
+
+// El total se calcula sobre todos los slices: nunca 100% con uno sin medir o bloqueado.
+func TestOverallSobreTodosLosSlices(t *testing.T) {
+	orq := t.TempDir()
+	openSlice(t, orq, "01", "listo", slice.Verificado)
+	openSlice(t, orq, "02", "sin plan", slice.Implementando)
+	b, _ := Build(orq, now)
+	if b.Overall.Pct == nil || *b.Overall.Pct != 50 || b.Overall.Total != 2 || b.Overall.Measured != 1 {
+		t.Fatalf("%+v", b.Overall)
+	}
+	txt := Text(b, false)
+	if !strings.Contains(txt, "missing: unknown (no plan)") || strings.Contains(txt, "unknown (no plan)\n     who: nobody · sent back 0 · x") {
+		t.Fatalf("slice sin plan:\n%s", txt)
+	}
+	if !strings.Contains(txt, "1 unmeasured counted as 0%") {
+		t.Fatalf("sin decir lo no medido:\n%s", txt)
+	}
+
+	orq2 := t.TempDir()
+	openSlice(t, orq2, "01", "listo", slice.Verificado)
+	stops.Add(stops.Path(orq2), stops.Raise{Type: "access", Severity: "blocking", Slice: "S-01", Text: "need access"}, now)
+	b, _ = Build(orq2, now)
+	if b.Overall.Pct == nil || *b.Overall.Pct >= 100 {
+		t.Fatalf("100%% con un slice bloqueado: %+v", b.Overall)
+	}
+}
+
+// Palabras de negocio y español con ORQ_LANG=es.
+func TestTableroSinJergaYEnEspanol(t *testing.T) {
+	orq := t.TempDir()
+	openSlice(t, orq, "01", "Pago", slice.Implementando)
+	savePlan(t, orq, "01", plan.Tarea{ID: "T1", Zona: "a", Rutas: []string{"a"}, Que: "boton"})
+	b, _ := Build(orq, now)
+	txt := Text(b, false)
+	for _, no := range []string{"IMPLEMENT", "rework"} {
+		if strings.Contains(txt, no) || strings.Contains(HTML(b), no) {
+			t.Errorf("jerga %q:\n%s", no, txt)
+		}
+	}
+	t.Setenv("ORQ_LANG", "es")
+	txt = Text(b, false)
+	for _, si := range []string{"EN CURSO", "TOTAL", "falta:", "TRABAJADORES", "nadie te espera"} {
+		if !strings.Contains(txt, si) && !strings.Contains(strings.ToLower(txt), strings.ToLower(si)) {
+			t.Errorf("falta %q:\n%s", si, txt)
+		}
+	}
+	for _, no := range []string{"missing", "tasks", "who:", "OVERALL", "IN PROGRESS", "rework"} {
+		if strings.Contains(txt, no) || strings.Contains(HTML(b), no) {
+			t.Errorf("sin traducir %q", no)
+		}
+	}
+}
+
+// Un agente sin sesión no se ve «running · ok».
+func TestSesionMuertaNoEsOK(t *testing.T) {
+	orq := t.TempDir()
+	openSlice(t, orq, "01", "Pago", slice.Implementando)
+	savePlan(t, orq, "01", plan.Tarea{ID: "T1", Zona: "a", Rutas: []string{"a"}, Que: "boton", Estado: "en_curso", Worker: "w1"})
+	workers.Save(orq, workers.State{ID: "w1", Slice: "S-01", Task: "T1", Phase: "running", Heartbeat: now, Started: now})
+	b, _ := Build(orq, now)
+	MarcarSesionesMuertas(&b, func(id string) bool { return id == "w1" })
+	if b.Workers[0].Verdict != "dead" {
+		t.Fatalf("%+v", b.Workers[0])
+	}
+	if s := find(b, "S-01"); s.Color != "amber" {
+		t.Fatalf("%+v", s)
 	}
 }

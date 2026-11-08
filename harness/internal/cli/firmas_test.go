@@ -3,11 +3,15 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"orq/internal/canal"
 	"orq/internal/plan"
+	"orq/internal/state"
+	"orq/internal/workers"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // añade una línea a un archivo de .orq como lo haría un worker con `echo >>`.
@@ -259,5 +263,52 @@ func TestPlanHechaEditadaNoCuenta(t *testing.T) {
 	t.Setenv("ORQ_TOKEN", "")
 	if pl, _ = plan.Leer(pp); pl.Tareas[0].Estado != "hecha" {
 		t.Errorf("firmada por orq no cuenta: %+v", pl.Tareas[0])
+	}
+}
+
+// `session open` pasa por la misma puerta que un worker: bajo HALT no abre nada.
+func TestSessionOpenRespetaHalt(t *testing.T) {
+	st, _, llamadas := lanzarAislado(t, 5)
+	state.WriteHalt(st, "disco lleno", time.Now())
+	if _, e, c := run(t, "session", "open", "planner"); c == 0 {
+		t.Fatalf("abrió bajo HALT: %s %v", e, *llamadas)
+	} else if !strings.Contains(e, "HALT") {
+		t.Fatal(e)
+	}
+	for _, l := range *llamadas {
+		if strings.Contains(strings.Join(l, " "), "tab") {
+			t.Fatalf("tocó el runner: %v", l)
+		}
+	}
+}
+
+// El tablero y doctor dicen lo mismo de una sesión que ya no existe.
+func TestBoardSesionMuerta(t *testing.T) {
+	root, f := sliceConFake(t, false)
+	t.Setenv("ORQ_LANG", "en")
+	orq := filepath.Join(root, ".orq")
+	workers.Save(orq, workers.State{ID: "worker-a-s01", Slice: "S-01", Phase: "running", Heartbeat: time.Now(), Started: time.Now()})
+	canal.SaveSesiones(filepath.Join(orq, "sesiones.json"), map[string]canal.Sesion{"worker-a-s01": {Agente: "worker-a-s01", Pane: "p"}})
+	f.Muertos = map[string]bool{"worker-a-s01": true}
+	out, _, _ := run(t, "board")
+	if strings.Contains(out, "running · ok") || !strings.Contains(out, "dead") {
+		t.Errorf("tablero:\n%s", out)
+	}
+}
+
+func TestStopListEnEspanol(t *testing.T) {
+	proyectoVis(t)
+	t.Setenv("ORQ_LANG", "es")
+	run(t, "stop", "raise", "--type", "access", "--severity", "blocking", "--slice", "S-04", "--text", "acceso")
+	out, _, _ := run(t, "stop", "list")
+	for _, si := range []string{"abierto", "bloqueante", "acceso"} {
+		if !strings.Contains(out, si) {
+			t.Errorf("falta %q: %s", si, out)
+		}
+	}
+	for _, no := range []string{" open ", "blocking", " access "} {
+		if strings.Contains(out, no) {
+			t.Errorf("sin traducir %q: %s", no, out)
+		}
 	}
 }

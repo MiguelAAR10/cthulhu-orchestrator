@@ -326,10 +326,11 @@ func (p *Process) Close(pane string) error {
 // ---------- Fake para pruebas ----------
 
 type Fake struct {
-	Calls  []string
-	Dentro bool
-	Envs   []map[string]string // env de cada Open/Split, en orden
-	n      int
+	Muertos map[string]bool
+	Calls   []string
+	Dentro  bool
+	Envs    []map[string]string // env de cada Open/Split, en orden
+	n       int
 }
 
 func (f *Fake) log(s string)    { f.Calls = append(f.Calls, s) }
@@ -355,5 +356,5 @@ func (f *Fake) Start(name string, l Launch, pane string) error {
 func (f *Fake) Rename(t, n string) error    { f.log("rename " + t + " " + n); return nil }
 func (f *Fake) Prompt(t, text string) error { f.log("prompt " + t + " " + text); return nil }
 func (f *Fake) Read(string) (string, error) { return "", nil }
-func (f *Fake) Alive(string) bool           { return true }
+func (f *Fake) Alive(t string) bool         { return !f.Muertos[t] }
 func (f *Fake) Close(p string) error        { f.log("close " + p); return nil }

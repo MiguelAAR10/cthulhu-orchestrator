@@ -31,6 +31,7 @@ type Overall struct {
 	Measured int  `json:"measured"`
 	Total    int  `json:"total"`
 	Rejected int  `json:"rejected"`
+	Blocked  int  `json:"blocked"`
 }
 
 type Stopper struct {
@@ -325,6 +326,9 @@ func Build(orqDir string, now time.Time) (Board, error) {
 			c.RejectedReason = s.motivo
 			b.Overall.Rejected++
 		}
+		if !hasPlan && !done && !rejected {
+			c.Missing = []string{lang.T("unknown (no plan)", "desconocido (sin plan)")}
+		}
 		if c.Pct != nil {
 			measuredPct = append(measuredPct, *c.Pct)
 			sumW += c.Tasks.WeightTotal
@@ -348,7 +352,7 @@ func Build(orqDir string, now time.Time) (Board, error) {
 		case !s.closed && (blocking != "" || s.phase == slice.Bloqueado):
 			c.Color = "red"
 			if blocking != "" {
-				c.BlockedReason = "waiting on stop " + blocking
+				c.BlockedReason = lang.T("waiting on stop ", "esperando el stopper ") + blocking
 			} else {
 				c.BlockedReason = s.motivo
 			}
@@ -364,6 +368,9 @@ func Build(orqDir string, now time.Time) (Board, error) {
 			c.Color = "blue"
 		}
 		c.Status = statusOf[c.Color]
+		if c.Color == "red" {
+			b.Overall.Blocked++
+		}
 		if rejected {
 			c.Status = "REJECTED"
 		}
@@ -372,16 +379,19 @@ func Build(orqDir string, now time.Time) (Board, error) {
 	slices.SortStableFunc(b.Slices, func(x, y Slice) int { return colorRank[x.Color] - colorRank[y.Color] })
 
 	b.Overall.Total, b.Overall.Measured = len(srcs), len(measuredPct)
+	sumP := 0
+	for _, p := range measuredPct {
+		sumP += p
+	}
 	switch {
 	case len(measuredPct) == 0:
-	case sumW > 0 && !sinPeso:
+	case len(measuredPct) == len(srcs) && sumW > 0 && !sinPeso:
 		b.Overall.Pct = ip(int(math.Round(float64(sumWP) / float64(sumW))))
-	default:
-		t := 0
-		for _, p := range measuredPct {
-			t += p
-		}
-		b.Overall.Pct = ip(int(math.Round(float64(t) / float64(len(measuredPct)))))
+	default: // lo no medido cuenta 0: el total nunca habla solo de lo que se pudo medir
+		b.Overall.Pct = ip(int(math.Round(float64(sumP) / float64(len(srcs)))))
+	}
+	if p := b.Overall.Pct; p != nil && *p >= 100 && (b.Overall.Blocked > 0 || b.Overall.Measured < b.Overall.Total) {
+		*p = 99
 	}
 	return b, nil
 }
@@ -392,9 +402,33 @@ func JSON(b Board) ([]byte, error) { return json.MarshalIndent(b, "", "  ") }
 
 var ansi = map[string]string{"red": "\x1b[31m", "amber": "\x1b[33m", "green": "\x1b[32m", "blue": "\x1b[34m", "grey": "\x1b[90m"}
 
+func desconocido() string { return lang.T("unknown", "desconocido") }
+
+// palabra: la etiqueta guardada dicha para el Owner, en su idioma. Los datos y el JSON no cambian.
+var palabras = map[string][2]string{
+	"BLOCKED": {"BLOCKED", "BLOQUEADO"}, "AT RISK": {"AT RISK", "EN RIESGO"}, "IN PROGRESS": {"IN PROGRESS", "EN CURSO"},
+	"NOT PLANNED": {"NOT PLANNED", "SIN PLAN"}, "DONE": {"DONE", "LISTO"}, "REJECTED": {"REJECTED", "RECHAZADO"},
+	slice.Implementando: {"being built", "en construcción"}, slice.Verificado: {"tests passed", "pruebas pasadas"},
+	slice.Bloqueado: {"stopped", "detenido"}, slice.Integrando: {"joining the product", "integrándose"}, slice.Cerrando: {"closing", "cerrando"},
+	"CLOSED": {"closed", "cerrado"}, "CLOSED (rejected)": {"closed, rejected", "cerrado, rechazado"},
+	"running": {"working", "trabajando"}, "asks_verification": {"asks for review", "pide revisión"}, "blocked": {"blocked", "bloqueado"},
+	"question": {"has a question", "tiene una pregunta"}, "exited": {"finished", "terminó"},
+	"ok": {"ok", "bien"}, "stuck": {"stuck", "atascado"}, "dead": {"dead", "muerto"}, "timeout": {"over time", "fuera de tiempo"},
+	"blocking": {"BLOCKING", "BLOQUEANTE"}, "soon": {"SOON", "PRONTO"}, "fyi": {"FYI", "AVISO"},
+	"credential": {"credential", "credencial"}, "api_key": {"api key", "clave de API"}, "decision": {"decision", "decisión"},
+	"confirmation": {"confirmation", "confirmación"}, "access": {"access", "acceso"},
+}
+
+func palabra(x string) string {
+	if p, ok := palabras[x]; ok {
+		return lang.T(p[0], p[1])
+	}
+	return x
+}
+
 func unknown(p *int, suffix string) string {
 	if p == nil {
-		return "unknown"
+		return desconocido()
 	}
 	return fmt.Sprintf("%d%s", *p, suffix)
 }
@@ -409,41 +443,48 @@ func bar(p *int) string {
 
 func missing(m []string) string {
 	if len(m) == 0 {
-		return "nothing"
+		return lang.T("nothing", "nada")
 	}
 	if len(m) <= 3 {
 		return strings.Join(m, "; ")
 	}
-	return strings.Join(m[:3], "; ") + fmt.Sprintf("; +%d more", len(m)-3)
+	return strings.Join(m[:3], "; ") + fmt.Sprintf(lang.T("; +%d more", "; +%d más"), len(m)-3)
 }
 
 func faltante(c Slice) string {
 	if c.Status == "REJECTED" {
-		return "not delivered"
+		return lang.T("not delivered", "no entregado")
 	}
 	return missing(c.Missing)
 }
 
 func motivoRechazo(c Slice) string {
 	if c.RejectedReason == "" {
-		return "no reason recorded"
+		return lang.T("no reason recorded", "sin motivo registrado")
 	}
 	return lang.Traducir(c.RejectedReason)
 }
 
 func who(w []string) string {
 	if len(w) == 0 {
-		return "nobody"
+		return lang.T("nobody", "nadie")
 	}
 	return strings.Join(w, ", ")
 }
 
-// rechazados: el total lo dice, para que un 50% no parezca trabajo a medias.
-func rechazados(o Overall) string {
-	if o.Rejected == 0 {
-		return ""
+// detalleTotal: el total dice qué cuenta, para que un 50% no parezca trabajo a medias.
+func detalleTotal(o Overall) string {
+	d := fmt.Sprintf(lang.T("%d of %d slices measured", "%d de %d slices medidos"), o.Measured, o.Total)
+	if n := o.Total - o.Measured; n > 0 {
+		d += fmt.Sprintf(lang.T(", %d unmeasured counted as 0%%", ", %d sin medir cuentan 0%%"), n)
 	}
-	return fmt.Sprintf(", %d rejected and counted as 0%%", o.Rejected)
+	if o.Rejected > 0 {
+		d += fmt.Sprintf(lang.T(", %d rejected and counted as 0%%", ", %d rechazados cuentan 0%%"), o.Rejected)
+	}
+	if o.Blocked > 0 {
+		d += fmt.Sprintf(lang.T(", %d blocked", ", %d bloqueados"), o.Blocked)
+	}
+	return d
 }
 
 // avisoFirmas: lo que el Owner debe saber de los registros decisivos sin firma válida.
@@ -462,81 +503,89 @@ func Text(b Board, color bool) string {
 		}
 		return ansi[c] + txt + "\x1b[0m"
 	}
+	T := lang.T
 	if len(b.Stoppers) > 0 {
-		s.WriteString("STOPPERS · only you can unblock these\n")
+		s.WriteString(T("STOPPERS · only you can unblock these\n", "STOPPERS · solo tú puedes destrabarlos\n"))
 		for _, st := range b.Stoppers {
 			c := map[string]string{"blocking": "red", "soon": "amber", "fyi": "grey"}[st.Severity]
 			tasks := ""
 			if len(st.Tasks) > 0 {
-				tasks = " · holds " + strings.Join(st.Tasks, ",")
+				tasks = T(" · holds ", " · retiene ") + strings.Join(st.Tasks, ",")
 			}
-			fmt.Fprintf(&s, "  %s %s %s %s: %s (%dm ago%s)\n", paint(c, "["+strings.ToUpper(st.Severity)+"]"), st.ID, st.Slice, st.Type, st.Text, st.AgeMin, tasks)
+			fmt.Fprintf(&s, T("  %s %s %s %s: %s (%dm ago%s)\n", "  %s %s %s %s: %s (hace %dm%s)\n"), paint(c, "["+palabra(st.Severity)+"]"), st.ID, st.Slice, palabra(st.Type), st.Text, st.AgeMin, tasks)
 		}
 	} else {
-		s.WriteString("STOPPERS · none, nothing waits on you\n")
+		s.WriteString(T("STOPPERS · none, nothing waits on you\n", "STOPPERS · ninguno, nadie te espera\n"))
 	}
 	if u := b.Unverified; u.Any() {
 		fmt.Fprintf(&s, "\n%s\n", paint("amber", avisoFirmas(u)))
 	}
-	fmt.Fprintf(&s, "\nOVERALL %s %s (%d of %d slices measured%s)\n", unknown(b.Overall.Pct, "%"), bar(b.Overall.Pct), b.Overall.Measured, b.Overall.Total, rechazados(b.Overall))
+	fmt.Fprintf(&s, "\n%s %s %s (%s)\n", T("OVERALL", "TOTAL"), unknown(b.Overall.Pct, "%"), bar(b.Overall.Pct), detalleTotal(b.Overall))
 	s.WriteString("\nSLICES\n")
 	if len(b.Slices) == 0 {
-		s.WriteString("  none yet\n")
+		s.WriteString(T("  none yet\n", "  ninguno todavía\n"))
 	}
 	for _, c := range b.Slices {
-		fmt.Fprintf(&s, "  %s %s · %s (%s)\n", paint(c.Color, "■ "+c.Status), c.ID, c.Title, lang.Traducir(c.Phase))
+		fmt.Fprintf(&s, "  %s %s · %s (%s)\n", paint(c.Color, "■ "+palabra(c.Status)), c.ID, c.Title, palabra(c.Phase))
 		if c.Status == "REJECTED" {
-			fmt.Fprintf(&s, "     not delivered · %d of %d tasks were done before rejection\n", c.Tasks.Done, c.Tasks.Total)
+			fmt.Fprintf(&s, T("     not delivered · %d of %d tasks were done before rejection\n", "     no entregado · %d de %d tareas hechas antes del rechazo\n"), c.Tasks.Done, c.Tasks.Total)
 		} else {
-			fmt.Fprintf(&s, "     %s done %s · %d of %d tasks · missing: %s\n", unknown(c.Pct, "%"), bar(c.Pct), c.Tasks.Done, c.Tasks.Total, missing(c.Missing))
+			fmt.Fprintf(&s, T("     %s done %s · %d of %d tasks · missing: %s\n", "     %s hecho %s · %d de %d tareas · falta: %s\n"), unknown(c.Pct, "%"), bar(c.Pct), c.Tasks.Done, c.Tasks.Total, missing(c.Missing))
 		}
 		for _, f := range c.Fronts {
-			fmt.Fprintf(&s, "     front %s: %s · %d of %d tasks\n", f.ID, f.Goal, f.Tasks.Done, f.Tasks.Total)
+			fmt.Fprintf(&s, T("     front %s: %s · %d of %d tasks\n", "     frente %s: %s · %d de %d tareas\n"), f.ID, f.Goal, f.Tasks.Done, f.Tasks.Total)
 		}
-		fmt.Fprintf(&s, "     who: %s · rework %d", who(c.Who), c.Rework)
+		fmt.Fprintf(&s, T("     who: %s · sent back %d times", "     quién: %s · devuelto %d veces"), who(c.Who), c.Rework)
 		if c.BlockedReason != "" {
-			fmt.Fprintf(&s, " · blocked: %s", lang.Traducir(c.BlockedReason))
+			fmt.Fprintf(&s, T(" · blocked: %s", " · bloqueado: %s"), lang.Traducir(c.BlockedReason))
 		}
 		if c.Status == "REJECTED" {
-			fmt.Fprintf(&s, " · rejected: %s", motivoRechazo(c))
+			fmt.Fprintf(&s, T(" · rejected: %s", " · rechazado: %s"), motivoRechazo(c))
 		}
 		s.WriteString("\n")
 	}
-	s.WriteString("\nWORKERS\n")
+	s.WriteString(T("\nWORKERS\n", "\nTRABAJADORES\n"))
 	if len(b.Workers) == 0 {
-		s.WriteString("  none running\n")
+		s.WriteString(T("  none running\n", "  ninguno trabajando\n"))
 	}
 	for _, w := range b.Workers {
-		tests := "tests unknown"
+		tests := T("tests unknown", "pruebas: desconocido")
 		if w.Tests != nil {
-			tests = fmt.Sprintf("tests %d/%d", w.Tests.Passing, w.Tests.Total)
+			tests = fmt.Sprintf(T("tests %d/%d", "pruebas %d/%d"), w.Tests.Passing, w.Tests.Total)
 		}
-		hb := "beat unknown"
+		hb := T("last signal unknown", "última señal desconocida")
 		if w.HeartbeatAgeS != nil {
-			hb = fmt.Sprintf("beat %dm ago", *w.HeartbeatAgeS/60)
+			hb = fmt.Sprintf(T("last signal %dm ago", "última señal hace %dm"), *w.HeartbeatAgeS/60)
 		}
-		budget := "budget: none"
+		budget := T("time limit: none", "tope de tiempo: ninguno")
 		if w.BudgetMin != nil {
-			budget = fmt.Sprintf("%s of %dm", unknown(w.ElapsedMin, "m"), *w.BudgetMin)
+			budget = fmt.Sprintf(T("%s of %dm", "%s de %dm"), unknown(w.ElapsedMin, "m"), *w.BudgetMin)
 		} else if w.ElapsedMin != nil {
-			budget = fmt.Sprintf("%dm, budget: none", *w.ElapsedMin)
+			budget = fmt.Sprintf(T("%dm, time limit: none", "%dm, tope de tiempo: ninguno"), *w.ElapsedMin)
 		}
 		vc := map[string]string{"ok": "green", "exited": "grey"}[w.Verdict]
 		if vc == "" {
 			vc = "amber"
 		}
-		fmt.Fprintf(&s, "  %s %s/%s %s · %s · %s · commits %d · %s · %s · context %s\n", w.ID, w.Slice, w.Task, w.Phase, paint(vc, w.Verdict), hb, w.Commits, tests, budget, unknown(w.ContextPct, "%"))
+		fmt.Fprintf(&s, T("  %s %s/%s %s · %s · %s · commits %d · %s · %s · context %s\n", "  %s %s/%s %s · %s · %s · commits %d · %s · %s · contexto %s\n"), w.ID, w.Slice, w.Task, palabra(w.Phase), paint(vc, palabra(w.Verdict)), hb, w.Commits, tests, budget, unknown(w.ContextPct, "%"))
 	}
-	vel := "unknown"
-	if b.Velocity.TasksPerHour != nil {
-		vel = fmt.Sprintf("%.2f tasks/hour", *b.Velocity.TasksPerHour)
-	}
-	rw := 0
-	for _, c := range b.Slices {
-		rw += c.Rework
-	}
-	fmt.Fprintf(&s, "\nVELOCITY %s (last %dh) · rework %d\n", vel, b.Velocity.WindowH, rw)
+	fmt.Fprintf(&s, T("\nPACE %s (last %dh) · sent back %d times\n", "\nRITMO %s (últimas %dh) · devuelto %d veces\n"), ritmo(b), b.Velocity.WindowH, totalDevuelto(b))
 	return s.String()
+}
+
+func ritmo(b Board) string {
+	if b.Velocity.TasksPerHour == nil {
+		return desconocido()
+	}
+	return fmt.Sprintf(lang.T("%.2f tasks/hour", "%.2f tareas/hora"), *b.Velocity.TasksPerHour)
+}
+
+func totalDevuelto(b Board) int {
+	n := 0
+	for _, c := range b.Slices {
+		n += c.Rework
+	}
+	return n
 }
 
 // ---------- html ----------
@@ -551,7 +600,7 @@ var cssColor = map[string]string{"red": "#c62828", "amber": "#b26a00", "green": 
 // HTML es un solo archivo estático: CSS en línea, sin scripts ni pedidos de red.
 func HTML(b Board) string {
 	var s strings.Builder
-	s.WriteString(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>orq board</title><style>
+	s.WriteString(`<!doctype html><html lang="` + lang.T("en", "es") + `"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>orq board</title><style>
 body{font:15px/1.45 system-ui,sans-serif;margin:0;padding:16px;background:#fafafa;color:#212121}
 h1{font-size:20px}h2{font-size:16px;margin-top:24px}
 .card{background:#fff;border-left:8px solid #999;border-radius:6px;padding:10px 14px;margin:8px 0;box-shadow:0 1px 2px #0002}
@@ -559,60 +608,74 @@ h1{font-size:20px}h2{font-size:16px;margin-top:24px}
 table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid #ddd;padding:4px 6px;text-align:left}
 @media (prefers-color-scheme:dark){body{background:#121212;color:#eee}.card{background:#1e1e1e}.bar{background:#333}.bar i{background:#ccc}td,th{border-color:#333}}
 </style></head><body>`)
-	fmt.Fprintf(&s, "<h1>How are we doing?</h1><p>Generated %s</p>", esc(b.GeneratedAt.Format(time.RFC3339)))
-	s.WriteString("<h2>Stoppers: only you can unblock these</h2>")
+	fmt.Fprintf(&s, lang.T("<h1>How are we doing?</h1><p>Generated %s</p>", "<h1>¿Cómo vamos?</h1><p>Generado %s</p>"), esc(b.GeneratedAt.Format(time.RFC3339)))
+	s.WriteString(lang.T("<h2>Stoppers: only you can unblock these</h2>", "<h2>Stoppers: solo tú puedes destrabarlos</h2>"))
 	if len(b.Stoppers) == 0 {
-		s.WriteString("<p>None. Nothing waits on you.</p>")
+		s.WriteString(lang.T("<p>None. Nothing waits on you.</p>", "<p>Ninguno. Nadie te espera.</p>"))
 	}
 	for _, st := range b.Stoppers {
 		c := map[string]string{"blocking": "red", "soon": "amber", "fyi": "grey"}[st.Severity]
-		fmt.Fprintf(&s, `<div class="card" style="border-color:%s"><span class="w" style="color:%s">%s</span> %s · %s · %s<br>%s<br><small>%d min ago</small></div>`,
-			cssColor[c], cssColor[c], esc(strings.ToUpper(st.Severity)), esc(st.ID), esc(st.Slice), esc(st.Type), esc(st.Text), st.AgeMin)
+		fmt.Fprintf(&s, `<div class="card" style="border-color:%s"><span class="w" style="color:%s">%s</span> %s · %s · %s<br>%s<br><small>%d min</small></div>`,
+			cssColor[c], cssColor[c], esc(palabra(st.Severity)), esc(st.ID), esc(st.Slice), esc(palabra(st.Type)), esc(st.Text), st.AgeMin)
 	}
 	pct := func(p *int) string {
 		if p == nil {
-			return `<p>unknown</p>`
+			return "<p>" + desconocido() + "</p>"
 		}
 		return fmt.Sprintf(`<div class="bar"><i style="width:%d%%"></i></div>%d%%`, *p, *p)
 	}
 	if u := b.Unverified; u.Any() {
 		fmt.Fprintf(&s, `<div class="card" style="border-color:%s">%s</div>`, cssColor["amber"], esc(avisoFirmas(u)))
 	}
-	fmt.Fprintf(&s, "<h2>Overall</h2>%s <small>(%d of %d slices measured%s)</small>", pct(b.Overall.Pct), b.Overall.Measured, b.Overall.Total, rechazados(b.Overall))
-	s.WriteString("<h2>What we are building</h2>")
+	fmt.Fprintf(&s, "<h2>%s</h2>%s <small>(%s)</small>", lang.T("Overall", "Total"), pct(b.Overall.Pct), esc(detalleTotal(b.Overall)))
+	s.WriteString(lang.T("<h2>What we are building</h2>", "<h2>Qué estamos construyendo</h2>"))
 	for _, c := range b.Slices {
-		fmt.Fprintf(&s, `<div class="card" style="border-color:%s"><span class="w" style="color:%s">%s</span> %s · <b>%s</b> <small>(%s)</small>%s<br>Missing: %s<br>Who: %s · rework %d`,
-			cssColor[c.Color], cssColor[c.Color], esc(c.Status), esc(c.ID), esc(c.Title), esc(lang.Traducir(c.Phase)), pct(c.Pct), esc(faltante(c)), esc(who(c.Who)), c.Rework)
+		fmt.Fprintf(&s, `<div class="card" style="border-color:%s"><span class="w" style="color:%s">%s</span> %s · <b>%s</b> <small>(%s)</small>%s<br>%s: %s<br>%s: %s · %s %d`,
+			cssColor[c.Color], cssColor[c.Color], esc(palabra(c.Status)), esc(c.ID), esc(c.Title), esc(palabra(c.Phase)), pct(c.Pct), lang.T("Missing", "Falta"), esc(faltante(c)), lang.T("Who", "Quién"), esc(who(c.Who)), lang.T("sent back, times:", "devuelto, veces:"), c.Rework)
 		if c.BlockedReason != "" {
-			fmt.Fprintf(&s, "<br>Blocked: %s", esc(c.BlockedReason))
+			fmt.Fprintf(&s, lang.T("<br>Blocked: %s", "<br>Bloqueado: %s"), esc(c.BlockedReason))
 		}
 		if c.Status == "REJECTED" {
-			fmt.Fprintf(&s, "<br>Rejected: %s", esc(motivoRechazo(c)))
+			fmt.Fprintf(&s, lang.T("<br>Rejected: %s", "<br>Rechazado: %s"), esc(motivoRechazo(c)))
 		}
 		s.WriteString("</div>")
 	}
-	s.WriteString("<h2>Workers</h2><table><tr><th>worker</th><th>task</th><th>state</th><th>last beat</th><th>commits</th><th>tests</th><th>time</th><th>context</th></tr>")
+	s.WriteString(lang.T("<h2>Workers</h2><table><tr><th>worker</th><th>task</th><th>state</th><th>last signal</th><th>commits</th><th>tests</th><th>time</th><th>context</th></tr>", "<h2>Trabajadores</h2><table><tr><th>trabajador</th><th>tarea</th><th>estado</th><th>última señal</th><th>commits</th><th>pruebas</th><th>tiempo</th><th>contexto</th></tr>"))
 	for _, w := range b.Workers {
-		tests := "unknown"
+		tests := desconocido()
 		if w.Tests != nil {
 			tests = fmt.Sprintf("%d/%d", w.Tests.Passing, w.Tests.Total)
 		}
-		hb := "unknown"
+		hb := desconocido()
 		if w.HeartbeatAgeS != nil {
-			hb = fmt.Sprintf("%dm ago", *w.HeartbeatAgeS/60)
+			hb = fmt.Sprintf(lang.T("%dm ago", "hace %dm"), *w.HeartbeatAgeS/60)
 		}
-		budget := "budget: none"
+		budget := lang.T("time limit: none", "tope de tiempo: ninguno")
 		if w.BudgetMin != nil {
-			budget = fmt.Sprintf("%s of %dm", unknown(w.ElapsedMin, "m"), *w.BudgetMin)
+			budget = fmt.Sprintf(lang.T("%s of %dm", "%s de %dm"), unknown(w.ElapsedMin, "m"), *w.BudgetMin)
 		}
 		fmt.Fprintf(&s, "<tr><td>%s</td><td>%s/%s</td><td>%s · %s</td><td>%s</td><td>%d</td><td>%s</td><td>%s</td><td>%s</td></tr>",
-			esc(w.ID), esc(w.Slice), esc(w.Task), esc(w.Phase), esc(w.Verdict), hb, w.Commits, tests, budget, unknown(w.ContextPct, "%"))
+			esc(w.ID), esc(w.Slice), esc(w.Task), esc(palabra(w.Phase)), esc(palabra(w.Verdict)), hb, w.Commits, tests, budget, unknown(w.ContextPct, "%"))
 	}
 	s.WriteString("</table>")
-	vel := "unknown"
-	if b.Velocity.TasksPerHour != nil {
-		vel = fmt.Sprintf("%.2f tasks/hour", *b.Velocity.TasksPerHour)
-	}
-	fmt.Fprintf(&s, "<h2>Velocity</h2><p>%s (last %dh)</p></body></html>\n", vel, b.Velocity.WindowH)
+	fmt.Fprintf(&s, lang.T("<h2>Pace</h2><p>%s (last %dh)</p></body></html>\n", "<h2>Ritmo</h2><p>%s (últimas %dh)</p></body></html>\n"), ritmo(b), b.Velocity.WindowH)
 	return s.String()
+}
+
+// MarcarSesionesMuertas: lo que el runner sabe y el estado del worker no dice. Un worker que no ha
+// terminado y cuya sesión ya no existe está muerto, y su slice en riesgo.
+func MarcarSesionesMuertas(b *Board, muerta func(id string) bool) {
+	for i := range b.Workers {
+		w := &b.Workers[i]
+		if w.Phase == "exited" || w.Phase == "asks_verification" || !muerta(w.ID) {
+			continue
+		}
+		w.Verdict = "dead"
+		for j := range b.Slices {
+			if c := &b.Slices[j]; c.ID == w.Slice && c.Color == "blue" {
+				c.Color, c.Status = "amber", statusOf["amber"]
+			}
+		}
+	}
+	slices.SortStableFunc(b.Slices, func(x, y Slice) int { return colorRank[x.Color] - colorRank[y.Color] })
 }

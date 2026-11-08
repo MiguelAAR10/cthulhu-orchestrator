@@ -315,18 +315,18 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 			return 0
 		}
 		if len(out) == 0 {
-			fmt.Fprintln(stdout, "no stoppers")
+			fmt.Fprintln(stdout, lang.T("no stoppers", "sin stoppers"))
 		}
 		for _, s := range out {
-			fmt.Fprintf(stdout, "%s %-9s %-8s %s %-12s %s", s.ID, s.State, s.Severity, s.Slice, s.Type, s.Text)
+			fmt.Fprintf(stdout, "%s %-9s %-10s %s %-12s %s", s.ID, verStop(s.State), verStop(s.Severity), s.Slice, verStop(s.Type), s.Text)
 			if len(s.Tasks) > 0 {
-				fmt.Fprintf(stdout, " [tasks %s]", strings.Join(s.Tasks, ","))
+				fmt.Fprintf(stdout, lang.T(" [tasks %s]", " [tareas %s]"), strings.Join(s.Tasks, ","))
 			}
 			if s.Where != "" {
-				fmt.Fprintf(stdout, " [put it in env %s]", s.Where)
+				fmt.Fprintf(stdout, lang.T(" [put it in env %s]", " [ponlo en la variable %s]"), s.Where)
 			}
 			if len(s.Options) > 0 {
-				fmt.Fprintf(stdout, " [options %s]", strings.Join(s.Options, "|"))
+				fmt.Fprintf(stdout, lang.T(" [options %s]", " [opciones %s]"), strings.Join(s.Options, "|"))
 			}
 			if s.ClosureIgnored {
 				fmt.Fprint(stdout, lang.T(" [UNVERIFIED: a closure without a valid signature was ignored]", " [SIN VERIFICAR: se ignoró un cierre sin firma válida]"))
@@ -423,6 +423,19 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 	return 1
 }
 
+// verStop: estado, severidad y tipo de un stopper en español con ORQ_LANG=es; el dato no cambia.
+func verStop(x string) string {
+	if !lang.ES() {
+		return x
+	}
+	es := map[string]string{"open": "abierto", "resolved": "resuelto", "cancelled": "cancelado", "blocking": "bloqueante", "soon": "pronto", "fyi": "aviso",
+		"credential": "credencial", "api_key": "clave-api", "decision": "decisión", "confirmation": "confirmación", "access": "acceso"}
+	if e, ok := es[x]; ok {
+		return e
+	}
+	return x
+}
+
 // ---------- orq autonomy ----------
 
 func runAutonomy(args []string, stdout, stderr io.Writer) int {
@@ -517,6 +530,12 @@ func runBoard(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintln(stderr, "orq board:", err)
 		return 1
+	}
+	if ses, err := canal.LoadSesiones(p.sesPath()); err == nil && rn().Inside() {
+		board.MarcarSesionesMuertas(&b, func(id string) bool {
+			s, ok := ses[id]
+			return ok && !rn().Alive(s.Agente)
+		})
 	}
 	switch {
 	case *asJSON:

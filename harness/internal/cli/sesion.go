@@ -7,7 +7,9 @@ import (
 	"sort"
 	"strings"
 
+	"orq/internal/admision"
 	"orq/internal/canal"
+	"orq/internal/limits"
 )
 
 // Distribución de herdr, siempre igual y con nombre:
@@ -57,6 +59,15 @@ func runSesion(args []string, stdout, stderr io.Writer) int {
 		if !rn().Inside() {
 			fmt.Fprintln(stderr, "orq sesion: corre esto dentro del runner (panel del Orquestador)")
 			return 1
+		}
+		// La misma puerta que un worker: HALT, disco, medición fresca, cuota y cupos.
+		l, err := limits.Load(limits.DefaultPath())
+		if err == nil {
+			err = admision.Evaluar(l, p.admision(l))
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, "orq session:", err)
+			return 2
 		}
 		rol := args[1]
 		if s, ok := ses[rol]; ok {
