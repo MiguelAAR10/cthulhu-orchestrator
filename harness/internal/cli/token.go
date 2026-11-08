@@ -18,7 +18,7 @@ var rolesConToken = map[string]bool{"": true, "owner": true, "atena": true, "orq
 // Es una acción del Owner en su terminal: un worker nunca la obtiene (el gate además lo bloquea).
 func runToken(stdout, stderr io.Writer) int {
 	wd, _ := os.Getwd()
-	if os.Getenv("ORQ_WORKER_ID") != "" || os.Getenv("ORQ_SHIM") != "" || !rolesConToken[os.Getenv("ORQ_ROL")] || gate.IsLinkedWorktree(wd) {
+	if _, w := workerEfectivo(); w || !rolesConToken[os.Getenv("ORQ_ROL")] || gate.IsLinkedWorktree(wd) {
 		fmt.Fprintln(stderr, "orq token: only the Owner, from a terminal outside any worker, gets the token")
 		return 1
 	}
@@ -48,9 +48,29 @@ func escribirShim(orqDir, id string) (string, error) {
 
 func shQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
+// workerEfectivo: quién es worker sin fiarse del entorno actual. Vale el propio ORQ_WORKER_ID o el
+// shim, pero también el entorno inicial de cualquier ancestro (/proc/<pid>/environ): un hijo puede
+// hacer unset/export de ORQ_* en su entorno, no en el de sus padres. Y un cwd dentro de un worktree
+// enlazado de un slice (.orq/worktrees o el registro de slices) también es un worker.
+func workerEfectivo() (string, bool) {
+	if id := os.Getenv("ORQ_WORKER_ID"); id != "" {
+		return id, true
+	}
+	if os.Getenv("ORQ_SHIM") != "" {
+		return "shim", true
+	}
+	if id, ok := identidad.WorkerHeredado(); ok {
+		return id, true
+	}
+	if wd, err := os.Getwd(); err == nil && worktreeDeOrq(wd) {
+		return "worktree", true
+	}
+	return "", false
+}
+
 // limiteDeWorker: dentro de un worker (ORQ_WORKER_ID o el shim) orq mismo aplica la lista blanca.
 func limiteDeWorker(args []string, stderr io.Writer) bool {
-	if os.Getenv("ORQ_WORKER_ID") == "" && os.Getenv("ORQ_SHIM") == "" {
+	if _, w := workerEfectivo(); !w {
 		return false
 	}
 	if gate.OrqPermitidoAWorker(args) {

@@ -117,3 +117,33 @@ func accionGC(a string) string {
 	}
 	return a
 }
+
+// worktreeDeOrq: cwd está dentro de un worktree enlazado que orq creó para un slice, una zona o un
+// scout (no el de integración ni el e2e, que usa el Orquestador). Primero la prueba barata (.git archivo).
+func worktreeDeOrq(cwd string) bool {
+	if !gate.IsLinkedWorktree(cwd) {
+		return false
+	}
+	d := orqDeCwd(cwd)
+	if d == "" {
+		return false
+	}
+	es, _ := worktrees.Leer(d)
+	real := func(p string) string {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return r
+		}
+		return filepath.Clean(p)
+	}
+	c := real(cwd)
+	for _, e := range es {
+		if e.Kind != worktrees.KindSlice && e.Kind != worktrees.KindZone && e.Kind != worktrees.KindScout {
+			continue
+		}
+		w := real(e.Path)
+		if c == w || strings.HasPrefix(c, w+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}

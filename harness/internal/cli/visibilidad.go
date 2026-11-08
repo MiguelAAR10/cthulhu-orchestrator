@@ -32,7 +32,7 @@ import (
 // rolStop: con ORQ_WORKER_ID es un worker; dentro de un worktree enlazado también lo es, aunque
 // falte el entorno (nunca owner ni atena desde ahí); sin rol registrado, quien teclea es el Owner.
 func (p proyecto) rolStop() string {
-	if id := os.Getenv("ORQ_WORKER_ID"); id != "" {
+	if id, ok := workerEfectivo(); ok {
 		if strings.HasPrefix(id, "worker") {
 			return id
 		}
