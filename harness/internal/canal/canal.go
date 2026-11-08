@@ -9,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 )
 
@@ -34,6 +36,14 @@ type Msg struct {
 	Para    string    `json:"para"`
 	Tipo    string    `json:"tipo"`
 	Texto   string    `json:"texto"`
+	Firma   string    `json:"firma,omitempty"` // HMAC: lo que dice venir de Atena puede aprobar
+	// SinVerificar lo calcula Load: dice venir de Atena y su firma no vale. No aprueba nada.
+	SinVerificar bool `json:"-"`
+}
+
+func (m Msg) datosFirma(path string) (string, Msg) {
+	m.Estado, m.Firma, m.SinVerificar = "", "", false
+	return identidad.Alcance(filepath.Dir(path)), m
 }
 
 // esRol: filtro, orquestador o un worker del equipo (los workers se hablan entre ellos).
@@ -62,6 +72,9 @@ func (m Msg) Format() string {
 	ref := m.ID
 	if m.Attempt != "" {
 		ref += " · " + m.Attempt
+	}
+	if m.SinVerificar {
+		ref += " · SIN VERIFICAR"
 	}
 	return fmt.Sprintf("[orq · %s de %s · %s] %s\n(Responde con: orq msg send --para %s --tipo <tipo> \"...\")", m.Tipo, m.De, ref, m.Texto, m.De)
 }
@@ -103,6 +116,10 @@ func Append(path string, m *Msg) error {
 		}
 	}
 	m.ID, m.Estado = fmt.Sprintf("c%d", len(prev)+1), "pendiente"
+	if m.De == "atena" && identidad.Autorizado() == nil {
+		al, datos := m.datosFirma(path)
+		m.Firma = identidad.FirmarRegistro("canal", al, datos)
+	}
 	line, _ := json.Marshal(m)
 	_, err = f.Write(append(line, '\n'))
 	return err
@@ -210,6 +227,10 @@ func Load(path string) ([]Msg, error) {
 		if json.Unmarshal(sc.Bytes(), &m) == nil {
 			if m.ID == "" { // canal de v0.3
 				m.ID = fmt.Sprintf("c%d", len(out)+1)
+			}
+			if m.De == "atena" {
+				al, datos := m.datosFirma(path)
+				m.SinVerificar = !identidad.RegistroValido("canal", al, datos, m.Firma)
 			}
 			pos[m.ID] = len(out)
 			out = append(out, m)

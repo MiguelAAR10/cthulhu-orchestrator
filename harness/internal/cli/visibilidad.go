@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"orq/internal/identidad"
+	"orq/internal/lang"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -327,6 +328,12 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 			if len(s.Options) > 0 {
 				fmt.Fprintf(stdout, " [options %s]", strings.Join(s.Options, "|"))
 			}
+			if s.ClosureIgnored {
+				fmt.Fprint(stdout, lang.T(" [UNVERIFIED: a closure without a valid signature was ignored]", " [SIN VERIFICAR: se ignoró un cierre sin firma válida]"))
+			}
+			if s.RaisedUnverified {
+				fmt.Fprint(stdout, lang.T(" [UNVERIFIED: this record has no valid signature; treated as blocking]", " [SIN VERIFICAR: este registro no tiene firma válida; se trata como bloqueante]"))
+			}
 			fmt.Fprintln(stdout)
 		}
 		return 0
@@ -434,6 +441,10 @@ func runAutonomy(args []string, stdout, stderr io.Writer) int {
 	}
 	if len(args) == 0 || args[0] == "ver" || args[0] == "show" {
 		fmt.Fprintf(stdout, "autonomy: %s\n", cfg.Mode())
+		if cfg.AutonomiaSinFirma {
+			fmt.Fprintln(stdout, lang.T("UNVERIFIED: config.json says free without a valid signature; ignored. The Owner re-approves with `orq autonomy free --scope ...`",
+				"SIN VERIFICAR: config.json dice free sin firma válida; se ignora. El Owner la vuelve a aprobar con `orq autonomy free --scope ...`"))
+		}
 		if a := cfg.Autonomy; a != nil && cfg.Mode() == "free" {
 			fmt.Fprintf(stdout, "scope: %s\nbudget: %d min/task, %d workers, %d attempts\napproved by %s at %s\n",
 				strings.Join(a.Scope, ", "), a.Budget.MinutesPerTask, a.Budget.MaxWorkers, a.Budget.MaxAttempts, a.ApprovedBy, a.ApprovedAt.Format(time.RFC3339))
@@ -468,6 +479,7 @@ func runAutonomy(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "uso: orq autonomy [ver] | guided | free --scope ...")
 		return 1
 	}
+	cfg.FirmarAutonomia(p.dir)
 	if err := config.Save(p.dir, cfg); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

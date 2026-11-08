@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 )
 
@@ -24,6 +25,7 @@ type Autonomy struct {
 	Budget     Budget    `json:"budget"`
 	ApprovedBy string    `json:"approved_by,omitempty"`
 	ApprovedAt time.Time `json:"approved_at,omitzero"`
+	Firma      string    `json:"firma,omitempty"` // HMAC con el token del Owner
 }
 
 type Watch struct {
@@ -34,7 +36,9 @@ type Config struct {
 	Autonomy *Autonomy `json:"autonomy,omitempty"`
 	Sync     string    `json:"sync,omitempty"` // local | commit | branch
 	Watch    *Watch    `json:"watch,omitempty"`
-	extra    map[string]json.RawMessage
+	// AutonomiaSinFirma: el archivo dice free sin firma válida; no vale, el modo efectivo es guided.
+	AutonomiaSinFirma bool `json:"-"`
+	extra             map[string]json.RawMessage
 }
 
 var SyncModes = []string{"local", "commit", "branch"}
@@ -54,6 +58,11 @@ func Load(orqDir string) (Config, error) {
 		return c, err
 	}
 	json.Unmarshal(raw, &c.extra)
+	if a := c.Autonomy; a != nil && a.Mode == "free" {
+		f, cp := a.Firma, *a
+		cp.Firma = ""
+		c.AutonomiaSinFirma = !identidad.RegistroValido("autonomy", identidad.Alcance(orqDir), cp, f)
+	}
 	return c, nil
 }
 
@@ -80,7 +89,7 @@ func Save(orqDir string, c Config) error {
 }
 
 func (c Config) Mode() string {
-	if c.Autonomy == nil || c.Autonomy.Mode != "free" {
+	if c.Autonomy == nil || c.Autonomy.Mode != "free" || c.AutonomiaSinFirma {
 		return "guided"
 	}
 	return "free"
@@ -98,4 +107,14 @@ func (c Config) StaleMin() int {
 		return 10
 	}
 	return c.Watch.StaleMin
+}
+
+// FirmarAutonomia firma la aprobación. El llamador ya comprobó que es el Owner o Atena.
+func (c *Config) FirmarAutonomia(orqDir string) {
+	if c.Autonomy == nil {
+		return
+	}
+	c.Autonomy.Firma = ""
+	c.Autonomy.Firma = identidad.FirmarRegistro("autonomy", identidad.Alcance(orqDir), *c.Autonomy)
+	c.AutonomiaSinFirma = false
 }

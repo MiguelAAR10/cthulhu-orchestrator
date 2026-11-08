@@ -16,7 +16,7 @@ func TestLeerAceptaClavesEspanolas(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := p.Tareas[0]
-	if len(p.Tareas) != 2 || a.Zona != "back" || a.Rutas[0] != "x" || a.DependeDe[0] != "b" || a.Dificultad != "alta" || a.Que != "hace x" || a.Estado != "hecha" {
+	if len(p.Tareas) != 2 || a.Zona != "back" || a.Rutas[0] != "x" || a.DependeDe[0] != "b" || a.Dificultad != "alta" || a.Que != "hace x" || a.Estado != "pendiente" || !a.HechaSinFirma {
 		t.Fatalf("%+v", p)
 	}
 }
@@ -30,7 +30,7 @@ func TestLeerAceptaClavesInglesasYGuardaEnIngles(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, b := p.Tareas[0], p.Tareas[1]
-	if a.Zona != "back" || a.Rutas[0] != "x" || a.DependeDe[0] != "b" || a.Dificultad != "alta" || a.Que != "does x" || a.Estado != "hecha" || b.Estado != "en_curso" || b.Dificultad != "baja" {
+	if a.Zona != "back" || a.Rutas[0] != "x" || a.DependeDe[0] != "b" || a.Dificultad != "alta" || a.Que != "does x" || a.Estado != "pendiente" || !a.HechaSinFirma || b.Estado != "en_curso" || b.Dificultad != "baja" {
 		t.Fatalf("%+v", p)
 	}
 	if err := Guardar(path, p); err != nil {
@@ -49,7 +49,7 @@ func TestLeerAceptaClavesInglesasYGuardaEnIngles(t *testing.T) {
 		}
 	}
 	p2, err := Leer(path)
-	if err != nil || p2.Revision() != p.Revision() || p2.Tareas[0].Estado != "hecha" {
+	if err != nil || p2.Revision() != p.Revision() || p2.Tareas[0].Estado != "pendiente" {
 		t.Fatalf("ida y vuelta: %v", err)
 	}
 }

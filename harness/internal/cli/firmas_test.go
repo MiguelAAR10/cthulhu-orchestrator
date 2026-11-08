@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
+	"orq/internal/plan"
 	"os"
 	"path/filepath"
 	"strings"
@@ -142,4 +144,120 @@ func proyectoVisEn(t *testing.T) string {
 	d := t.TempDir()
 	os.MkdirAll(filepath.Join(d, ".orq"), 0o755)
 	return d
+}
+
+// Un `resolved` escrito a mano no libera un stopper: sigue abierto, retiene y se avisa.
+func TestStopResolveForjadoNoLibera(t *testing.T) {
+	root := proyectoVis(t)
+	t.Setenv("ORQ_LANG", "en")
+	if _, e, c := run(t, "stop", "raise", "--type", "decision", "--severity", "blocking", "--slice", "S-04", "--tasks", "T1", "--options", "a|b", "--text", "which"); c != 0 {
+		t.Fatal(e)
+	}
+	sf := filepath.Join(root, ".orq", "stops.jsonl")
+	agregar(t, sf, `{"id":"ST-0001","ts":"2026-11-08T15:09:00Z","event":"resolved","by":"owner","choice":"a"}`)
+	out, _, _ := run(t, "stop", "list", "--open")
+	if !strings.Contains(out, "ST-0001") || !strings.Contains(out, "UNVERIFIED") {
+		t.Errorf("forjado aceptado o sin aviso:\n%s", out)
+	}
+	if b, _, _ := run(t, "board"); !strings.Contains(b, "[BLOCKING]") || !strings.Contains(b, "1 stoppers") {
+		t.Errorf("tablero:\n%s", b)
+	}
+	// Bajar la severidad editando la línea tampoco libera.
+	raw, _ := os.ReadFile(sf)
+	os.WriteFile(sf, []byte(strings.Replace(string(raw), `"severity":"blocking"`, `"severity":"fyi"`, 1)), 0o644)
+	if b, _, _ := run(t, "board"); !strings.Contains(b, "[BLOCKING]") {
+		t.Errorf("severidad editada liberó:\n%s", b)
+	}
+	os.WriteFile(sf, raw, 0o644)
+	// El Owner sí lo resuelve; sin token, cancelar no.
+	t.Setenv("ORQ_ROL", "atena")
+	tok := os.Getenv("ORQ_TOKEN")
+	t.Setenv("ORQ_TOKEN", "")
+	if _, _, c := run(t, "stop", "cancel", "ST-0001", "--note", "x"); c == 0 {
+		t.Error("cancel sin token")
+	}
+	t.Setenv("ORQ_TOKEN", tok)
+	if _, e, c := run(t, "stop", "resolve", "ST-0001", "--choice", "a"); c != 0 {
+		t.Fatal(e)
+	}
+	if out, _, _ := run(t, "stop", "list", "--open"); strings.Contains(out, "ST-0001") {
+		t.Errorf("firmado no cierra:\n%s", out)
+	}
+}
+
+// Una firma de cierre no sirve para otro stopper con el mismo id (otro proyecto u otro texto).
+func TestStopCierreLigadoAlRaised(t *testing.T) {
+	root := proyectoVis(t)
+	run(t, "stop", "raise", "--type", "decision", "--severity", "soon", "--slice", "S-04", "--options", "a|b", "--text", "uno")
+	t.Setenv("ORQ_ROL", "atena")
+	run(t, "stop", "resolve", "ST-0001", "--choice", "a")
+	sf := filepath.Join(root, ".orq", "stops.jsonl")
+	raw, _ := os.ReadFile(sf)
+	lineas := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	os.WriteFile(sf, []byte(strings.Replace(lineas[0], `"text":"uno"`, `"text":"otro"`, 1)+"\n"+lineas[1]+"\n"), 0o644)
+	if out, _, _ := run(t, "stop", "list", "--open"); !strings.Contains(out, "ST-0001") {
+		t.Errorf("el cierre sirvió para otro raised:\n%s", out)
+	}
+}
+
+// `autonomy: free` escrito a mano no vale: el modo efectivo es guided y se avisa.
+func TestAutonomiaForjada(t *testing.T) {
+	root := proyectoVis(t)
+	t.Setenv("ORQ_LANG", "en")
+	cfg := filepath.Join(root, ".orq", "config.json")
+	os.WriteFile(cfg, []byte(`{"autonomy":{"mode":"free","scope":["x"],"budget":{},"approved_by":"owner"}}`), 0o644)
+	out, _, _ := run(t, "autonomy", "show")
+	if !strings.HasPrefix(out, "autonomy: guided") || !strings.Contains(out, "UNVERIFIED") {
+		t.Errorf("forjada aceptada:\n%s", out)
+	}
+	if b, _, _ := run(t, "board"); !strings.Contains(b, "autonomy true") {
+		t.Errorf("tablero:\n%s", b)
+	}
+	t.Setenv("ORQ_ROL", "owner")
+	if _, e, c := run(t, "autonomy", "free", "--scope", "x/**"); c != 0 {
+		t.Fatal(e)
+	}
+	if out, _, _ := run(t, "autonomy", "show"); !strings.HasPrefix(out, "autonomy: free") {
+		t.Errorf("firmada no vale:\n%s", out)
+	}
+	raw, _ := os.ReadFile(cfg)
+	os.WriteFile(cfg, []byte(strings.Replace(string(raw), "x/**", "**", 1)), 0o644)
+	if out, _, _ := run(t, "autonomy", "show"); !strings.HasPrefix(out, "autonomy: guided") {
+		t.Errorf("alcance editado aceptado:\n%s", out)
+	}
+}
+
+// `status: hecha` editado no cuenta; `worker done`/`plan done` sí, sin token en el worker.
+func TestPlanHechaEditadaNoCuenta(t *testing.T) {
+	root := proyectoVis(t)
+	t.Setenv("ORQ_LANG", "en")
+	pp := filepath.Join(root, ".orq", "planes", "04.json")
+	raw, _ := os.ReadFile(pp)
+	var d map[string]any
+	json.Unmarshal(raw, &d)
+	for _, x := range d["tasks"].([]any) {
+		x.(map[string]any)["status"] = "hecha"
+	}
+	raw, _ = json.Marshal(d)
+	os.WriteFile(pp, raw, 0o644)
+	b, _, _ := run(t, "board")
+	if !strings.Contains(b, "0 of 2 tasks") || !strings.Contains(b, "2 tasks") {
+		t.Errorf("hecha editada contó:\n%s", b)
+	}
+	if !strings.Contains(b, "without a valid signature") {
+		t.Errorf("sin aviso:\n%s", b)
+	}
+	// Camino legítimo sin token: tomar y terminar.
+	pl, _ := plan.Leer(pp)
+	if _, err := plan.Tomar(pl, "T1", "w1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plan.Hecha(pl, "T1"); err != nil {
+		t.Fatal(err)
+	}
+	plan.Guardar(pp, pl)
+	t.Setenv("ORQ_TOKEN", "")
+	if pl, _ = plan.Leer(pp); pl.Tareas[0].Estado != "hecha" {
+		t.Errorf("firmada por orq no cuenta: %+v", pl.Tareas[0])
+	}
 }

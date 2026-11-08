@@ -6,6 +6,7 @@ package stops
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"orq/internal/config"
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 )
 
@@ -48,6 +50,9 @@ type Event struct {
 	ProvidedAt string    `json:"provided_at,omitempty"`
 	Choice     string    `json:"choice,omitempty"`
 	Note       string    `json:"note,omitempty"`
+	// Firma: HMAC con el token del Owner. Un raised lo firma orq al escribirlo (atestigua que salió de
+	// orq, no quién lo pidió); un cierre solo lo firma una sesión autorizada y queda ligado a su raised.
+	Firma string `json:"firma,omitempty"`
 }
 
 // Stop es el estado plegado de un id.
@@ -69,7 +74,15 @@ type Stop struct {
 	ProvidedAt string    `json:"provided_at,omitempty"`
 	Choice     string    `json:"choice,omitempty"`
 	Note       string    `json:"note,omitempty"`
+	// ClosureIgnored: hubo un cierre sin firma válida; no cuenta y el stopper sigue como estaba.
+	ClosureIgnored bool `json:"closure_ignored,omitempty"`
+	// RaisedUnverified: la línea original no tiene firma válida (editada o anterior a la firma).
+	RaisedUnverified bool `json:"raised_unverified,omitempty"`
+	digest           string
 }
+
+// Unverified: el stopper tiene algún registro cuya firma no vale.
+func (s Stop) Unverified() bool { return s.ClosureIgnored || s.RaisedUnverified }
 
 type Raise struct {
 	Type, Severity, Slice, By, Text, Where string
@@ -81,6 +94,20 @@ type Resolution struct {
 }
 
 func Path(orqDir string) string { return filepath.Join(orqDir, "stops.jsonl") }
+
+func alcance(path string) string { return identidad.Alcance(filepath.Dir(path)) }
+
+func digestDe(e Event) string {
+	raw, _ := json.Marshal(e)
+	h := sha256.Sum256(raw)
+	return string(h[:])
+}
+
+func firmaValida(path, clase string, e Event) bool {
+	f := e.Firma
+	e.Firma = ""
+	return identidad.RegistroValido(clase, alcance(path), e, f)
+}
 
 func Load(path string) ([]Stop, error) {
 	f, err := os.Open(path)
@@ -104,10 +131,22 @@ func Load(path string) ([]Stop, error) {
 		switch {
 		case e.Event == "raised" && !ok:
 			idx[e.ID] = len(out)
-			out = append(out, Stop{ID: e.ID, State: "open", Type: e.Type, Severity: e.Severity, Slice: e.Slice,
-				Tasks: e.Tasks, By: e.By, Text: e.Text, Options: e.Options, Where: e.Where, Raised: e.TS, Provided: "no"})
+			st := Stop{ID: e.ID, State: "open", Type: e.Type, Severity: e.Severity, Slice: e.Slice,
+				Tasks: e.Tasks, By: e.By, Text: e.Text, Options: e.Options, Where: e.Where, Raised: e.TS, Provided: "no", digest: digestDe(e)}
+			if !firmaValida(path, "stop.raised", e) {
+				st.RaisedUnverified = true
+				// Falla cerrado: una línea editada no baja su propia severidad.
+				if identidad.Leer() != "" {
+					st.Severity = "blocking"
+				}
+			}
+			out = append(out, st)
 		case ok && (e.Event == "resolved" || e.Event == "cancelled"):
 			s := &out[i]
+			if !firmaValida(path, "stop.cierre"+s.digest, e) {
+				s.ClosureIgnored = true
+				continue
+			}
 			s.State, s.Closed, s.ClosedBy, s.Note = map[string]string{"resolved": "resolved", "cancelled": "cancelled"}[e.Event], e.TS, e.By, e.Note
 			if e.Provided != "" {
 				s.Provided, s.ProvidedAt = e.Provided, e.ProvidedAt
@@ -291,6 +330,7 @@ func Add(path string, r Raise, now time.Time) (Stop, bool, error) {
 	}
 	e := Event{ID: next(all), TS: now.UTC(), Event: "raised", Type: r.Type, Severity: r.Severity, Slice: r.Slice,
 		Tasks: r.Tasks, By: r.By, Text: r.Text, Options: r.Options, Where: r.Where, Provided: "no"}
+	e.Firma = identidad.FirmarRegistro("stop.raised", alcance(path), e)
 	if err := appendEvent(path, e); err != nil {
 		return Stop{}, false, err
 	}
@@ -299,6 +339,9 @@ func Add(path string, r Raise, now time.Time) (Stop, bool, error) {
 }
 
 func closeStop(path, id string, e Event, check func(Stop) error) (Stop, error) {
+	if err := identidad.Autorizado(); err != nil {
+		return Stop{}, fmt.Errorf("closing a stopper needs the Owner's token from a trusted session: %v", err)
+	}
 	unlock, err := orqdir.Candado(path)
 	if err != nil {
 		return Stop{}, err
@@ -321,6 +364,7 @@ func closeStop(path, id string, e Event, check func(Stop) error) (Stop, error) {
 		}
 	}
 	e.ID = id
+	e.Firma = identidad.FirmarRegistro("stop.cierre"+s.digest, alcance(path), e)
 	if err := appendEvent(path, e); err != nil {
 		return Stop{}, err
 	}

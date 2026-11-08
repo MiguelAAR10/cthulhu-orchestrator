@@ -1084,7 +1084,7 @@ func (p proyecto) decisionRegistrada(aprobado string) (string, error) {
 		}
 		if ms, _ := canal.Load(p.canalPath()); strings.HasPrefix(id, "c") {
 			for _, m := range ms {
-				if m.ID == id && m.De == "atena" {
+				if m.ID == id && m.De == "atena" && !m.SinVerificar {
 					return id, nil
 				}
 			}

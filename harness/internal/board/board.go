@@ -152,6 +152,12 @@ func Build(orqDir string, now time.Time) (Board, error) {
 		return b, err
 	}
 	open := stops.Open(all)
+	for _, st := range all {
+		if st.Unverified() {
+			b.Unverified.Stops++
+		}
+	}
+	b.Unverified.Autonomy = cfg.AutonomiaSinFirma
 	for _, s := range open {
 		b.Stoppers = append(b.Stoppers, Stopper{ID: s.ID, Type: s.Type, Severity: s.Severity, Slice: s.Slice,
 			Tasks: append([]string{}, s.Tasks...), Text: s.Text, AgeMin: int(now.Sub(s.Raised).Minutes()), raised: s.Raised})
@@ -287,6 +293,9 @@ func Build(orqDir string, now time.Time) (Board, error) {
 				c.Fronts = append(c.Fronts, g)
 			}
 			for _, t := range pl.Tareas {
+				if t.HechaSinFirma {
+					b.Unverified.Tasks++
+				}
 				w := weight(t.Dificultad)
 				c.Tasks.Total++
 				c.Tasks.WeightTotal += w

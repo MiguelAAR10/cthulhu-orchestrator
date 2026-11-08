@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 	"orq/internal/stops"
 )
@@ -37,6 +38,19 @@ type Tarea struct {
 	Estado     string   `json:"status,omitempty"`     // pendiente | en_curso | hecha
 	Worker     string   `json:"worker,omitempty"`
 	Front      string   `json:"front,omitempty"` // id del front (sub-orquestador como dato) al que pertenece
+	// FirmaHecha: HMAC que orq pone al guardar una tarea hecha. Sin ella, `status: hecha` no cuenta.
+	FirmaHecha string `json:"done_sig,omitempty"`
+	// HechaSinFirma: el archivo decía hecha sin firma válida; Leer la devolvió atrás.
+	HechaSinFirma bool `json:"unverified_done,omitempty"`
+}
+
+// firmaHecha: lo que atestigua la firma: esta tarea, con este contrato y este worker, en este plan.
+func firmaHecha(path string, t Tarea) (string, any) {
+	nn := strings.TrimSuffix(filepath.Base(path), ".json")
+	if t.Dificultad == "" {
+		t.Dificultad = "media" // igual que Leer: el contrato firmado es el normalizado
+	}
+	return identidad.Alcance(filepath.Dir(filepath.Dir(path))), []string{nn, t.ID, t.HashContrato(), t.Worker}
 }
 
 type Plan struct {
@@ -68,6 +82,19 @@ func Leer(path string) (*Plan, error) {
 		}
 		if p.Tareas[i].Dificultad == "" {
 			p.Tareas[i].Dificultad = "media"
+		}
+	}
+	for i := range p.Tareas {
+		t := &p.Tareas[i]
+		if t.Estado != "hecha" {
+			continue
+		}
+		al, datos := firmaHecha(path, *t)
+		if !identidad.RegistroValido("plan.hecha", al, datos, t.FirmaHecha) {
+			t.Estado, t.FirmaHecha, t.HechaSinFirma = "pendiente", "", true
+			if t.Worker != "" {
+				t.Estado = "en_curso"
+			}
 		}
 	}
 	p.Debatido = p.DebatidoRev != "" && p.DebatidoRev == p.Revision()
@@ -125,6 +152,16 @@ func Actualizar(path string, f func(*Plan) error) (*Plan, error) {
 func Guardar(path string, p *Plan) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
+	}
+	// Lo hecha aquí ya pasó por Leer o por Hecha: una edición a mano no llega firmada.
+	for i := range p.Tareas {
+		t := &p.Tareas[i]
+		if t.Estado == "hecha" {
+			al, datos := firmaHecha(path, *t)
+			t.FirmaHecha, t.HechaSinFirma = identidad.FirmarRegistro("plan.hecha", al, datos), false
+		} else {
+			t.FirmaHecha = ""
+		}
 	}
 	raw, _ := json.MarshalIndent(p, "", " ")
 	return orqdir.WriteAtomic(path, raw)
@@ -333,11 +370,14 @@ func Hecha(p *Plan, id string) (*Tarea, error) {
 func Conservar(nuevo, viejo *Plan) (kept, reabiertas []string) {
 	for i := range nuevo.Tareas {
 		t := &nuevo.Tareas[i]
-		t.Estado, t.Worker = "pendiente", ""
+		t.Estado, t.Worker, t.FirmaHecha, t.HechaSinFirma = "pendiente", "", "", false
 		if viejo == nil {
 			continue
 		}
 		v := viejo.tarea(t.ID)
+		if v != nil {
+			t.HechaSinFirma = v.HechaSinFirma
+		}
 		if v == nil || v.Estado == "pendiente" {
 			continue
 		}
