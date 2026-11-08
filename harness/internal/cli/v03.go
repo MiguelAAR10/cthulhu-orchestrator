@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"orq/internal/identidad"
+	"orq/internal/lang"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -311,7 +312,7 @@ func runDoctor(stdout, stderr io.Writer) int {
 			if l != "" {
 				q++
 				problemas++
-				fmt.Fprintf(stdout, "en cuarentena: %s\n", l)
+				fmt.Fprintf(stdout, "en cuarentena: %s\n", lineaCuarentena(l))
 			}
 		}
 		if q > 0 {
@@ -344,4 +345,26 @@ func runDoctor(stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "%d cosa(s) por revisar. orq no borra nada solo: los comandos de arriba los corres tú o el Orquestador.\n", problemas)
 	return 3
+}
+
+// lineaCuarentena: una entrada de cuarentena.jsonl como texto legible en el idioma de orq (las
+// claves JSON del archivo son internas). Si no es JSON, la línea tal cual.
+func lineaCuarentena(l string) string {
+	var c struct {
+		Ruta, Rama, Slice, Motivo string
+	}
+	if json.Unmarshal([]byte(l), &c) != nil || (c.Ruta == "" && c.Rama == "") {
+		return l
+	}
+	que := c.Ruta
+	if que == "" {
+		que = lang.T("branch ", "rama ") + c.Rama
+	}
+	motivo := c.Motivo
+	if !lang.ES() {
+		if r, ok := strings.CutPrefix(motivo, "no está integrada en "); ok {
+			motivo = "not merged into " + r
+		}
+	}
+	return fmt.Sprintf("%s (%s): %s", que, c.Slice, motivo)
 }

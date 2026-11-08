@@ -663,7 +663,8 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		aprobado := fs.String("aprobado", "", "quién lo aprobó y por qué (req o mem de Atena/Owner)")
 		zona := fs.String("zona", "", "también la suma a la zona de ese worker ya lanzado")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *aprobado == "" {
-			fmt.Fprintln(stderr, "uso: orq slice alcance RUTA[,RUTA] --aprobado \"mNN|cNN de Atena/Owner: motivo\" [--zona back]")
+			fmt.Fprintln(stderr, lang.T("usage: orq slice scope PATH[,PATH] --approved \"mNN|cNN from Atena/Owner: reason\" [--zone back]",
+				"uso: orq slice alcance RUTA[,RUTA] --aprobado \"mNN|cNN de Atena/Owner: motivo\" [--zona back]"))
 			return 1
 		}
 		if err := p.cambioDeContrato(*aprobado, r, nn); err != nil {
@@ -864,7 +865,8 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		cmd := fs.String("cmd", "", "comando nuevo del examen si debe correr también los archivos sumados")
 		aprobado := fs.String("aprobado", "", "req de Atena u Owner que aprueba el examen nuevo")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *aprobado == "" {
-			fmt.Fprintln(stderr, "uso: orq slice examen [--slice NN] ARCHIVO[,ARCHIVO] --aprobado \"mNN|cNN de Atena/Owner\" [--cmd \"...\"]")
+			fmt.Fprintln(stderr, lang.T("usage: orq slice exam [--slice NN] FILE[,FILE] --approved \"mNN|cNN from Atena/Owner\" [--cmd \"...\"]",
+				"uso: orq slice examen [--slice NN] ARCHIVO[,ARCHIVO] --aprobado \"mNN|cNN de Atena/Owner\" [--cmd \"...\"]"))
 			return 1
 		}
 		if err := p.cambioDeContrato(*aprobado, r, nn); err != nil {

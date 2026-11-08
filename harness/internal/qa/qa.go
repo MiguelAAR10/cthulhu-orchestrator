@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"orq/internal/lang"
 	"orq/internal/perfil"
 	"os"
 	"os/exec"
@@ -275,7 +276,7 @@ func Run(dir, nn, head string, layers []Layer, crit string, run Runner, now time
 	for _, l := range layers {
 		lr := LayerResult{Name: l.Name, Cmd: l.Cmd}
 		if l.MinCriticality != "" && !alMenos(crit, l.MinCriticality) {
-			lr.Skipped, lr.Reason = true, fmt.Sprintf("criticidad %s < %s", rec.Criticality, normalizar(l.MinCriticality))
+			lr.Skipped, lr.Reason = true, fmt.Sprintf(lang.T("criticality %s < %s", "criticidad %s < %s"), rec.Criticality, normalizar(l.MinCriticality))
 			rec.Layers = append(rec.Layers, lr)
 			continue
 		}

@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -41,5 +43,31 @@ func TestComandosComunesSinEspanol(t *testing.T) {
 	}
 	if strings.Contains(s, "Safety and resources") {
 		t.Fatalf("orq --slice 01 slice close imprimió la ayuda:\n%s", s)
+	}
+}
+
+// Restos del evaluador: qa run sin capas, la ayuda de slice exam/scope y la línea de cuarentena de
+// doctor (con las claves JSON en español) salen en inglés; "uso:" nunca aparece por defecto.
+func TestRestosSinEspanol(t *testing.T) {
+	root, _ := sliceConFake(t, false)
+	t.Setenv("ORQ_LANG", "")
+	t.Setenv("ORQ_ROL", "")
+	os.WriteFile(filepath.Join(root, ".orq", "cuarentena.jsonl"),
+		[]byte(`{"ruta":"/tmp/x","slice":"S-12","motivo":"no está integrada en main","ts":"2026-01-01T00:00:00Z"}`+"\n"), 0o644)
+	var todo strings.Builder
+	for _, args := range [][]string{
+		{"qa", "run", "S-12"},
+		{"qa"},
+		{"slice", "exam"},
+		{"slice", "scope"},
+		{"doctor"},
+	} {
+		out, errs, _ := run(t, args...)
+		todo.WriteString("$ orq " + strings.Join(args, " ") + "\n" + out + errs)
+	}
+	s := strings.ReplaceAll(todo.String(), "cuarentena.jsonl", "") // nombre de archivo, no texto
+	restos := regexp.MustCompile(`(?i)\buso:|sin capas|criticidad|ARCHIVO|--aprobado|"ruta"|"motivo"|en cuarentena|no está integrada`)
+	if m := append(marcasES.FindAllString(s, -1), restos.FindAllString(s, -1)...); len(m) > 0 {
+		t.Fatalf("español en la salida por defecto: %v\n%s", m, s)
 	}
 }

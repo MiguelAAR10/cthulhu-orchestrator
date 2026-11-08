@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"orq/internal/lang"
 	"os"
 	"strings"
 	"time"
@@ -33,7 +34,8 @@ func (p proyecto) dirSlice(nn string) (string, *slice.Estado) {
 }
 
 func runQA(args []string, stdout, stderr io.Writer) int {
-	uso := "uso: orq qa run S-NN | finding add S-NN --requirement R --commit SHA --repro CMD --observed O --expected E --impact I | ver S-NN"
+	uso := lang.T("usage: orq qa run S-NN | finding add S-NN --requirement R --commit SHA --repro CMD --observed O --expected E --impact I | show S-NN",
+		"uso: orq qa run S-NN | finding add S-NN --requirement R --commit SHA --repro CMD --observed O --expected E --impact I | ver S-NN")
 	p, err := abrirProyecto()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -42,13 +44,14 @@ func runQA(args []string, stdout, stderr io.Writer) int {
 	switch {
 	case len(args) >= 2 && args[0] == "run":
 		if _, w := workerEfectivo(); w || os.Getenv("ORQ_ROL") == "tester" || os.Getenv("ORQ_ROL") == "repairer" {
-			fmt.Fprintln(stderr, "orq qa: `qa run` lo pide solo el Orquestador")
+			fmt.Fprintln(stderr, lang.T("orq qa: only the Orchestrator asks for `qa run`", "orq qa: `qa run` lo pide solo el Orquestador"))
 			return 1
 		}
 		nn := nnDe(args[1])
 		cfg := qa.LoadConfig(p.dir)
 		if len(cfg.Layers) == 0 {
-			fmt.Fprintln(stderr, `orq qa: sin capas. Declara la pirámide en .orq/config.json: {"qa":{"layers":[{"name":"unit","cmd":"..."},{"name":"e2e","cmd":"npx playwright test"},{"name":"mutation","cmd":"...","min_criticality":"high"}]}}`)
+			fmt.Fprintln(stderr, lang.T("orq qa: no layers. Declare the pyramid in .orq/config.json: ", "orq qa: sin capas. Declara la pirámide en .orq/config.json: ")+
+				`{"qa":{"layers":[{"name":"unit","cmd":"..."},{"name":"e2e","cmd":"npx playwright test"},{"name":"mutation","cmd":"...","min_criticality":"high"}]}}`)
 			return 1
 		}
 		dir, _ := p.dirSlice(nn)
@@ -59,10 +62,10 @@ func runQA(args []string, stdout, stderr io.Writer) int {
 		}
 		for _, l := range rec.Layers {
 			if l.Skipped {
-				fmt.Fprintf(stdout, "  %-12s omitida (%s)\n", l.Name, l.Reason)
+				fmt.Fprintf(stdout, lang.T("  %-12s skipped (%s)\n", "  %-12s omitida (%s)\n"), l.Name, l.Reason)
 				continue
 			}
-			fmt.Fprintf(stdout, "  %-12s exit %d · %d pasan · %d fallan\n", l.Name, l.Exit, l.Passed, l.Failed)
+			fmt.Fprintf(stdout, lang.T("  %-12s exit %d · %d pass · %d fail\n", "  %-12s exit %d · %d pasan · %d fallan\n"), l.Name, l.Exit, l.Passed, l.Failed)
 		}
 		if rec.Result == "invalid" {
 			fmt.Fprintf(stderr, "orq qa: the run (in a throwaway copy at the worker's HEAD) changed files it must not touch — main checkout, worker worktree, .orq/config.json, or the copy outside the allowed reports (%s); the receipt is invalid:\n", strings.Join(cfg.Permitidos(), ", "))
@@ -70,7 +73,7 @@ func runQA(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintln(stderr, "  "+c)
 			}
 		}
-		fmt.Fprintf(stdout, "QA %s %s (criticidad %s) → .orq/qa/%s/receipt.json\n", rec.Slice, rec.Result, rec.Criticality, rec.Slice)
+		fmt.Fprintf(stdout, lang.T("QA %s %s (criticality %s) → .orq/qa/%s/receipt.json\n", "QA %s %s (criticidad %s) → .orq/qa/%s/receipt.json\n"), rec.Slice, rec.Result, rec.Criticality, rec.Slice)
 		if rec.Result != "pass" {
 			return 1
 		}
@@ -96,21 +99,21 @@ func runQA(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		if f.Confirmed {
-			fmt.Fprintf(stdout, "hallazgo CONFIRMADO (el repro falla con exit %d): bloquea el cierre hasta un QA verde nuevo\n", f.ReproExit)
+			fmt.Fprintf(stdout, lang.T("finding CONFIRMED (the repro fails with exit %d): blocks closing until a new green QA\n", "hallazgo CONFIRMADO (el repro falla con exit %d): bloquea el cierre hasta un QA verde nuevo\n"), f.ReproExit)
 		} else {
-			fmt.Fprintln(stdout, "hallazgo NO confirmado: el repro pasa al re-ejecutarlo; queda registrado y no cuenta")
+			fmt.Fprintln(stdout, lang.T("finding NOT confirmed: the repro passes when re-run; it is recorded and does not count", "hallazgo NO confirmado: el repro pasa al re-ejecutarlo; queda registrado y no cuenta"))
 		}
 		return 0
-	case len(args) >= 2 && args[0] == "ver":
+	case len(args) >= 2 && (args[0] == "ver" || args[0] == "show"):
 		nn := nnDe(args[1])
 		if rec, err := qa.Recibo(p.dir, nn); err == nil {
 			raw, _ := json.MarshalIndent(rec, "", "  ")
 			fmt.Fprintln(stdout, string(raw))
 		} else {
-			fmt.Fprintln(stdout, "sin recibo QA")
+			fmt.Fprintln(stdout, lang.T("no QA receipt", "sin recibo QA"))
 		}
 		fs := qa.Findings(p.dir, nn)
-		fmt.Fprintf(stdout, "hallazgos: %d registrados, %d confirmados\n", len(fs), qa.Confirmados(fs))
+		fmt.Fprintf(stdout, lang.T("findings: %d recorded, %d confirmed\n", "hallazgos: %d registrados, %d confirmados\n"), len(fs), qa.Confirmados(fs))
 		return 0
 	}
 	fmt.Fprintln(stderr, uso)
