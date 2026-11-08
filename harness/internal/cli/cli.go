@@ -98,6 +98,8 @@ const usageES = `orq ` + Version + ` · harness de orquestador-2
                                  El adversario es de otra familia que el planificador (lo impone orq)
   orq worker beat|done|list      estado vivo del worker (.orq/workers/<id>/state.json, ORQ_WORKER_ID)
   orq token                      token del Owner (export ORQ_TOKEN="$(orq token)"); nunca llega a un worker
+  orq session register [--pid N] [--role R]   ancla la shell del Owner (firmada con el token) para
+                                 que sus descendientes valgan como privilegiados sin terminal
   orq stop raise|list|resolve|cancel   pedidos al Owner (credential|api_key|decision|confirmation|access,
                                  blocking|soon|fyi); solo atena/owner resuelven; nunca un secreto en texto
   orq autonomy [ver|guided|free --scope ...]   autonomía; free lo aprueba el Owner

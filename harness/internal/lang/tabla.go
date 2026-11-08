@@ -26,6 +26,7 @@ var tabla = []struct{ es, en string }{
 
 	// init, doctor, gc, hooks
 	{"en cuarentena: %s\n", "quarantined: %s\n"},
+	{"worktree sobrante: %s\n  quitar: git worktree remove %s\n", "leftover worktree: %s\n  remove: git worktree remove %s\n"},
 	{"modo: %s (%d archivos de código) · stack: %s\n", "mode: %s (%d code files) · stack: %s\n"},
 	{"hooks instalados en %s: guardia, contexto al arrancar y relevo antes de compactar\n", "hooks installed in %s: guard, context at start and handoff before compacting\n"},
 	{"ya existe %s: une a mano el bloque hooks de `orq init --hooks`\n", "%s already exists: merge the hooks block from `orq init --hooks` by hand\n"},

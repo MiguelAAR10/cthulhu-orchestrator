@@ -288,8 +288,9 @@ func runDoctor(stdout, stderr io.Writer) int {
 		problemas++
 		fmt.Fprintf(stdout, "estado de slices ilegible: %v\n", err)
 	}
-	out, _ := exec.Command("git", "-C", p.root, "branch", "--list", "slice/*", "--merged").Output()
-	for _, b := range strings.Fields(strings.ReplaceAll(string(out), "*", "")) {
+	// --format: sin los marcadores "* " (rama actual) y "+ " (sacada en otro worktree).
+	out, _ := exec.Command("git", "-C", p.root, "branch", "--format=%(refname:short)", "--list", "slice/*", "--merged").Output()
+	for _, b := range strings.Fields(string(out)) {
 		if slices.ContainsFunc(abiertos, func(e *slice.Estado) bool { return e.Rama == b }) {
 			continue
 		}

@@ -61,13 +61,24 @@ func TestRestosSinEspanol(t *testing.T) {
 		{"slice", "exam"},
 		{"slice", "scope"},
 		{"doctor"},
+		{"mem", "add", "--imp", "huge", "--cat", "risk", "x"},
+		{"mem", "add", "--imp", "low", "--cat", "risk", "--source", "worker", "--type", "fact", "x"},
+		{"mem", "add", "--imp", "low", "--cat", "risk", "--source", "worker", ""},
 	} {
 		out, errs, _ := run(t, args...)
 		todo.WriteString("$ orq " + strings.Join(args, " ") + "\n" + out + errs)
 	}
 	s := strings.ReplaceAll(todo.String(), "cuarentena.jsonl", "") // nombre de archivo, no texto
-	restos := regexp.MustCompile(`(?i)\buso:|sin capas|criticidad|ARCHIVO|--aprobado|"ruta"|"motivo"|en cuarentena|no está integrada`)
+	restos := regexp.MustCompile(`(?i)\busa |necesita|texto vacío|sobrante|quitar:|\buso:|sin capas|criticidad|ARCHIVO|--aprobado|"ruta"|"motivo"|en cuarentena|no está integrada`)
 	if m := append(marcasES.FindAllString(s, -1), restos.FindAllString(s, -1)...); len(m) > 0 {
 		t.Fatalf("español en la salida por defecto: %v\n%s", m, s)
+	}
+}
+
+func TestAyudaGeneralNombraSessionRegister(t *testing.T) {
+	t.Setenv("ORQ_LANG", "")
+	out, errs, _ := run(t, "help")
+	if !strings.Contains(out+errs, "orq session register") {
+		t.Fatalf("la ayuda general no nombra session register:\n%s", out+errs)
 	}
 }
