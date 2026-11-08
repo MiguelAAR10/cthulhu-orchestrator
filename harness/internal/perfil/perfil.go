@@ -4,7 +4,6 @@ package perfil
 
 import (
 	"crypto/sha256"
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -12,39 +11,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 )
-
-//go:embed catalogo.json
-var catalogoJSON []byte
-
-type Entrada struct {
-	Senal    string              `json:"senal"`
-	Repo     string              `json:"repo"`
-	Skills   []string            `json:"skills"`
-	Para     string              `json:"para"`
-	Roles    map[string][]string `json:"roles"`    // skill → roles que la cargan
-	Requiere map[string][]string `json:"requiere"` // skill → skills sin las que no funciona
-	Adapta   map[string]string   `json:"adapta"`   // skill → regla del harness que manda sobre la skill
-}
 
 // Roles del harness.
 var Roles = []string{"atena", "orquestador", "planificador", "astra", "scout", "worker", "verificador"}
 
 // Nunca: skills que dan al agente un control que en este harness es de orq o del Orquestador.
-var Nunca = map[string]string{
-	"using-superpowers":              "convierte a cada sesión en orquestador; aquí coordina uno solo",
-	"using-git-worktrees":            "los worktrees los crea y cierra orq",
-	"finishing-a-development-branch": "integrar y limpiar es `orq slice cerrar`",
-	"brainstorming":                  "la entrevista es del Atena (grilling)",
-	"subagent-driven-development":    "decide solo ante ambigüedad; aquí para y pregunta",
-	"webapp-testing":                 "usa networkidle; se prueba con playwright-cli y aserciones",
-	"grill-me":                       "reemplazada por grilling / grill-with-docs",
-	"tdd":                            "duplica test-driven-development",
-	"handoff":                        "el relevo es `orq relevo`",
-}
+// Sale de la never-list del catálogo embebido.
+var Nunca = DefaultCatalog().neverMap()
 
 // Skill es una skill recomendada con su contexto en el harness.
 type Skill struct {
@@ -52,46 +28,23 @@ type Skill struct {
 	Roles, Requiere      []string
 }
 
-// Lista devuelve las skills del perfil con sus dependencias incluidas, sin repetir.
+// Lista devuelve todas las skills que el proyecto podría cargar (cualquier fase y rol,
+// ceremonia completa), con dependencias y sin repetir. Para un rol concreto usa Plan.
 func Lista(p Perfil) []Skill {
-	activas := append([]string{"base", "modo:" + p.Modo}, p.Senales...)
-	var out []Skill
-	visto := map[string]bool{}
-	for _, e := range Catalogo() {
-		if !slices.Contains(activas, e.Senal) {
-			continue
-		}
-		for _, s := range e.Skills {
-			pend := append([]string{s}, e.Requiere[s]...)
-			for _, n := range pend {
-				if visto[n] {
-					continue
-				}
-				visto[n] = true
-				out = append(out, Skill{Nombre: n, Repo: e.Repo, Adapta: e.Adapta[n], Roles: e.Roles[n], Requiere: e.Requiere[n]})
-			}
-		}
+	pr := Profile{ProjectType: "greenfield", Stacks: p.Senales, Criticality: "high", Stage: "production"}
+	if p.Modo == "mejora" {
+		pr.ProjectType = "brownfield"
 	}
-	return out
+	return AsSkills(PlanAll(DefaultCatalog(), pr))
 }
 
-// ParaRol filtra las skills que carga un rol.
-func ParaRol(ls []Skill, rol string) []Skill {
+// AsSkills adapta entradas del catálogo al tipo que usa Verificar.
+func AsSkills(es []Entry) []Skill {
 	var out []Skill
-	for _, s := range ls {
-		if slices.Contains(s.Roles, rol) {
-			out = append(out, s)
-		}
+	for _, e := range es {
+		out = append(out, Skill{Nombre: e.Name, Repo: e.Source, Adapta: e.Adapt, Roles: e.Roles, Requiere: e.Requires})
 	}
 	return out
-}
-
-func Catalogo() []Entrada {
-	var c []Entrada
-	if err := json.Unmarshal(catalogoJSON, &c); err != nil {
-		panic(err) // catálogo embebido roto: error de compilación del harness
-	}
-	return c
 }
 
 type Perfil struct {
@@ -180,15 +133,6 @@ func Detect(root string) Perfil {
 	return p
 }
 
-// Recomendadas devuelve, por repo, las skills que este perfil necesita.
-func Recomendadas(p Perfil) map[string][]string {
-	res := map[string][]string{}
-	for _, s := range Lista(p) {
-		res[s.Repo] = append(res[s.Repo], s.Nombre)
-	}
-	return res
-}
-
 // HuellaSkill resume el contenido de la carpeta de una skill instalada en el repo.
 func HuellaSkill(root, skill string) (string, error) {
 	dir := filepath.Join(root, ".claude", "skills", skill)
@@ -211,6 +155,8 @@ func HuellaSkill(root, skill string) (string, error) {
 
 // Fijada es una entrada del manifiesto .orq/skills.lock.json.
 type Fijada struct {
+	ID     string   `json:"id,omitempty"`
+	Ref    string   `json:"ref,omitempty"`
 	Repo   string   `json:"repo"`
 	Huella string   `json:"huella"`
 	Roles  []string `json:"roles"`
@@ -252,13 +198,4 @@ func Verificar(root string, ls []Skill, fijadas map[string]Fijada) []Problema {
 func Instalada(root, skill string) bool {
 	_, err := os.Stat(filepath.Join(root, ".claude", "skills", skill, "SKILL.md"))
 	return err == nil
-}
-
-// ComandoInstalar es el comando que deja las skills solo en este repo.
-func ComandoInstalar(repo string, skills []string) []string {
-	args := []string{"npx", "-y", "skills@latest", "add", repo}
-	for _, s := range skills {
-		args = append(args, "-s", s)
-	}
-	return append(args, "-a", "claude-code", "-y")
 }

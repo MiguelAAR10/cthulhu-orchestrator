@@ -33,9 +33,14 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq halt --set MSG  pone HALT a mano
 
   orq init [--modo=mejora|nuevo] detecta modo y stack, instala hooks y lista skills
-  orq skills [instalar [NOMBRE...]|fijar|verificar]   skills del proyecto por rol, solo en su .claude/skills;
-                                 fijar guarda su huella; verificar avisa FALTA/DEP/CAMBIO/NUNCA
-  orq skill ROL                  guía del rol (atena|orquestador|scout|worker|verificador) y sus skills
+  orq profile [set type=greenfield|brownfield|legacy criticality=trivial|low|medium|high stage=development|production stacks=a,b]
+                                 multi-signal detection (code, git age/commits/authors, tests, CI, manifests);
+                                 Owner-forced values persist in .orq/profile.json and win; contradictions warn
+  orq skills [plan --phase X --role R | install [ID...] | vet ID [--file F] | fijar | verificar]
+                                 curated gallery (skills.catalog.json + .orq/skills.catalog.json): minimal set per
+                                 phase×role by stakes; install pins hashes in .orq/skills.lock.json and refuses
+                                 the never-list; vet records validated|rejected in .orq/skills.gallery.json
+  orq skill ROL                  guía del rol (atena|orquestador|scout|worker|verificador) y sus skills de fase×rol
   orq fase                       T·Traducción, C·Contexto, A·Análisis, D1·Desarrollo, D2·Documentación
   orq contexto                   hook SessionStart: rol, fase, relevo y memoria
   orq doc                        ficha viva del proyecto (.orq/PROYECTO.md) con un modelo barato
@@ -133,6 +138,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runHalt(args[1:], stdout, stderr)
 	case "init":
 		return runInit(args[1:], stdout, stderr)
+	case "profile":
+		return runProfile(args[1:], stdout, stderr)
 	case "skills":
 		return runSkills(args[1:], stdout, stderr)
 	case "fase":
