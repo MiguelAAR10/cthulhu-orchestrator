@@ -21,7 +21,7 @@ import (
 var builtin []byte
 
 // Roles conocidos. "worker" se elige por riesgo (low|medium|high).
-var Roles = []string{"atena", "main", "scout", "planner", "adversary", "worker", "verifier", "docs"}
+var Roles = []string{"atena", "main", "scout", "planner", "adversary", "worker", "verifier", "docs", "tester", "repairer"}
 
 // CLIs que `orq config agents detect` busca en el PATH.
 var Detectables = []string{"claude", "codex", "cursor-agent", "gemini", "opencode", "aider"}
@@ -171,7 +171,7 @@ func (c *Config) Validar() error {
 func (c *Config) Rol(rol string) Eleccion {
 	e := c.roles[rol]
 	switch rol {
-	case "verifier":
+	case "verifier", "tester":
 		e.Fresh = true
 	case "docs":
 		if m := c.barato(e.Agent); m != "" {

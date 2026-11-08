@@ -63,6 +63,16 @@ Cada worktree que orq crea (slice, zona, integración) queda en `.orq/worktrees.
 - **Handoff** (`orq handoff [--out F]`): `HANDOFF.md` generado, 6 secciones, ≤120 líneas, sin rutas absolutas y con todo lo que parezca secreto tapado.
 - **Memoria** (`orq init --sync|--memoria=local|commit|branch`, guardado en `config.json`): `local` ignora `.orq/`; `commit` lo versiona salvo workers, candados, board.html y salidas (y deja de escribir `/.orq/` en `.git/info/exclude`); `branch` usa `orq sync push|pull [--theirs]` con el worktree aparte `.orq-sync` en la rama `orq/state`: nunca toca el HEAD, el índice ni las ramas del usuario, nunca `--force` ni rebase; si diverge se detiene ("diverged").
 
+## QA independiente y evidencia visual (slices 8–9) · ver docs/v2/QA.md
+
+- **tester** (`ORQ_ROL=tester`, sesión fresca): el gate le niega Edit/Write/MultiEdit/NotebookEdit y todo Bash que escriba (redirecciones salvo `/dev/null`, `rm/mv/cp/tee/touch/sed -i`, `mkdir`, `git add/commit/checkout…`, instalaciones, intérpretes en línea) y los comandos del Orquestador. Prueba y registra hallazgos.
+- **repairer** (`ORQ_ROL=repairer`, worker aparte): edita producto; el paquete del examen fijado por huella (H-01) le está protegido aunque no esté en un worktree enlazado.
+- **`orq qa run S-NN`** (solo Orquestador; el gate y la CLI lo niegan a tester, repairer y workers): corre en orden las capas de `qa.layers` en `.orq/config.json` dentro del worktree del slice; recibo en `.orq/qa/S-NN/receipt.json` con conteos por capa. Las capas con `min_criticality: high` (mutación, adversarial) solo corren si la criticidad es high.
+- **Criticidad**: `criticality` o `project.criticality` en `.orq/config.json` (low|medium|high y sinónimos), lectura tolerante, **medium** por defecto.
+- **`orq qa finding add`** exige requirement, commit, repro, observed, expected, impact. orq re-ejecuta el repro: **confirmado solo si falla**; uno que pasa queda registrado y no cuenta.
+- **Cierre**: `orq slice cerrar --aceptado` exige recibo QA verde y ningún hallazgo confirmado posterior cuando criticidad ≥ `qa.require_receipt_from` (medium).
+- **Evidencia**: `orq evidence add S-NN --kind target|before|after --file PNG [--note] [--pulir]` guarda en `docs/slices/S-NN/`, calcula el % de píxeles distintos after vs target (stdlib, determinista) y regenera `README.md` ≤40 líneas. El pulido con el modelo `docs` es opcional y con tiempo máximo; si falla, queda el determinista.
+
 ## Comandos
 
 ```

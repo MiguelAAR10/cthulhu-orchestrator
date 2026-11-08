@@ -16,6 +16,7 @@ if [ -n "${ORQ_BIN:-}" ]; then cp "$ORQ_BIN" "$BASE/bin/orq"; else (cd "$REPO/ha
 pasa=0; falla=0
 ok() { if [ "$1" = "$2" ]; then pasa=$((pasa+1)); echo "  ✓ $3"; else falla=$((falla+1)); echo "  ✗ $3 (esperaba $2, salió $1)"; fi; }
 q() { orq "$@" >/tmp/orq-e2e.$$ 2>&1; echo $?; }
+gate0() { printf '{"tool_name":"%s","cwd":"%s","tool_input":%s}' "$1" "$2" "$3" | orq gate >/dev/null 2>&1; echo $?; }
 
 git init -q -b main tienda && cd tienda && git config user.email t@t && git config user.name t
 examen() { # examen NN: TAP; pasa cuando vNN.txt dice ok
@@ -47,7 +48,18 @@ antes=$(git worktree list | wc -l)
 ok "$(q relevo --solo-archivo orquestador)" 0 "relevo escrito aunque el escriba falle"
 grep -q "no crear otro" .orq/relevo-orquestador.md; ok $? 0 "el relevo dice que siga en el mismo worktree"
 ok "$(git worktree list | wc -l)" "$antes" "el relevo no creó worktrees"
+echo "== S-01: QA independiente"
+ok "$(q slice cerrar --aceptado)" 1 "criticidad medium: sin recibo QA no cierra"
+grep -q '"qa"' .orq/config.json 2>/dev/null && { echo "config.json ya trae qa: ajusta el e2e"; exit 1; }
+printf '{"sync":"local","qa":{"layers":[{"name":"unit","cmd":"sh tests/s01.sh"},{"name":"mutation","cmd":"false","min_criticality":"high"}]}}\n' > .orq/config.json
+ok "$(ORQ_ROL=tester gate0 Write "$W" '{"file_path":"v01.txt"}')" 2 "gate: el tester no escribe"
+ok "$(ORQ_ROL=tester gate0 Bash "$W" '{"command":"sh tests/s01.sh"}')" 0 "gate: el tester sí prueba"
+ok "$(q qa finding add S-01 --requirement R1 --repro true)" 1 "hallazgo incompleto rechazado"
+ok "$(q qa finding add S-01 --requirement R1 --commit x --repro true --observed o --expected e --impact i)" 0 "hallazgo con repro que pasa: no confirmado"
+ok "$(q qa run S-01)" 0 "QA verde; mutation omitida en medium"
+grep -q '"skipped": true' .orq/qa/S-01/receipt.json; ok $? 0 "el recibo QA registra la capa omitida"
 ok "$(q slice cerrar --aceptado)" 0 "cierra aceptado"
+printf '{"sync":"local","criticality":"low"}\n' > .orq/config.json   # el resto del e2e prueba el cierre, no QA
 
 n=2
 for etapa in integrar integrado publicado limpiando; do

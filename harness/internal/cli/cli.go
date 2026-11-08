@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"orq/internal/slice"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -96,6 +97,13 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq board [--json|--html [--out F]]   tablero del Owner: stoppers, slices, workers, velocidad
   orq handoff [--out F]          HANDOFF.md para que otra persona retome el proyecto
   orq sync push|pull [--theirs]  memoria en la rama orq/state (orq init --sync=local|commit|branch)
+  orq qa run S-NN                pirámide de pruebas (unit → integration → e2e; mutation/adversarial solo si
+                                 criticidad ≥ high) y recibo QA. Solo el Orquestador. Cerrar aceptado lo exige
+                                 desde criticidad medium (qa.require_receipt_from)
+  orq qa finding add S-NN --requirement R --commit SHA --repro CMD --observed O --expected E --impact I
+                                 confirmado solo si orq re-ejecuta el repro y falla · orq qa ver S-NN
+  orq evidence add S-NN --kind target|before|after --file PNG [--note "..."] [--pulir]
+                                 docs/slices/S-NN/: PNG, diff % after vs target y README ≤40 líneas
   orq version
 `
 
@@ -173,6 +181,10 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runSkill(args[1:], stdout, stderr)
 	case "config":
 		return runConfig(args[1:], stdout, stderr)
+	case "qa":
+		return runQA(args[1:], stdout, stderr)
+	case "evidence":
+		return runEvidence(args[1:], stdout, stderr)
 	case "version":
 		fmt.Fprintln(stdout, Version)
 		return 0
@@ -190,6 +202,7 @@ func realEnv() gate.Env {
 		IsWorktree: gate.IsLinkedWorktree,
 		Bundle:     bundleAbierto,
 		Worktrees:  worktreesDe,
+		Rol:        os.Getenv("ORQ_ROL"),
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"orq/internal/limits"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
+	"orq/internal/qa"
 	"orq/internal/slice"
 	"orq/internal/state"
 )
@@ -727,6 +728,13 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		if fs.Parse(args[1:]) != nil || *ok == (*motivo != "") {
 			fmt.Fprintln(stderr, "uso: orq slice cerrar --aceptado | --rechazado \"motivo\"")
 			return 1
+		}
+		// Rigor proporcional: desde la criticidad configurada, aceptar exige un recibo QA verde.
+		if e, err := r.Load(nn); *ok && err == nil && e != nil {
+			if err := qa.PuedeCerrar(p.dir, e.NN, qa.LoadConfig(p.dir)); err != nil {
+				fmt.Fprintln(stderr, "orq slice:", err)
+				return 1
+			}
 		}
 		// El examen se protegió con chmod en los worktrees de los workers; solo orq lo devuelve.
 		if e, err := r.Load(nn); err == nil && e != nil {

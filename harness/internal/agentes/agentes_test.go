@@ -131,6 +131,19 @@ func TestPlantillaDelRepoEsValida(t *testing.T) {
 	}
 }
 
+func TestTesterFrescoYRepairerAparte(t *testing.T) {
+	c, err := cargar(t, "", "", `{"roles":{"tester":{"agent":"codex","model":"gpt-6.1-sol","fresh":false}}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Rol("tester").Fresh {
+		t.Fatal("el tester siempre arranca en sesión nueva")
+	}
+	if r := c.Rol("repairer"); r.Agent == "" || r.Model == "" {
+		t.Fatalf("repairer es un rol propio: %+v", r)
+	}
+}
+
 func mustRead(t *testing.T, p string) string {
 	raw, err := os.ReadFile(p)
 	if err != nil {

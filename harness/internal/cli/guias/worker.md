@@ -12,3 +12,12 @@ You are the only writer of your slice or zone. Your contract comes from the Orch
 
 ## Lessons
 At startup you get "Lessons learned". Apply them. Misled you → `orq aprender refutar ID`; saved a failure → `orq aprender confirmar ID`. Don't promote to global.
+
+## Excuses that do not count
+| Excuse | Rebuttal |
+|---|---|
+| "The test is flaky, skip it" | Run it 3 times; a flaky test is a FAIL with evidence. |
+| "Tests are green, so it works" | Show real behavior: screenshot, HTTP log or CLI output. |
+| "This test is wrong, I will adjust it" | You cannot edit pinned tests; ask the Orchestrator for a contract change. |
+| "That is out of scope" | Cite the story line that excludes it, or it is in scope. |
+| "I will fix it in a follow-up" | Then the slice is not verified. |
