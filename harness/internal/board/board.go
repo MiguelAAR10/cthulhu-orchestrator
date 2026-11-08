@@ -413,7 +413,7 @@ var palabras = map[string][2]string{
 	"CLOSED": {"closed", "cerrado"}, "CLOSED (rejected)": {"closed, rejected", "cerrado, rechazado"},
 	"running": {"working", "trabajando"}, "asks_verification": {"asks for review", "pide revisión"}, "blocked": {"blocked", "bloqueado"},
 	"question": {"has a question", "tiene una pregunta"}, "exited": {"finished", "terminó"},
-	"ok": {"ok", "bien"}, "stuck": {"stuck", "atascado"}, "dead": {"dead", "muerto"}, "timeout": {"over time", "fuera de tiempo"},
+	"ok": {"ok", "bien"}, "stuck": {"stuck", "atascado"}, "dead": {"dead", "muerto"}, "timeout": {"over time", "fuera de tiempo"}, "unknown": {"unknown", "desconocido"},
 	"blocking": {"BLOCKING", "BLOQUEANTE"}, "soon": {"SOON", "PRONTO"}, "fyi": {"FYI", "AVISO"},
 	"credential": {"credential", "credencial"}, "api_key": {"api key", "clave de API"}, "decision": {"decision", "decisión"},
 	"confirmation": {"confirmation", "confirmación"}, "access": {"access", "acceso"},
@@ -424,6 +424,14 @@ func palabra(x string) string {
 		return lang.T(p[0], p[1])
 	}
 	return x
+}
+
+// veredicto: el estado del worker dicho una sola vez. Uno que terminó o murió ya no «trabaja».
+func veredicto(w Worker) string {
+	if w.Phase == "exited" || w.Verdict == "dead" {
+		return palabra(w.Verdict)
+	}
+	return palabra(w.Phase) + " · " + palabra(w.Verdict)
 }
 
 func unknown(p *int, suffix string) string {
@@ -567,7 +575,7 @@ func Text(b Board, color bool) string {
 		if vc == "" {
 			vc = "amber"
 		}
-		fmt.Fprintf(&s, T("  %s %s/%s %s · %s · %s · commits %d · %s · %s · context %s\n", "  %s %s/%s %s · %s · %s · commits %d · %s · %s · contexto %s\n"), w.ID, w.Slice, w.Task, palabra(w.Phase), paint(vc, palabra(w.Verdict)), hb, w.Commits, tests, budget, unknown(w.ContextPct, "%"))
+		fmt.Fprintf(&s, T("  %s %s/%s %s · %s · commits %d · %s · %s · context %s\n", "  %s %s/%s %s · %s · commits %d · %s · %s · contexto %s\n"), w.ID, w.Slice, w.Task, paint(vc, veredicto(w)), hb, w.Commits, tests, budget, unknown(w.ContextPct, "%"))
 	}
 	fmt.Fprintf(&s, T("\nPACE %s (last %dh) · sent back %d times\n", "\nRITMO %s (últimas %dh) · devuelto %d veces\n"), ritmo(b), b.Velocity.WindowH, totalDevuelto(b))
 	return s.String()
@@ -654,8 +662,8 @@ table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px
 		if w.BudgetMin != nil {
 			budget = fmt.Sprintf(lang.T("%s of %dm", "%s de %dm"), unknown(w.ElapsedMin, "m"), *w.BudgetMin)
 		}
-		fmt.Fprintf(&s, "<tr><td>%s</td><td>%s/%s</td><td>%s · %s</td><td>%s</td><td>%d</td><td>%s</td><td>%s</td><td>%s</td></tr>",
-			esc(w.ID), esc(w.Slice), esc(w.Task), esc(palabra(w.Phase)), esc(palabra(w.Verdict)), hb, w.Commits, tests, budget, unknown(w.ContextPct, "%"))
+		fmt.Fprintf(&s, "<tr><td>%s</td><td>%s/%s</td><td>%s</td><td>%s</td><td>%d</td><td>%s</td><td>%s</td><td>%s</td></tr>",
+			esc(w.ID), esc(w.Slice), esc(w.Task), esc(veredicto(w)), hb, w.Commits, tests, budget, unknown(w.ContextPct, "%"))
 	}
 	s.WriteString("</table>")
 	fmt.Fprintf(&s, lang.T("<h2>Pace</h2><p>%s (last %dh)</p></body></html>\n", "<h2>Ritmo</h2><p>%s (últimas %dh)</p></body></html>\n"), ritmo(b), b.Velocity.WindowH)
@@ -678,4 +686,14 @@ func MarcarSesionesMuertas(b *Board, muerta func(id string) bool) {
 		}
 	}
 	slices.SortStableFunc(b.Slices, func(x, y Slice) int { return colorRank[x.Color] - colorRank[y.Color] })
+}
+
+// MarcarSesionesSinComprobar: fuera del runner no se puede preguntar si la sesión vive. Un worker con
+// sesión registrada y sin otra señal en contra se lee «unknown», nunca «ok».
+func MarcarSesionesSinComprobar(b *Board, registrada func(id string) bool) {
+	for i := range b.Workers {
+		if w := &b.Workers[i]; w.Verdict == "ok" && w.Phase != "asks_verification" && registrada(w.ID) {
+			w.Verdict = "unknown"
+		}
+	}
 }

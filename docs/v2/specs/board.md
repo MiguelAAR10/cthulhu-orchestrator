@@ -27,7 +27,7 @@ Rule: when a value cannot be computed from files, show `unknown`. Never estimate
 - **Missing** = the `que` field of each task not in `hecha`, in plan order, at most 3 shown, then `+N more`. A missing `que` shows the task id.
 - **Who** = the distinct `tareas[].worker` values of tasks `en_curso`, joined with their worker state. With no worker, show `nobody`.
 - **Status color**: red = has a `blocking` stopper or `fase`=BLOQUEADO · amber = has a `soon` stopper, or a worker in that slice is `stuck`/`dead`/`timeout` · green = VERIFICADO/INTEGRANDO/accepted · blue = IMPLEMENTANDO with no issue · grey = no plan. Every card also prints the status word, so the board does not depend on color alone.
-- **Worker strip**, from state.json: `task`, heartbeat age = now − `heartbeat` (shown as `Nm`), `commits`, tests `passing/total` (or `unknown`), elapsed = now − `started` against `budget_min` (or `budget: none`), `context_pct` (or `unknown`), and the watcher verdict.
+- **Worker strip**, from state.json: `task`, heartbeat age = now − `heartbeat` (shown as `Nm`), `commits`, tests `passing/total` (or `unknown`), elapsed = now − `started` against `budget_min` (or `budget: none`), `context_pct` (or `unknown`), and the watcher verdict. `unknown` = the session is registered but `orq board` ran outside the runner, so nobody could ask whether it is alive.
 - **Velocity (tasks/hour)** = count of `done` events in `tasks.jsonl` in the last 24 h ÷ hours between the first such event and now, with a floor of 1 h. Fewer than 2 events shows `unknown`.
 - **Rework** per slice = count of `reopened` events + `(recibo attempt − 1)` from `intento`.
 
@@ -55,7 +55,7 @@ Terminal output uses ANSI color only when stdout is a TTY and `NO_COLOR` is unse
               "tasks": {"done": 0, "total": 0, "weight_done": 0, "weight_total": 0},
               "missing": ["..."], "who": ["w-s04-t2"], "rework": 0, "blocked_reason": ""}],
   "workers": [{"id": "w-s04-t2", "slice": "S-04", "task": "T2", "phase": "running",
-               "verdict": "ok|stuck|dead|timeout|exited",
+               "verdict": "ok|stuck|dead|timeout|exited|unknown",
                "heartbeat_age_s": 0, "commits": 0,
                "tests": {"passing": 0, "total": 0},
                "elapsed_min": 0, "budget_min": 0, "context_pct": 0}],

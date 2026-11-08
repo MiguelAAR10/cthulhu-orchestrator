@@ -531,11 +531,15 @@ func runBoard(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "orq board:", err)
 		return 1
 	}
-	if ses, err := canal.LoadSesiones(p.sesPath()); err == nil && rn().Inside() {
-		board.MarcarSesionesMuertas(&b, func(id string) bool {
-			s, ok := ses[id]
-			return ok && !rn().Alive(s.Agente)
-		})
+	if ses, err := canal.LoadSesiones(p.sesPath()); err == nil {
+		if r := rn(); r.Inside() {
+			board.MarcarSesionesMuertas(&b, func(id string) bool {
+				s, ok := ses[id]
+				return ok && !r.Alive(s.Agente)
+			})
+		} else {
+			board.MarcarSesionesSinComprobar(&b, func(id string) bool { _, ok := ses[id]; return ok })
+		}
 	}
 	switch {
 	case *asJSON:

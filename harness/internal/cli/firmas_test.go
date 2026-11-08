@@ -312,3 +312,17 @@ func TestStopListEnEspanol(t *testing.T) {
 		}
 	}
 }
+
+// Fuera del runner no se puede preguntar si la sesión vive: el tablero no afirma «ok».
+func TestBoardFueraDelRunnerNoAfirmaOK(t *testing.T) {
+	root, f := sliceConFake(t, false)
+	t.Setenv("ORQ_LANG", "en")
+	f.Fuera = true
+	orq := filepath.Join(root, ".orq")
+	workers.Save(orq, workers.State{ID: "worker-a-s01", Slice: "S-01", Phase: "running", Heartbeat: time.Now(), Started: time.Now()})
+	canal.SaveSesiones(filepath.Join(orq, "sesiones.json"), map[string]canal.Sesion{"worker-a-s01": {Agente: "worker-a-s01", Pane: "p"}})
+	out, _, _ := run(t, "board")
+	if strings.Contains(out, "working · ok") || !strings.Contains(out, "working · unknown") {
+		t.Errorf("tablero:\n%s", out)
+	}
+}

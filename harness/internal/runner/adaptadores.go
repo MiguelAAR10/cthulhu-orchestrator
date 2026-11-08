@@ -327,6 +327,7 @@ func (p *Process) Close(pane string) error {
 
 type Fake struct {
 	Muertos map[string]bool
+	Fuera   bool // simula correr fuera del multiplexor
 	Calls   []string
 	Dentro  bool
 	Envs    []map[string]string // env de cada Open/Split, en orden
@@ -335,7 +336,7 @@ type Fake struct {
 
 func (f *Fake) log(s string)    { f.Calls = append(f.Calls, s) }
 func (f *Fake) Name() string    { return "fake" }
-func (f *Fake) Inside() bool    { return true }
+func (f *Fake) Inside() bool    { return !f.Fuera }
 func (f *Fake) Current() string { return "fake:0" }
 func (f *Fake) Open(label, cwd string, env map[string]string) (string, string, error) {
 	f.n++

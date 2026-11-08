@@ -338,3 +338,80 @@ func TestSesionMuertaNoEsOK(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+func lineaWorker(t *testing.T, txt, id string) string {
+	t.Helper()
+	for _, l := range strings.Split(txt, "\n") {
+		if strings.Contains(l, id+" ") {
+			return l
+		}
+	}
+	t.Fatalf("sin worker %s:\n%s", id, txt)
+	return ""
+}
+
+// Un worker que terminó lo dice una vez; uno muerto no se lee «trabajando».
+func TestEstadoDelWorkerSinRepetirNiContradecir(t *testing.T) {
+	orq := t.TempDir()
+	openSlice(t, orq, "01", "Pago", slice.Implementando)
+	workers.Save(orq, workers.State{ID: "w-fin", Slice: "S-01", Task: "T1", Phase: "exited", Heartbeat: now, Started: now})
+	workers.Save(orq, workers.State{ID: "w-mue", Slice: "S-01", Task: "T2", Phase: "running", Heartbeat: now, Started: now})
+	workers.Save(orq, workers.State{ID: "w-viv", Slice: "S-01", Task: "T3", Phase: "running", Heartbeat: now, Started: now})
+	b, _ := Build(orq, now)
+	MarcarSesionesMuertas(&b, func(id string) bool { return id == "w-mue" })
+	casos := []struct {
+		lang, fin, mue, trabajando string
+	}{{"en", "finished", "dead", "working"}, {"es", "terminó", "muerto", "trabajando"}}
+	for _, c := range casos {
+		t.Setenv("ORQ_LANG", c.lang)
+		for nombre, txt := range map[string]string{"text": Text(b, false), "html": HTML(b)} {
+			var fin, mue, viv string
+			for _, l := range strings.Split(strings.ReplaceAll(txt, "<tr>", "\n"), "\n") {
+				switch {
+				case strings.Contains(l, "w-fin"):
+					fin = l
+				case strings.Contains(l, "w-mue"):
+					mue = l
+				case strings.Contains(l, "w-viv"):
+					viv = l
+				}
+			}
+			if strings.Count(fin, c.fin) != 1 {
+				t.Errorf("%s/%s terminado repite: %q", c.lang, nombre, fin)
+			}
+			if !strings.Contains(mue, c.mue) || strings.Contains(mue, c.trabajando) {
+				t.Errorf("%s/%s muerto: %q", c.lang, nombre, mue)
+			}
+			if !strings.Contains(viv, c.trabajando) {
+				t.Errorf("%s/%s vivo: %q", c.lang, nombre, viv)
+			}
+		}
+	}
+}
+
+// Sin runner que pregunte, una sesión registrada no se declara «ok»: no se sabe.
+func TestSesionSinComprobarEsDesconocida(t *testing.T) {
+	orq := t.TempDir()
+	openSlice(t, orq, "01", "Pago", slice.Implementando)
+	workers.Save(orq, workers.State{ID: "w1", Slice: "S-01", Phase: "running", Heartbeat: now, Started: now})
+	workers.Save(orq, workers.State{ID: "w2", Slice: "S-01", Phase: "exited", Heartbeat: now, Started: now})
+	b, _ := Build(orq, now)
+	MarcarSesionesSinComprobar(&b, func(string) bool { return true })
+	t.Setenv("ORQ_LANG", "es")
+	if l := lineaWorker(t, Text(b, false), "w1"); !strings.Contains(l, "desconocido") || strings.Contains(l, " bien") {
+		t.Errorf("%q", l)
+	}
+	if b.Workers[1].Verdict != "exited" {
+		t.Errorf("%+v", b.Workers[1])
+	}
+}
+
+func TestSinPlanEnEspanol(t *testing.T) {
+	t.Setenv("ORQ_LANG", "es")
+	orq := t.TempDir()
+	openSlice(t, orq, "01", "Pago", slice.Implementando)
+	b, _ := Build(orq, now)
+	if txt := Text(b, false); !strings.Contains(txt, "falta: desconocido (sin plan)") {
+		t.Fatal(txt)
+	}
+}
