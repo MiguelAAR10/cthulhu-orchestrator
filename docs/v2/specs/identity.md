@@ -27,7 +27,8 @@ Owner decision, or change the exam, the autonomy mode or a stopper.
 
 | Action | Role |
 |---|---|
-| `mem add --source owner` | owner or atena |
+| `mem add --source owner` | owner or atena (never the default: without `--source`, a worker signs `worker`, a session role signs itself, owner and atena must say it) |
+| `mem add --source filtro` | owner or atena |
 | `mem add --source atena`, `msg send --from atena` | atena |
 | `slice exam`, `slice scope` | owner, atena or orchestrator (plus a registered decision) |
 | `autonomy guided|free` | owner or atena |
@@ -65,8 +66,16 @@ or wrong (fail closed; `TestAnclaPlantadaSinHMAC`). Writing a JSON file into `se
 enough: the forger also needs the token, and with the token rotated every old anchor stops counting.
 `Anclar` refuses when there is no token. For workers the gate also denies `Read/Grep/Glob/LS` **and**
 `Write/Edit/MultiEdit/NotebookEdit` on the orq config dir (`$XDG_CONFIG_HOME/orq`, `~/.config/orq`,
-`sessions/` included), any Bash command naming that dir, and glob/`find -name` patterns for tokens
-(`*.token`, `own?r.tok*`, `find / -name '*token*'`). Dead anchors (pid gone or start time changed) are pruned on every registration. Anchors are created by:
+`sessions/` included). The comparison uses the **real path** (symlinks resolved up to the deepest existing
+parent, dangling links followed), so `lnk -> ~/.config/orq` inside a worktree opens nothing; Bash arguments
+that resolve there (`cat lnk/*`, `cd lnk`, `tar cf - lnk`, globs expanded against the disk) are denied too, as
+is any Bash command naming that dir. `Grep` with `path` on `/`, the home folder or an ancestor of the config
+dir is denied. Searching for the token by pattern is denied: `Glob` (pattern or path), `Grep --glob` and
+`find -name|-iname|-path|-regex`, `rg -g`, `fd`, `locate` matching `*tok*` or `owner.*`, or any wildcard segment
+that matches `owner.token` (`*.token`, `own?r.tok*`, `**/*t?k*`, braces expanded); from `/` or home one literal
+is enough (`**/o*`). `find / -name 'owner.*'` and `**/*.tok*` with path `/` are the test cases. The worktree's
+own absolute prefix is ignored, so a repo called `stock` still works; anything else with `tok` in the pattern
+or path is denied even when innocent (`**/tokenizer.go`): read it by exact path. Dead anchors (pid gone or start time changed) are pruned on every registration. Anchors are created by:
 
 - **first token creation** (`orq init` or `orq token` when no token exists): whoever creates the token is
   the Owner by definition; the parent process is anchored with role `owner`;
@@ -102,7 +111,7 @@ Unit tests anchor the test process in `TestMain`.
    `{owner, atena, orquestador, orchestrator, planificador, planner, astra}`, a subagent, or a cwd in a
    linked worktree. The gate reads those values from the agent's own environment, which a Bash command
    cannot change. For a worker, orq is an **allowlist**: `slice status|verify|receipt|contract|fact|hypothesis`,
-   `msg send|read` (no `--from`, no closing type), `mem add|show` (no owner/atena source),
+   `msg send|read` (no `--from`, no closing type), `mem add|show` (source `worker` or `scout` only; without `--source` it defaults from the effective role),
    `worker beat|done|list`, `stop raise|list`, `qa finding|show`, `learn`, `plan show|ready`, `skill`,
    `context`, `phase`, `status`, `board`, `doc`, `gate`, `version`, `help`, `handoff-note --auto`.
    Quotes and backslashes are removed as the shell does (`sl''ice` is `slice`). Denied outright:
@@ -118,7 +127,11 @@ Unit tests anchor the test process in `TestMain`.
    `nohup`/`disown`, or runs `orq` through `os.system`/`subprocess`/`exec*`/`spawn*`/`system`/backticks
    (string tricks like `'or' 'q'` evade it; the session check is the real control). Single-dash flags are normalised (`-tipo cierre` is `--tipo cierre`); a worker may only
    send `pregunta|respuesta|estado` (question|answer|status). Read/Grep/Glob of the config folder or
-   `/proc/*/environ` are denied too (the hook matcher includes Read|Grep|Glob).
+   `/proc/*/environ` are denied too (the hook matcher includes Read|Grep|Glob|LS; projects initialised
+   earlier must add `LS` to their `.claude/settings.json`). Recursive `rm` (`-r`, `-R`, `-rf`, `-fr`,
+   `--recursive`) is denied on `/`, `~`, `$HOME`, the worktree root itself and anything outside it (`..`
+   included, `cd` followed), and fails closed on what cannot be checked (`$VAR`, `$(...)`, braces, `xargs`).
+   `find <inside> -exec rm -r {}` and cleanup inside the worktree pass.
 3. **Shim + CLI allowlist (Codex and other agents without a hook).** With `ORQ_WORKER_ID` or `ORQ_SHIM`
    set, a worker ancestor (layer 0) or a cwd in a slice worktree, `orq` itself refuses anything outside the
    same allowlist (exit 2). `msg send` also refuses `cierre|historia|plan` from any effective worker and
@@ -128,6 +141,8 @@ Unit tests anchor the test process in `TestMain`.
 
 ## Honest limits
 
+- **The gate's rm and path checks read the command text.** `find / -delete`, `python -c "shutil.rmtree(...)"`
+  and a path assembled at run time (`"lnk/"+"owner.to"+"ken"`, a script file) are not seen.
 - **Escaping the process tree, after the session check.** An orphan (double fork + `setsid`, `at`,
   `systemd-run --user`, cron) loses its worker ancestor *and* any terminal, so it is now refused. What is
   still accepted is a process that ends up under a **user terminal or an anchor it did not come from**:
