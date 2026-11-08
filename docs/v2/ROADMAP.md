@@ -12,6 +12,14 @@ Principles: lean, reversible (feature flags / adapters), value-first, one vertic
 | 4 | **Bounded memory + `orq revive`** (H-04, H-05) | Append-only channel queried by slice; locked read-modify-write; plan tasks keep "done" only if their contract hash is unchanged; per-role `STATE.md` ≤ 60 lines | Kill everything, revive, next slice completes without help | Minutes to resume |
 | 5 | **Event-driven status** | Workers write `.orq/workers/<id>/state.json` (heartbeat, result, exit code); a code watcher flags dead/stuck/timeout; Atena reads status from files | < 30% of messages go through the orchestrator | Owner minutes per slice |
 
+### Owner requirements added 2026-11-08 (folded into slices 4, 5 and 10)
+
+- **Status board in business language** (`orq board` + skill `orq-board`): one screen with colored cards — what is being built (in product words), % done per slice and overall, what is missing, who is working on what. No jargon.
+- **Human stoppers with severity** (`orq stop`): agents raise typed requests to the Owner — `credential`, `api_key`, `decision`, `confirmation`, `access` — with severity `blocking` / `soon` / `fyi`; work that does not depend on it continues; the board lists them first.
+- **Free-rein mode** (`autonomy: guided | free`): in `free`, the Owner pre-approves decisions inside a declared scope and budget; only `blocking` stoppers and product-acceptance reach the Owner.
+- **Worker status and productivity**: per worker — current task, last heartbeat, commits, tests added/passing, elapsed vs budget, context used; per slice — velocity (tasks/hour), rework count.
+- **Handoff to another person**: `HANDOFF.md` generated per project (what it is, status, how to resume, where memory lives). Memory sync policy chosen at `orq init`: `local` (`.orq/` git-ignored), `commit` (versioned), or `branch` (kept on an `orq/state` branch for multi-machine use).
+
 ## Phase 2 — Speed and alignment
 
 | # | Slice | Observable result |
