@@ -1,0 +1,25 @@
+{
+  "runner": "",
+  "agents": {
+    "gemini": {
+      "cli": "gemini", "kind": "gemini", "family": "google", "hooks": "none",
+      "args": ["-m", "{model}"],
+      "headless": ["-m", "{model}", "-p", "{prompt}"], "prompt": "arg",
+      "models": ["gemini-flash", "gemini-pro"], "default": "gemini-pro", "cheapest": "gemini-flash"
+    }
+  },
+  "roles": {
+    "atena":     {"agent": "claude", "model": "opus",   "effort": "medium"},
+    "main":      {"agent": "claude", "model": "sonnet", "effort": "medium"},
+    "scout":     {"agent": "claude", "model": "haiku"},
+    "planner":   {"agent": "claude", "model": "opus",   "effort": "high"},
+    "adversary": {"agent": "codex",  "model": "gpt-6-astra", "effort": "high"},
+    "verifier":  {"agent": "codex",  "model": "gpt-6.1-sol"},
+    "docs":      {"agent": "claude"},
+    "worker": {"by_risk": {
+      "low":    {"agent": "claude", "model": "haiku",  "effort": "medium"},
+      "medium": {"agent": "claude", "model": "sonnet", "effort": "medium"},
+      "high":   {"agent": "claude", "model": "opus",   "effort": "high"}
+    }}
+  }
+}

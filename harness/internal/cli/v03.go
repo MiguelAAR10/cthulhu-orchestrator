@@ -13,7 +13,6 @@ import (
 
 	"orq/internal/canal"
 	"orq/internal/escriba"
-	"orq/internal/herdr"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
 	"orq/internal/perfil"
@@ -37,7 +36,7 @@ func (p proyecto) rolActual() string {
 		return r
 	}
 	ses, _ := canal.LoadSesiones(p.sesPath())
-	return canal.RolDePane(ses, herdr.CurrentPane())
+	return canal.RolDePane(ses, rn().Current())
 }
 
 // ---------- init ----------
@@ -429,9 +428,9 @@ func runDoctor(stdout, stderr io.Writer) int {
 		}
 	}
 	ses, _ := canal.LoadSesiones(p.sesPath())
-	if herdr.Inside() {
+	if rn().Inside() {
 		for rol, s := range ses {
-			if _, err := herdr.Run("agent", "get", s.Agente); err != nil {
+			if !rn().Alive(s.Agente) {
 				problemas++
 				fmt.Fprintf(stdout, "la sesión de %s (%s) ya no existe: orq relevo %s\n", rol, s.Agente, rol)
 			}

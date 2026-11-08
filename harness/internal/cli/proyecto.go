@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"orq/internal/agentes"
 	"orq/internal/plan"
 	"os"
 	"os/exec"
@@ -204,7 +205,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			*de = os.Getenv("ORQ_ROL")
 		}
 		if *de == "" {
-			*de = canal.RolDePane(ses, herdr.CurrentPane())
+			*de = canal.RolDePane(ses, rn().Current())
 		}
 		m := canal.Msg{TS: time.Now().UTC().Truncate(time.Second), De: *de, Para: *para, Tipo: *tipo, Texto: texto(fs.Args(), stdin), Ref: *ref, Clave: *clave}
 		var e *slice.Estado
@@ -248,7 +249,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "guardado como %s, pendiente; %s aún no tiene sesión (orq up)\n", m.ID, *para)
 			return 0
 		}
-		if err := herdr.Prompt(dest.Agente, m.Format()); err != nil {
+		if err := rn().Prompt(dest.Agente, m.Format()); err != nil {
 			if errors.Is(err, herdr.ErrTimeout) {
 				fmt.Fprintf(stderr, "%s guardado; herdr no respondió: puede haber llegado o no. Revisa y usa `orq msg reconciliar`, no lo reenvíes a ciegas\n", m.ID)
 			} else {
@@ -276,7 +277,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 					fmt.Fprintf(stderr, "%s no tiene sesión\n", m.Para)
 					return 1
 				}
-				if err := herdr.Prompt(dest.Agente, m.Format()); err != nil {
+				if err := rn().Prompt(dest.Agente, m.Format()); err != nil {
 					fmt.Fprintln(stderr, err)
 					return 4
 				}
@@ -328,43 +329,10 @@ type arranque struct {
 
 func flagsArranque(fs *flag.FlagSet) *arranque {
 	a := &arranque{}
-	fs.StringVar(&a.kind, "kind", "", "agente de herdr: claude|codex (por defecto, el del rol)")
+	fs.StringVar(&a.kind, "kind", "", "agente de orq.agents.json (por defecto, el del rol)")
 	fs.StringVar(&a.modelo, "modelo", "", "modelo (por defecto, el del rol)")
 	fs.StringVar(&a.esfuerzo, "esfuerzo", "", "esfuerzo (por defecto, el del rol)")
 	return a
-}
-
-// Cada rol tiene su agente por defecto. El Orquestador solo reparte: no necesita el modelo más caro.
-// El Planificador piensa el plan: Opus. Astra mejora el plan desde otro proveedor: gpt-6-astra.
-var porRol = map[string]arranque{
-	"orquestador":  {"claude", "sonnet", "medium"},
-	"planificador": {"claude", "opus", "high"},
-	"astra":        {"codex", "gpt-6-astra", "high"},
-	"atena":        {"claude", "opus", "medium"},
-}
-
-func (a *arranque) completar(rol string) {
-	d := porRol[rol]
-	if a.kind == "" {
-		a.kind = d.kind
-	}
-	if a.kind != d.kind && a.modelo == "" { // otro proveedor: su modelo por defecto
-		a.modelo = map[string]string{"claude": "opus", "codex": "gpt-6.1-sol"}[a.kind]
-	}
-	if a.modelo == "" {
-		a.modelo = d.modelo
-	}
-	if a.esfuerzo == "" {
-		a.esfuerzo = d.esfuerzo
-	}
-}
-
-// agentArgs traduce modelo y esfuerzo a cada CLI.
-func agentArgs(kind, modelo, esfuerzo, name string) []string {
-	if kind == "codex" {
-		return []string{"-m", modelo, "-c", "model_reasoning_effort=" + esfuerzo}
-	}
-	return []string{"--model", modelo, "--effort", esfuerzo, "-n", name}
 }
 
 // etiqueta es el nombre tipado de la pestaña de cada rol: «<rol> · <proyecto>».
@@ -393,29 +361,39 @@ func lanzar(p proyecto, ses map[string]canal.Sesion, rol string, a *arranque) (c
 	if gen > 1 {
 		name = fmt.Sprintf("%s-%d", name, gen)
 	}
-	a.completar(rol)
+	cfg, err := p.agentes()
+	if err != nil {
+		return canal.Sesion{}, err
+	}
+	el, err := a.eleccion(cfg, rol)
+	if err != nil {
+		return canal.Sesion{}, err
+	}
+	l, err := cfg.Launch(el, name, agentes.Contexto{GitCommon: gitCommon(p.root), Parent: filepath.Dir(p.root)}, "role")
+	if err != nil {
+		return canal.Sesion{}, err
+	}
 	env := map[string]string{"ORQ_ROL": rol}
 	// Distribución fija: orq en su pestaña, plan en la suya; Astra al lado del Planificador.
 	var tab, pane string
-	var err error
 	if pl, ok := ses["planificador"]; rol == "astra" && ok && pl.Pane != "" {
 		tab = pl.Tab
-		pane, err = herdr.SplitDe(pl.Pane, p.root, env)
+		pane, err = rn().Split(pl.Pane, p.root, env)
 	} else {
-		tab, pane, err = herdr.Tab(etiqueta(rol, p), p.root, env)
+		tab, pane, err = rn().Open(etiqueta(rol, p), p.root, env)
 	}
 	if err != nil {
 		return canal.Sesion{}, err
 	}
-	if err := herdr.Start(name, a.kind, pane, rolArgs(a.kind, a.modelo, a.esfuerzo, name, p.root)); err != nil {
+	if err := rn().Start(name, l, pane); err != nil {
 		return canal.Sesion{}, fmt.Errorf("%v (el panel %s quedó abierto)", err, pane)
 	}
-	s := canal.Sesion{Agente: name, Pane: pane, Tab: tab, Desde: time.Now().UTC().Truncate(time.Second), Gen: gen}
+	s := canal.Sesion{Agente: name, Pane: pane, Tab: tab, Desde: time.Now().UTC().Truncate(time.Second), Gen: gen, Gate: gateDe(cfg, el.Agent)}
 	ses[rol] = s
 	if err := canal.SaveSesiones(p.sesPath(), ses); err != nil {
 		return s, err
 	}
-	return s, herdr.Prompt(name, fmt.Sprintf(arranqueRol, rol, skillDe(rol)))
+	return s, rn().Prompt(name, fmt.Sprintf(arranqueRol, rol, skillDe(rol)))
 }
 
 func runUp(args []string, stdout, stderr io.Writer) int {
@@ -425,7 +403,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	if fs.Parse(args) != nil {
 		return 1
 	}
-	if !herdr.Inside() {
+	if !rn().Inside() {
 		fmt.Fprintln(stderr, "orq up: corre esto desde un panel de herdr (falta HERDR_ENV). Orca llegará después.")
 		return 1
 	}
@@ -452,10 +430,10 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fname := "atena-" + orqdir.Slug(p.root)
-	if err := herdr.Rename(herdr.CurrentPane(), fname); err != nil {
+	if err := rn().Rename(rn().Current(), fname); err != nil {
 		fmt.Fprintf(stderr, "aviso: no se pudo nombrar este panel como %s (%v)\n", fname, err)
 	}
-	ses["atena"] = canal.Sesion{Agente: fname, Pane: herdr.CurrentPane(), Desde: time.Now().UTC().Truncate(time.Second), Gen: 1}
+	ses["atena"] = canal.Sesion{Agente: fname, Pane: rn().Current(), Desde: time.Now().UTC().Truncate(time.Second), Gen: 1}
 	o, err := lanzar(p, ses, "orquestador", a)
 	if err != nil {
 		fmt.Fprintln(stderr, "orq up:", err)
@@ -497,8 +475,8 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 	}
 	ses, _ := canal.LoadSesiones(p.sesPath())
 	// Una sola sesión por rol: si la anterior relevo ya abrió una sesión que sigue viva, no se abre otra.
-	if prev, ok := ses[rol]; ok && !*soloArchivo && !*forzar && prev.Gen > 1 && time.Since(prev.Desde) < 15*time.Minute && herdr.Inside() {
-		if _, err := herdr.Run("agent", "get", prev.Agente); err == nil {
+	if prev, ok := ses[rol]; ok && !*soloArchivo && !*forzar && prev.Gen > 1 && time.Since(prev.Desde) < 15*time.Minute && rn().Inside() {
+		if rn().Alive(prev.Agente) {
 			fmt.Fprintf(stderr, "orq relevo: %s ya tiene una sesión nueva viva (%s, hace %s). No se abre otra; usa --forzar si de verdad hace falta\n", rol, prev.Agente, time.Since(prev.Desde).Round(time.Second))
 			return 1
 		}
@@ -528,7 +506,7 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 	if *soloArchivo {
 		return 0
 	}
-	if !herdr.Inside() {
+	if !rn().Inside() {
 		fmt.Fprintln(stdout, "fuera de herdr: abre una sesión nueva y pídele que lea ese archivo.")
 		return 0
 	}
@@ -615,6 +593,12 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
+		}
+		// H-06: si los workers por defecto son Claude, el worktree del slice lleva el hook del gate.
+		if cfg, err := p.agentes(); err == nil && cfg.Agents[cfg.Rol("worker.medium").Agent].TieneHooks() {
+			if err := asegurarHook(e.Worktree, p.root); err != nil {
+				fmt.Fprintf(stdout, "aviso H-06: %v. `orq slice lanzar` no abrirá workers Claude hasta arreglarlo\n", err)
+			}
 		}
 		fmt.Fprintf(stdout, "%s abierto en rojo sobre %s (%s). Worktree: %s\nPaquete protegido: %s\nAsigna el escritor: orq slice tomar <quien>\n", e.Attempt(), e.Base, e.SHARojo[:8], e.Worktree, strings.Join(e.Bundle, ", "))
 		return 0
@@ -740,6 +724,13 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "uso: orq slice cerrar --aceptado | --rechazado \"motivo\"")
 			return 1
 		}
+		// El examen se protegió con chmod en los worktrees de los workers; solo orq lo devuelve.
+		if e, err := r.Load(nn); err == nil && e != nil {
+			restaurarExamen(e.Worktree, e.Bundle)
+			for _, w := range e.Equipo {
+				restaurarExamen(w.Worktree, e.Bundle)
+			}
+		}
 		reg, cuarentena, out, err := r.Cerrar(nn, *ok, *motivo, time.Now())
 		show(out)
 		if errors.Is(err, slice.ErrYaCerrado) {
@@ -788,7 +779,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	case "lanzar":
 		fs := flag.NewFlagSet("slice lanzar", flag.ContinueOnError)
 		fs.SetOutput(stderr)
-		agente := fs.String("agente", "claude", "claude (Sonnet) | codex")
+		agente := fs.String("agente", "", "agente de orq.agents.json (por defecto, el de roles.worker por riesgo)")
 		zona := fs.String("zona", "", "front, back, test…: suma el worker al equipo del slice")
 		rutas := fs.String("rutas", "", "carpetas de esa zona, separadas por coma")
 		alcance := fs.String("alcance", "solo lo necesario para que el examen pase", "qué sí y qué no")
@@ -861,8 +852,8 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			listas, _ := plan.Listas(pl)
 			fmt.Fprintf(stdout, "plan: %d pendientes; marca lo terminado con `orq plan hecha ID`; listas: %s\n", pl.Pendientes(), ids(listas))
 			// El Planificador vigila su plan: cada junta le pide revisarlo.
-			if ses, _ := canal.LoadSesiones(p.sesPath()); ses["planificador"].Agente != "" && herdr.Inside() {
-				herdr.Prompt(ses["planificador"].Agente, fmt.Sprintf("[orq] S-%s merged. Run `orq plan revisar --slice %s` and keep the plan minimal and current.", e.NN, e.NN))
+			if ses, _ := canal.LoadSesiones(p.sesPath()); ses["planificador"].Agente != "" && rn().Inside() {
+				rn().Prompt(ses["planificador"].Agente, fmt.Sprintf("[orq] S-%s merged. Run `orq plan revisar --slice %s` and keep the plan minimal and current.", e.NN, e.NN))
 			}
 		}
 		// Documentación barata en paralelo: Haiku actualiza la ficha sin frenar al equipo.
@@ -971,16 +962,6 @@ func partir(s string) []string {
 		}
 	}
 	return out
-}
-
-// rolArgs: un rol Codex (Astra) escribe rojos y planes en los repos hermanos del producto,
-// así que además del sandbox de worker puede escribir en la carpeta que los contiene.
-func rolArgs(kind, modelo, esfuerzo, name, root string) []string {
-	args := workerArgs(kind, modelo, esfuerzo, name, root)
-	if kind == "codex" {
-		args = append(args, "--add-dir", filepath.Dir(root))
-	}
-	return args
 }
 
 // cambioDeContrato: el examen y el alcance solo cambian desde el checkout principal (no desde un

@@ -1,0 +1,57 @@
+{
+  "runner": "",
+  "agents": {
+    "claude": {
+      "cli": "claude", "kind": "claude", "family": "anthropic", "hooks": "claude",
+      "args": ["--model", "{model}", "--effort", "{effort}", "-n", "{name}"],
+      "headless": ["-p", "--model", "{model}", "--output-format", "text"],
+      "prompt": "stdin",
+      "models": ["haiku", "sonnet", "opus"], "default": "opus", "cheapest": "haiku",
+      "by_risk": {"low": {"model": "haiku", "effort": "medium"}, "medium": {"model": "sonnet", "effort": "medium"}, "high": {"model": "opus", "effort": "high"}}
+    },
+    "codex": {
+      "cli": "codex", "kind": "codex", "family": "openai", "hooks": "none",
+      "args": ["-m", "{model}", "-c", "model_reasoning_effort={effort}"],
+      "worker_args": ["-s", "workspace-write", "-a", "on-request", "-c", "sandbox_workspace_write.network_access=true", "--add-dir", "{git_common}"],
+      "role_args": ["--add-dir", "{parent}"],
+      "headless": ["exec", "-m", "{model}", "{prompt}"],
+      "prompt": "arg",
+      "models": ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"], "default": "gpt-6.1-sol", "cheapest": "gpt-6-luna",
+      "by_risk": {"low": {"model": "gpt-6-luna", "effort": "medium"}, "medium": {"model": "gpt-6.1-sol", "effort": "medium"}, "high": {"model": "gpt-6.1-sol", "effort": "high"}}
+    },
+    "cursor-agent": {
+      "cli": "cursor-agent", "kind": "cursor-agent", "family": "cursor", "hooks": "none",
+      "args": ["--model", "{model}"], "headless": ["-p", "--model", "{model}", "{prompt}"], "prompt": "arg",
+      "models": ["auto"], "default": "auto", "cheapest": "auto"
+    },
+    "gemini": {
+      "cli": "gemini", "kind": "gemini", "family": "google", "hooks": "none",
+      "args": ["-m", "{model}"], "headless": ["-m", "{model}", "-p", "{prompt}"], "prompt": "arg",
+      "models": ["gemini-flash", "gemini-pro"], "default": "gemini-pro", "cheapest": "gemini-flash"
+    },
+    "opencode": {
+      "cli": "opencode", "kind": "opencode", "family": "opencode", "hooks": "none",
+      "args": ["--model", "{model}"], "headless": ["run", "--model", "{model}", "{prompt}"], "prompt": "arg",
+      "models": ["default"], "default": "default", "cheapest": "default"
+    },
+    "aider": {
+      "cli": "aider", "kind": "aider", "family": "aider", "hooks": "none",
+      "args": ["--model", "{model}"], "headless": ["--model", "{model}", "--yes", "--message", "{prompt}"], "prompt": "arg",
+      "models": ["default"], "default": "default", "cheapest": "default"
+    }
+  },
+  "roles": {
+    "atena":     {"agent": "claude", "model": "opus",   "effort": "medium"},
+    "main":      {"agent": "claude", "model": "sonnet", "effort": "medium"},
+    "scout":     {"agent": "claude", "model": "haiku",  "effort": "medium"},
+    "planner":   {"agent": "claude", "model": "opus",   "effort": "high"},
+    "adversary": {"agent": "codex",  "model": "gpt-6-astra", "effort": "high"},
+    "verifier":  {"agent": "codex",  "model": "gpt-6.1-sol", "effort": "medium", "fresh": true},
+    "docs":      {"agent": "claude", "model": "haiku",  "effort": "low"},
+    "worker": {"by_risk": {
+      "low":    {"agent": "claude", "model": "haiku",  "effort": "medium"},
+      "medium": {"agent": "claude", "model": "sonnet", "effort": "medium"},
+      "high":   {"agent": "claude", "model": "opus",   "effort": "high"}
+    }}
+  }
+}
