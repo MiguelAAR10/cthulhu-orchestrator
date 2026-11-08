@@ -279,6 +279,40 @@ func revisar(orqDir string, e Entrada, procs []sysinfo.Proc, o Opciones) Resulta
 	return r
 }
 
+// Retirar quita un worktree concreto con el mismo cuidado que GC (sin ttl ni registro): nunca
+// fuerza, empaqueta un HEAD sin ref duradera y respalda (verificado) los ignorados únicos antes
+// de `git worktree remove`. Si algo no es seguro, devuelve error y no borra nada.
+func Retirar(orqDir, repo, d string, now time.Time) (Resultado, error) {
+	r := Resultado{Path: d}
+	head, err := git(d, "rev-parse", "HEAD")
+	if err != nil {
+		return r, fmt.Errorf("sin HEAD legible: %w", err)
+	}
+	ign, motivo, err := ignorados(d, repo)
+	if err != nil {
+		return r, fmt.Errorf("no pude listar ignorados: %w", err)
+	}
+	if motivo != "" {
+		return r, errors.New(motivo)
+	}
+	nombre := fmt.Sprintf("%s-%s", filepath.Base(d), now.UTC().Format("20060102T150405"))
+	if cont, _ := git(d, "for-each-ref", "--contains", head, "--format=%(refname)", "refs/remotes", "refs/heads"); cont == "" {
+		if r.Bundle, err = empaquetar(orqDir, repo, d, head, nombre); err != nil {
+			return r, fmt.Errorf("HEAD sin ref duradera y el bundle falló: %w", err)
+		}
+	}
+	if len(ign) > 0 {
+		if r.Backup, err = respaldar(orqDir, d, head, nombre, ign); err != nil {
+			return r, fmt.Errorf("respaldo de ignorados falló: %w", err)
+		}
+	}
+	if _, err := git(repo, "worktree", "remove", d); err != nil {
+		return r, fmt.Errorf("git worktree remove (sin --force) falló: %w", err)
+	}
+	r.Accion = Retirado
+	return r, nil
+}
+
 var saltar = map[string]bool{"node_modules": true, ".venv": true, "venv": true, ".git": true, "__pycache__": true, ".next": true}
 
 // ultimaActividad: el archivo más nuevo, sin dependencias y sin el puntero .git de la raíz

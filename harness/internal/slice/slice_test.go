@@ -1044,3 +1044,23 @@ func TestCambiosDeContratoInvalidanRecibos(t *testing.T) {
 		}
 	}
 }
+
+// Exploit 4: rechazar no borra un ignorado único sin respaldo verificado.
+func TestRechazarRespaldaIgnoradoUnico(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	os.WriteFile(filepath.Join(e.Worktree, ".gitignore"), []byte("out.tap\n"), 0o644)
+	Git(e.Worktree, "add", ".gitignore")
+	Git(e.Worktree, "commit", "-qm", "ignora")
+	os.WriteFile(filepath.Join(e.Worktree, "out.tap"), []byte("ok 1 único\n"), 0o644)
+	if _, _, _, err := r.Cerrar("", false, "no", t0); err != nil {
+		t.Fatal(err)
+	}
+	if existe(filepath.Join(e.Worktree, "out.tap")) {
+		return // conservado o en cuarentena: no se perdió
+	}
+	bs, _ := filepath.Glob(filepath.Join(r.OrqDir, "backups", "*.tgz"))
+	if len(bs) == 0 {
+		t.Fatal("borró out.tap sin respaldo")
+	}
+}

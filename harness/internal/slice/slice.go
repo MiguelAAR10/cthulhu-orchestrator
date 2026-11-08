@@ -828,7 +828,7 @@ func (r Repo) quitarWorktree(e *Estado, ruta string, now time.Time) string {
 	if !existe(ruta) { // nada que quitar; no se hace prune global: tocaría worktrees ajenos
 		return ""
 	}
-	if _, err := Git(r.Root, "worktree", "remove", ruta); err != nil {
+	if _, err := worktrees.Retirar(r.OrqDir, r.Root, ruta, now); err != nil {
 		appendJSON(r.CuarentenaPath(), Cuarentena{Ruta: ruta, Slice: e.ID(), Motivo: err.Error(), TS: now.UTC().Truncate(time.Second)})
 		return ruta
 	}
