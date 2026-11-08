@@ -127,6 +127,8 @@ type Receipt struct {
 	// Tree: HEAD y git status del worktree antes y después de las capas. Si el tester cambió algo
 	// fuera de los informes permitidos, el recibo es invalid: no prueba el código que se entregó.
 	Tree *TreeCheck `json:"tree,omitempty"`
+	// Isolation: la ejecución en una copia desechable y lo vigilado fuera de ella (ver RunAislado).
+	Isolation *Vigilancia `json:"isolation,omitempty"`
 }
 
 type TreeCheck struct {

@@ -213,3 +213,78 @@ func TestTesterQueEscribeInvalidaElRecibo(t *testing.T) {
 		t.Fatalf("reescritura de un archivo sucio: %+v", rec.Tree)
 	}
 }
+
+// QA corre en una copia desechable (git worktree --detach) en el HEAD del worker y vigila el
+// checkout principal y .orq/config.json.
+func TestQAAisladoEnCopia(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("sin python3")
+	}
+	main := t.TempDir()
+	git := func(dir string, a ...string) {
+		if out, err := exec.Command("git", append([]string{"-C", dir, "-c", "user.email=a@b", "-c", "user.name=a"}, a...)...).CombinedOutput(); err != nil {
+			t.Fatal(err, string(out))
+		}
+	}
+	git(main, "init", "-q")
+	os.MkdirAll(filepath.Join(main, "tests"), 0o755)
+	os.WriteFile(filepath.Join(main, "tests", "exam.sh"), []byte("exit 0\n"), 0o644)
+	os.WriteFile(filepath.Join(main, "app.py"), []byte("print(1)\n"), 0o644)
+	os.WriteFile(filepath.Join(main, ".gitignore"), []byte("out.tap\n.orq/\n"), 0o644)
+	git(main, "add", ".")
+	git(main, "commit", "-q", "-m", "x")
+	orqDir := filepath.Join(main, ".orq")
+	os.MkdirAll(orqDir, 0o755)
+	os.WriteFile(filepath.Join(orqDir, "config.json"), []byte(`{"qa":{}}`), 0o644)
+	wt := filepath.Join(t.TempDir(), "wt")
+	git(main, "worktree", "add", "-q", "-b", "slice/s07", wt)
+	os.WriteFile(filepath.Join(wt, "app.py"), []byte("print(2)\n"), 0o644)
+	git(wt, "commit", "-qam", "feat")
+	headWorker, _ := exec.Command("git", "-C", wt, "rev-parse", "HEAD").Output()
+	a := Aislado{WorkerDir: wt, MainRoot: main, OrqDir: orqDir}
+	corre := func(cmd string) Receipt {
+		return RunAislado(a, "07", []Layer{{Name: "unit", Cmd: cmd}}, "medium", ShellRunner, t0, []string{"out.tap"})
+	}
+
+	// limpio: corre en una copia en el HEAD del worker (ve print(2)), y la copia desaparece.
+	rec := corre(`grep -q 'print(2)' app.py && pwd > ` + filepath.Join(t.TempDir(), "x") + ` && echo 'ok 1' > out.tap`)
+	if rec.Result != "pass" || rec.Isolation == nil || rec.Head != strings.TrimSpace(string(headWorker)) {
+		t.Fatalf("limpio: %+v %+v", rec, rec.Tree)
+	}
+	if rec.Isolation.Copy == wt || rec.Isolation.Copy == main {
+		t.Fatalf("no corrió en una copia: %s", rec.Isolation.Copy)
+	}
+	if _, err := os.Stat(rec.Isolation.Copy); !os.IsNotExist(err) {
+		t.Fatalf("la copia sigue ahí: %v", err)
+	}
+	if out, _ := exec.Command("git", "-C", main, "worktree", "list").Output(); strings.Contains(string(out), "orq-qa-") {
+		t.Fatalf("worktree de QA registrado: %s", out)
+	}
+
+	// cambiar y restaurar el worktree del worker: el examen corre en la copia, el worker no se toca.
+	rec = corre(`python3 -c "p='app.py'; s=open(p).read(); open(p,'w').write('print(9)'); open(p,'w').write(s)" && echo 'ok 1' > out.tap`)
+	if rec.Result != "pass" {
+		t.Fatalf("cambiar y restaurar dentro de la copia: %+v", rec.Tree)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(wt, "app.py")); string(raw) != "print(2)\n" {
+		t.Fatalf("el worktree del worker cambió: %q", raw)
+	}
+
+	// escribir el examen del checkout principal (ruta absoluta), o .orq/config.json: invalid.
+	for nombre, cmd := range map[string]string{
+		"examen principal": `echo 'exit 0 # trampa' >> ` + filepath.Join(main, "tests", "exam.sh"),
+		"config":           `python3 -c "open('` + filepath.Join(orqDir, "config.json") + `','w').write('{}')"`,
+		"untracked main":   `touch ` + filepath.Join(main, "nuevo.txt"),
+		"worker worktree":  `echo x > ` + filepath.Join(wt, "app.py"),
+		"copia":            `echo 'print(5)' > app.py`,
+	} {
+		rec := corre(cmd)
+		if rec.Result != "invalid" || len(rec.Tree.Changed) == 0 {
+			t.Errorf("%s: %+v", nombre, rec.Tree)
+		}
+		git(main, "checkout", "-q", "--", ".")
+		os.Remove(filepath.Join(main, "nuevo.txt"))
+		os.WriteFile(filepath.Join(orqDir, "config.json"), []byte(`{"qa":{}}`), 0o644)
+		git(wt, "checkout", "-q", "--", ".")
+	}
+}

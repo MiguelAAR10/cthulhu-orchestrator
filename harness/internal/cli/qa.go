@@ -52,7 +52,7 @@ func runQA(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		dir, _ := p.dirSlice(nn)
-		rec := qa.RunVigilado(dir, nn, cfg.Layers, cfg.Crit(), qaRunner, time.Now(), cfg.Permitidos())
+		rec := qa.RunAislado(qa.Aislado{WorkerDir: dir, MainRoot: p.root, OrqDir: p.dir}, nn, cfg.Layers, cfg.Crit(), qaRunner, time.Now(), cfg.Permitidos())
 		if err := qa.Guardar(p.dir, rec); err != nil {
 			fmt.Fprintln(stderr, "orq qa:", err)
 			return 1
@@ -65,7 +65,7 @@ func runQA(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "  %-12s exit %d · %d pasan · %d fallan\n", l.Name, l.Exit, l.Passed, l.Failed)
 		}
 		if rec.Result == "invalid" {
-			fmt.Fprintf(stderr, "orq qa: the run changed the worktree outside the allowed reports (%s); the receipt is invalid:\n", strings.Join(cfg.Permitidos(), ", "))
+			fmt.Fprintf(stderr, "orq qa: the run (in a throwaway copy at the worker's HEAD) changed files it must not touch — main checkout, worker worktree, .orq/config.json, or the copy outside the allowed reports (%s); the receipt is invalid:\n", strings.Join(cfg.Permitidos(), ", "))
 			for _, c := range rec.Tree.Changed {
 				fmt.Fprintln(stderr, "  "+c)
 			}
