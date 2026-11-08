@@ -63,6 +63,16 @@ Cada worktree que orq crea (slice, zona, integración) queda en `.orq/worktrees.
 - **Handoff** (`orq handoff [--out F]`): `HANDOFF.md` generado, 6 secciones, ≤120 líneas, sin rutas absolutas y con todo lo que parezca secreto tapado.
 - **Memoria** (`orq init --sync|--memoria=local|commit|branch`, guardado en `config.json`): `local` ignora `.orq/`; `commit` lo versiona salvo workers, candados, board.html y salidas (y deja de escribir `/.orq/` en `.git/info/exclude`); `branch` usa `orq sync push|pull [--theirs]` con el worktree aparte `.orq-sync` en la rama `orq/state`: nunca toca el HEAD, el índice ni las ramas del usuario, nunca `--force` ni rebase; si diverge se detiene ("diverged").
 
+## Skills (slice 7): perfil, enrutado fase×rol, galería con verificación y fijado
+
+Detalle en inglés: `docs/v2/SKILLS.md`.
+
+- **Perfil** (`orq profile`): detecta con señales: archivos de código, edad y commits de git, autores, tests, CI y manifiestos (package.json+tsconfig ⇒ typescript, pyproject/requirements ⇒ python, go.mod ⇒ go). CI con Dockerfile/deploy o con tags da la pista `production`. Tipo: greenfield (<5 archivos y <20 commits), legacy (≥3 años y le faltan tests o CI), brownfield el resto. `orq profile set type=… criticality=trivial|low|medium|high stage=… stacks=a,b` guarda en `.orq/profile.json`. El Owner gana siempre; orq avisa cuando la evidencia lo contradice.
+- **Catálogo**: `skills.catalog.json` embebido, más `.orq/skills.catalog.json` del proyecto (el mismo id reemplaza). Cada entrada lleva id, fuente, install (`npx …` o `copy:NOMBRE`), ref y sha256 fijados, fases (T C A D V DOC), roles, project_types, stacks, min_criticality, token_tier, adapt y never.
+- **Enrutado** (`orq skills plan --phase X --role R`): solo lo que encaja con tipo, stacks, fase, rol y criticidad efectiva (producción sube un nivel). Trivial ⇒ 0 o 1 skill; crítica en producción ⇒ todas las que encajan. `orq skill ROL` y `orq contexto` muestran solo el conjunto fase×rol: worker D, scout C, planificador/astra A, verificador V; atena y orquestador siguen la fase del proyecto. Matt Pocock va solo al frente (grilling en T desde medium).
+- **Instalar** (`orq skills install [ID…]`): instala solo la selección, en `.claude/skills/` y `.agents/skills/`, y fija la huella en `.orq/skills.lock.json`. Rechaza la never-list, lo rechazado en la galería, lo que no pasa `vet` y lo que difiere del sha256 del catálogo o del lock.
+- **Vet** (`orq skills vet ID [--file F]`): exige frontmatter con name/description y ≤20000 bytes. Rechaza `git push`, `--force`, `rm -rf`, `reset --hard`/`branch -D`, lanzar agentes y `curl|sh`; una línea que lo prohíbe no cuenta. El veredicto validated|rejected va con su motivo a `.orq/skills.gallery.json`.
+
 ## Comandos
 
 ```

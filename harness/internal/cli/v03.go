@@ -108,123 +108,6 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	return runSkills(nil, stdout, stderr)
 }
 
-// ---------- skills ----------
-
-func runSkills(args []string, stdout, stderr io.Writer) int {
-	p, err := abrirProyecto()
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	ls := perfil.Lista(p.perfil())
-	sub := ""
-	if len(args) > 0 {
-		sub = args[0]
-	}
-	switch sub {
-	case "fijar":
-		m := map[string]perfil.Fijada{}
-		for _, s := range ls {
-			if h, err := perfil.HuellaSkill(p.root, s.Nombre); err == nil && perfil.Instalada(p.root, s.Nombre) {
-				m[s.Nombre] = perfil.Fijada{Repo: s.Repo, Huella: h, Roles: s.Roles, Adapta: s.Adapta}
-			}
-		}
-		raw, _ := json.MarshalIndent(m, "", "  ")
-		if err := orqdir.WriteAtomic(p.lockPath(), raw); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "%d skills fijadas en %s (versión revisada; un cambio se avisará)\n", len(m), p.lockPath())
-		return 0
-	case "verificar":
-		ps := perfil.Verificar(p.root, ls, p.fijadas())
-		for _, x := range ps {
-			fmt.Fprintf(stdout, "%-6s %-32s %s\n", x.Tipo, x.Skill, x.Detalle)
-		}
-		cfg := os.Getenv("CLAUDE_CONFIG_DIR")
-		if home, _ := os.UserHomeDir(); cfg == "" {
-			cfg = filepath.Join(home, ".claude")
-		}
-		if cfg != "" {
-			if m, _ := filepath.Glob(filepath.Join(cfg, "plugins", "cache", "*", "superpowers")); len(m) > 0 {
-				fmt.Fprintln(stdout, "aviso: el plugin superpowers está instalado para todos los proyectos; su using-superpowers se carga en cada sesión. Desactívalo en /plugin si quieres solo las piezas de este repo.")
-			}
-		}
-		if len(ps) == 0 {
-			fmt.Fprintln(stdout, "skills en orden: las del proyecto, con sus dependencias y sin cambios")
-			return 0
-		}
-		return 1
-	}
-	instalar := sub == "instalar"
-	// orq skills instalar a b c: solo esas (y lo que requieren), no todo el catálogo.
-	if instalar && len(args) > 1 {
-		pedidas := map[string]bool{}
-		for _, n := range args[1:] {
-			pedidas[n] = true
-		}
-		for _, s := range ls {
-			if pedidas[s.Nombre] {
-				for _, r := range s.Requiere {
-					pedidas[r] = true
-				}
-			}
-		}
-		var sel []perfil.Skill
-		for _, s := range ls {
-			if pedidas[s.Nombre] {
-				sel = append(sel, s)
-				delete(pedidas, s.Nombre)
-			}
-		}
-		for n := range pedidas {
-			fmt.Fprintf(stderr, "%s no está en el catálogo de este proyecto\n", n)
-			return 1
-		}
-		ls = sel
-	}
-	porRepo := map[string][]string{}
-	var repos []string
-	for _, s := range ls {
-		mark := "✓"
-		if !perfil.Instalada(p.root, s.Nombre) {
-			mark = "·"
-			if _, ok := porRepo[s.Repo]; !ok {
-				repos = append(repos, s.Repo)
-			}
-			porRepo[s.Repo] = append(porRepo[s.Repo], s.Nombre)
-		}
-		fmt.Fprintf(stdout, "  %s %-32s %-26s %s\n", mark, s.Nombre, strings.Join(s.Roles, ","), s.Repo)
-	}
-	faltan := 0
-	for _, repo := range repos {
-		miss := porRepo[repo]
-		faltan += len(miss)
-		if !instalar {
-			continue
-		}
-		cmd := perfil.ComandoInstalar(repo, miss)
-		c := exec.Command(cmd[0], cmd[1:]...)
-		c.Dir = p.root
-		if out, err := c.CombinedOutput(); err != nil {
-			fmt.Fprintf(stderr, "falló %s: %v\n%s\n", strings.Join(cmd, " "), err, tail(string(out), 5))
-			return 1
-		}
-		faltan -= len(miss)
-	}
-	switch {
-	case faltan == 0 && instalar:
-		fmt.Fprintln(stdout, "skills instaladas solo en este repo. Revísalas y fíjalas: `orq skills fijar`")
-	case faltan == 0:
-		fmt.Fprintln(stdout, "skills del proyecto completas (solo en .claude/skills de este repo)")
-	case instalar:
-		fmt.Fprintf(stdout, "faltan %d skills\n", faltan)
-	default:
-		fmt.Fprintf(stdout, "faltan %d: `orq skills instalar` las deja solo en este repo\n", faltan)
-	}
-	return 0
-}
-
 func tail(s string, n int) string {
 	l := strings.Split(strings.TrimSpace(s), "\n")
 	return strings.Join(l[max(0, len(l)-n):], "\n")
@@ -300,6 +183,7 @@ func runContexto(stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "# orq · %s\nRol: %s · modo: %s · fase: %s (%s)\n", filepath.Base(p.root), def(rol, "sin rol"), pf.Modo, f, d)
 	if rol != "" {
 		fmt.Fprintf(stdout, "Tu guía y tus skills: `orq skill %s`\n", rol)
+		fmt.Fprint(stdout, p.roleSkills(rol))
 		if raw, err := os.ReadFile(p.relevo(rol)); err == nil {
 			fmt.Fprintf(stdout, "\n%s\n", strings.TrimSpace(string(raw)))
 		}

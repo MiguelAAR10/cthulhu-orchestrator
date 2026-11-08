@@ -72,7 +72,7 @@ func TestMemoriaPorLineaDeComandos(t *testing.T) {
 func TestOrqSkillDaLaGuiaDelRol(t *testing.T) {
 	t.Setenv("ORQ_ROOT", t.TempDir())
 	out, _, code := run(t, "skill", "worker")
-	if code != 0 || !strings.Contains(out, "networkidle") || !strings.Contains(out, "No cargues") {
+	if code != 0 || !strings.Contains(out, "networkidle") || !strings.Contains(out, "Never load") {
 		t.Fatalf("%d %q", code, out)
 	}
 	if _, _, code := run(t, "--skill", "nadie"); code == 0 {

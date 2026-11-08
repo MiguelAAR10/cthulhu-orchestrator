@@ -1,0 +1,790 @@
+{
+ "version": 1,
+ "skills": [
+  {
+   "id": "pocock.grilling",
+   "name": "grilling",
+   "source": "github.com/mattpocock/skills",
+   "install": "npx -y skills@latest add mattpocock/skills -s grilling -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "T"
+   ],
+   "roles": [
+    "atena"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "high",
+   "summary": "Interview the Owner until the story is unambiguous.",
+   "adapt": "Only about the current slice; cap at 10 questions; research requests go to the Orchestrator."
+  },
+  {
+   "id": "pocock.grill-with-docs",
+   "name": "grill-with-docs",
+   "source": "github.com/mattpocock/skills",
+   "install": "npx -y skills@latest add mattpocock/skills -s grill-with-docs -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "T"
+   ],
+   "roles": [
+    "atena"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "high",
+   "token_tier": "high",
+   "summary": "Grilling plus glossary and ADRs for large or critical work.",
+   "requires": [
+    "grilling",
+    "domain-modeling"
+   ],
+   "adapt": "Distil into a 1-page story in English; later roles never see the transcript."
+  },
+  {
+   "id": "pocock.domain-modeling",
+   "name": "domain-modeling",
+   "source": "github.com/mattpocock/skills",
+   "install": "npx -y skills@latest add mattpocock/skills -s domain-modeling -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "T",
+    "A"
+   ],
+   "roles": [
+    "atena",
+    "planificador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "high",
+   "summary": "Shared domain glossary and ADRs."
+  },
+  {
+   "id": "pocock.to-spec",
+   "name": "to-spec",
+   "source": "github.com/mattpocock/skills",
+   "install": "npx -y skills@latest add mattpocock/skills -s to-spec -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "A"
+   ],
+   "roles": [
+    "planificador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "high",
+   "token_tier": "high",
+   "summary": "Turn the story into a short spec.",
+   "adapt": "The plan stays a living one-page document, never a giant spec."
+  },
+  {
+   "id": "pocock.to-tickets",
+   "name": "to-tickets",
+   "source": "github.com/mattpocock/skills",
+   "install": "npx -y skills@latest add mattpocock/skills -s to-tickets -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "A"
+   ],
+   "roles": [
+    "planificador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "high",
+   "summary": "Split the spec into vertical slices.",
+   "adapt": "Each ticket is a slice with its exam; no GitHub issues."
+  },
+  {
+   "id": "pocock.codebase-design",
+   "name": "codebase-design",
+   "source": "github.com/mattpocock/skills",
+   "install": "npx -y skills@latest add mattpocock/skills -s codebase-design -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "A"
+   ],
+   "roles": [
+    "planificador",
+    "scout"
+   ],
+   "project_types": [
+    "greenfield"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "high",
+   "summary": "Deep modules and seams from day one."
+  },
+  {
+   "id": "pocock.improve-codebase-architecture",
+   "name": "improve-codebase-architecture",
+   "source": "github.com/mattpocock/skills",
+   "install": "npx -y skills@latest add mattpocock/skills -s improve-codebase-architecture -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "C",
+    "A"
+   ],
+   "roles": [
+    "scout",
+    "planificador"
+   ],
+   "project_types": [
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "high",
+   "summary": "Map and improve what already exists."
+  },
+  {
+   "id": "pocock.code-review",
+   "name": "code-review",
+   "source": "github.com/mattpocock/skills",
+   "install": "npx -y skills@latest add mattpocock/skills -s code-review -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "V"
+   ],
+   "roles": [
+    "verificador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "med",
+   "summary": "Review the diff against the story."
+  },
+  {
+   "id": "superpowers.test-driven-development",
+   "name": "test-driven-development",
+   "source": "github.com/obra/superpowers",
+   "install": "npx -y skills@latest add obra/superpowers -s test-driven-development -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D"
+   ],
+   "roles": [
+    "worker"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "low",
+   "token_tier": "med",
+   "summary": "Red-green-refactor.",
+   "adapt": "Never delete others' code without a backup commit; the acceptance exam is untouchable."
+  },
+  {
+   "id": "superpowers.systematic-debugging",
+   "name": "systematic-debugging",
+   "source": "github.com/obra/superpowers",
+   "install": "npx -y skills@latest add obra/superpowers -s systematic-debugging -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D",
+    "V"
+   ],
+   "roles": [
+    "worker"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "med",
+   "summary": "Root cause before fixing."
+  },
+  {
+   "id": "superpowers.verification-before-completion",
+   "name": "verification-before-completion",
+   "source": "github.com/obra/superpowers",
+   "install": "npx -y skills@latest add obra/superpowers -s verification-before-completion -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D",
+    "V"
+   ],
+   "roles": [
+    "worker",
+    "orquestador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "low",
+   "summary": "Evidence before claims.",
+   "adapt": "The final evidence is the receipt of `orq slice verificar`."
+  },
+  {
+   "id": "superpowers.requesting-code-review",
+   "name": "requesting-code-review",
+   "source": "github.com/obra/superpowers",
+   "install": "npx -y skills@latest add obra/superpowers -s requesting-code-review -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "V"
+   ],
+   "roles": [
+    "orquestador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "high",
+   "token_tier": "low",
+   "summary": "Ask for review; critical issues block."
+  },
+  {
+   "id": "superpowers.receiving-code-review",
+   "name": "receiving-code-review",
+   "source": "github.com/obra/superpowers",
+   "install": "npx -y skills@latest add obra/superpowers -s receiving-code-review -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D"
+   ],
+   "roles": [
+    "worker"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "high",
+   "token_tier": "low",
+   "summary": "Act on review with technical rigor."
+  },
+  {
+   "id": "vercel.vercel-react-best-practices",
+   "name": "vercel-react-best-practices",
+   "source": "github.com/vercel-labs/agent-skills",
+   "install": "npx -y skills@latest add vercel-labs/agent-skills -s vercel-react-best-practices -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D",
+    "V"
+   ],
+   "roles": [
+    "worker",
+    "verificador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "react"
+   ],
+   "min_criticality": "low",
+   "token_tier": "med",
+   "summary": "React and Next.js practices."
+  },
+  {
+   "id": "vercel.vercel-composition-patterns",
+   "name": "vercel-composition-patterns",
+   "source": "github.com/vercel-labs/agent-skills",
+   "install": "npx -y skills@latest add vercel-labs/agent-skills -s vercel-composition-patterns -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D"
+   ],
+   "roles": [
+    "worker"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "react"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "med",
+   "summary": "React composition patterns."
+  },
+  {
+   "id": "vercel.vercel-react-native-skills",
+   "name": "vercel-react-native-skills",
+   "source": "github.com/vercel-labs/agent-skills",
+   "install": "npx -y skills@latest add vercel-labs/agent-skills -s vercel-react-native-skills -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D"
+   ],
+   "roles": [
+    "worker"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "react-native"
+   ],
+   "min_criticality": "low",
+   "token_tier": "med",
+   "summary": "React Native and Expo."
+  },
+  {
+   "id": "vercel.web-design-guidelines",
+   "name": "web-design-guidelines",
+   "source": "github.com/vercel-labs/agent-skills",
+   "install": "npx -y skills@latest add vercel-labs/agent-skills -s web-design-guidelines -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "V"
+   ],
+   "roles": [
+    "verificador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "web",
+    "react"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "med",
+   "summary": "UI and accessibility review."
+  },
+  {
+   "id": "anthropic.frontend-design",
+   "name": "frontend-design",
+   "source": "github.com/anthropics/skills",
+   "install": "npx -y skills@latest add anthropics/skills -s frontend-design -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D"
+   ],
+   "roles": [
+    "worker"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "web",
+    "react"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "med",
+   "summary": "Web interface design."
+  },
+  {
+   "id": "anthropic.claude-api",
+   "name": "claude-api",
+   "source": "github.com/anthropics/skills",
+   "install": "npx -y skills@latest add anthropics/skills -s claude-api -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D"
+   ],
+   "roles": [
+    "worker"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "claude-sdk"
+   ],
+   "min_criticality": "low",
+   "token_tier": "med",
+   "summary": "Code that calls Claude."
+  },
+  {
+   "id": "anthropic.mcp-builder",
+   "name": "mcp-builder",
+   "source": "github.com/anthropics/skills",
+   "install": "npx -y skills@latest add anthropics/skills -s mcp-builder -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D"
+   ],
+   "roles": [
+    "worker"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "mcp"
+   ],
+   "min_criticality": "low",
+   "token_tier": "med",
+   "summary": "MCP servers."
+  },
+  {
+   "id": "playwright.playwright-cli",
+   "name": "playwright-cli",
+   "source": "github.com/microsoft/playwright-cli",
+   "install": "npx -y skills@latest add microsoft/playwright-cli -s playwright-cli -a claude-code -y",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D",
+    "V"
+   ],
+   "roles": [
+    "worker",
+    "verificador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "web",
+    "react"
+   ],
+   "min_criticality": "medium",
+   "token_tier": "med",
+   "summary": "End-to-end checks of the real web product.",
+   "adapt": "Wait on state assertions (expect/locator), never networkidle or sleeps."
+  },
+  {
+   "id": "pstack.typescript-best-practices",
+   "name": "typescript-best-practices",
+   "source": "github.com/cursor/plugins/pstack",
+   "install": "copy:vendor/typescript-best-practices",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D",
+    "V"
+   ],
+   "roles": [
+    "worker",
+    "verificador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "typescript"
+   ],
+   "min_criticality": "low",
+   "token_tier": "med",
+   "summary": "TypeScript best practices: strict types, no any, impossible states unrepresentable.",
+   "adapt": "No npx path published: vendor the SKILL.md into .orq/vendor/typescript-best-practices/ and `orq skills vet` it before first use."
+  },
+  {
+   "id": "community.python-best-practices",
+   "name": "python-best-practices",
+   "source": "github.com/wshobson/agents",
+   "install": "copy:vendor/python-best-practices",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D",
+    "V"
+   ],
+   "roles": [
+    "worker",
+    "verificador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "python"
+   ],
+   "min_criticality": "low",
+   "token_tier": "med",
+   "summary": "Python best practices: typing, pytest, packaging with pyproject.",
+   "adapt": "Source to confirm: vendor the SKILL.md into .orq/vendor/python-best-practices/ and `orq skills vet` it before first use."
+  },
+  {
+   "id": "orq.orq-board",
+   "name": "orq-board",
+   "source": "local:orq",
+   "install": "copy:orq-board",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "*"
+   ],
+   "roles": [
+    "atena"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "low",
+   "token_tier": "low",
+   "summary": "Explain `orq board` to the Owner."
+  },
+  {
+   "id": "orq.orq-supervisor",
+   "name": "orq-supervisor",
+   "source": "local:orq",
+   "install": "copy:orq-supervisor",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "D",
+    "V"
+   ],
+   "roles": [
+    "orquestador"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "low",
+   "token_tier": "low",
+   "summary": "Supervise workers with `orq worker list`."
+  },
+  {
+   "id": "orq.orq-stopper",
+   "name": "orq-stopper",
+   "source": "local:orq",
+   "install": "copy:orq-stopper",
+   "ref": "",
+   "sha256": "",
+   "phases": [
+    "*"
+   ],
+   "roles": [
+    "atena",
+    "orquestador",
+    "planificador",
+    "worker"
+   ],
+   "project_types": [
+    "greenfield",
+    "brownfield",
+    "legacy"
+   ],
+   "stacks": [
+    "*"
+   ],
+   "min_criticality": "low",
+   "token_tier": "low",
+   "summary": "Ask the Owner for what only a human can give."
+  },
+  {
+   "id": "superpowers.using-superpowers",
+   "name": "using-superpowers",
+   "source": "github.com/obra/superpowers",
+   "never": "Turns every session into an orchestrator and burns tokens each turn; here only one coordinates."
+  },
+  {
+   "id": "superpowers.using-git-worktrees",
+   "name": "using-git-worktrees",
+   "source": "github.com/obra/superpowers",
+   "never": "orq creates and closes worktrees."
+  },
+  {
+   "id": "superpowers.finishing-a-development-branch",
+   "name": "finishing-a-development-branch",
+   "source": "github.com/obra/superpowers",
+   "never": "Merge and cleanup is `orq slice cerrar`, done by code."
+  },
+  {
+   "id": "superpowers.brainstorming",
+   "name": "brainstorming",
+   "source": "github.com/obra/superpowers",
+   "never": "The interview belongs to Atena (grilling)."
+  },
+  {
+   "id": "superpowers.subagent-driven-development",
+   "name": "subagent-driven-development",
+   "source": "github.com/obra/superpowers",
+   "never": "Agents spawning agents bypass orq admission (H-02)."
+  },
+  {
+   "id": "superpowers.dispatching-parallel-agents",
+   "name": "dispatching-parallel-agents",
+   "source": "github.com/obra/superpowers",
+   "never": "Agents spawning agents bypass orq admission (H-02)."
+  },
+  {
+   "id": "anthropic.webapp-testing",
+   "name": "webapp-testing",
+   "source": "github.com/anthropics/skills",
+   "never": "Waits on networkidle; we test with playwright-cli and assertions."
+  },
+  {
+   "id": "pocock.grill-me",
+   "name": "grill-me",
+   "source": "github.com/mattpocock/skills",
+   "never": "Replaced by grilling / grill-with-docs."
+  },
+  {
+   "id": "pocock.tdd",
+   "name": "tdd",
+   "source": "github.com/mattpocock/skills",
+   "never": "Duplicates test-driven-development."
+  },
+  {
+   "id": "pocock.handoff",
+   "name": "handoff",
+   "source": "github.com/mattpocock/skills",
+   "never": "Revival is `orq relevo` / `orq revive`."
+  },
+  {
+   "id": "pstack.swarm",
+   "name": "swarm",
+   "source": "github.com/cursor/plugins/pstack",
+   "never": "Agents spawning agents bypass orq admission (H-02)."
+  },
+  {
+   "id": "pstack.arena",
+   "name": "arena",
+   "source": "github.com/cursor/plugins/pstack",
+   "never": "Multi-agent spawning bypasses orq admission (H-02)."
+  },
+  {
+   "id": "pstack.poteto-mode",
+   "name": "poteto-mode",
+   "source": "github.com/cursor/plugins/pstack",
+   "never": "Spawns agents on its own; bypasses orq admission (H-02)."
+  },
+  {
+   "id": "pstack.worktree-cleanup",
+   "name": "worktree-cleanup",
+   "source": "github.com/cursor/plugins/pstack",
+   "never": "Uses rm -rf; worktree cleanup is `orq gc` (never --force)."
+  },
+  {
+   "id": "gstack.ship",
+   "name": "ship",
+   "source": "github.com/garrytan/gstack",
+   "never": "Pushes and ships; nothing ships without the Owner."
+  },
+  {
+   "id": "gstack.land-and-deploy",
+   "name": "land-and-deploy",
+   "source": "github.com/garrytan/gstack",
+   "never": "Merges and deploys; nothing ships without the Owner."
+  },
+  {
+   "id": "gstack.canary",
+   "name": "canary",
+   "source": "github.com/garrytan/gstack",
+   "never": "Production deploy monitoring is out of the agents' hands."
+  }
+ ]
+}
