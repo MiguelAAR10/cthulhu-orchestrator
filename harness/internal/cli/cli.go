@@ -53,6 +53,7 @@ const usageES = `orq ` + Version + ` · harness de orquestador-2
   orq msg leer [-n 10]
   orq mem add --imp I --cat C [--fuente F] [--slice S-NN] "texto ≤200"
   orq mem ver [--cat C]          la memoria etiquetada, lo crítico primero
+  orq mem confirmar mNN          el Owner firma una línea sin verificar que revisó
   orq mem compactar              Haiku resume lo no crítico; se valida antes de guardar
   orq relevo [--solo-archivo] ROL   escribe .orq/relevo-ROL.md y abre una sesión fresca
   orq slice abrir NN --titulo T --test RUTA --cmd "CMD" [--bundle a,b] [--sano "CMD"] [--alcance rutas] [--sin-scouts "motivo"]

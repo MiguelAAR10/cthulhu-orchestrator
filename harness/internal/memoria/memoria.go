@@ -9,11 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"orq/internal/identidad"
 	"orq/internal/lang"
 	"orq/internal/orqdir"
 )
@@ -48,7 +50,33 @@ type Item struct {
 	Vence     string `json:"vence,omitempty"`     // S-NN: deja de valer al cerrarse ese slice
 	// Por es el rol validado de quien escribió la línea (no el que dice --fuente); solo owner|atena aprueban.
 	Por string `json:"por,omitempty"`
+	// Firma: HMAC con el token del Owner. La exigen las líneas decisivas (ver ExigeFirma).
+	Firma string `json:"firma,omitempty"`
+	// SinVerificar lo calcula Load: la línea se presenta como decisiva y su firma no vale.
+	SinVerificar bool `json:"-"`
 }
+
+// ExigeFirma: lo que se presenta como dicho o confirmado por el Owner, Atena o el filtro.
+func (it Item) ExigeFirma() bool {
+	return confirma(it.Fuente) || confirma(it.Por) || it.Conf == "confirmado" || it.Imp == "critica"
+}
+
+// firmaOK comprueba la firma contra el proyecto de path.
+func (it Item) firmaOK(path string) bool {
+	f := it.Firma
+	it.Firma, it.SinVerificar = "", false
+	return identidad.RegistroValido("mem", identidad.Alcance(filepath.Dir(path)), it, f)
+}
+
+// Firmado devuelve el ítem con su firma para el proyecto de path. El llamador ya comprobó la autoridad.
+func (it Item) Firmado(path string) Item {
+	it.Firma, it.SinVerificar = "", false
+	it.Firma = identidad.FirmarRegistro("mem", identidad.Alcance(filepath.Dir(path)), it)
+	return it
+}
+
+// Marca es la etiqueta visible de una línea sin firma válida.
+func Marca() string { return lang.T("UNVERIFIED", "SIN VERIFICAR") }
 
 // TipoEfectivo da tipo también a líneas viejas: una decisión es decisión; lo inferido, hipótesis.
 func (it Item) TipoEfectivo() string {
@@ -157,6 +185,7 @@ func Load(path string) ([]Item, error) {
 		if err := json.Unmarshal([]byte(line), &it); err != nil {
 			return nil, fmt.Errorf("%s:%d: %v", path, n, err)
 		}
+		it.SinVerificar = it.ExigeFirma() && !it.firmaOK(path)
 		out = append(out, it)
 	}
 	return out, sc.Err()
@@ -205,6 +234,10 @@ func Add(path string, it Item, now time.Time) (Item, int, error) {
 	}
 	it.TS = now.UTC().Truncate(time.Second)
 	it.ID = nextID(items)
+	// Solo firma una sesión autorizada (token y proceso confiable); si no, la línea queda sin verificar.
+	if confirma(it.Fuente) && identidad.Autorizado() == nil {
+		it = it.Firmado(path)
+	}
 	items = append(items, it)
 	return it, len(items), Save(path, items)
 }
@@ -220,14 +253,19 @@ func nextID(items []Item) string {
 	return fmt.Sprintf("m%d", max+1)
 }
 
-func rank(imp string) int { return slices.Index(Imps, imp) }
+func rank(it Item) int {
+	if it.SinVerificar {
+		return len(Imps) // nunca por delante de lo verificado
+	}
+	return slices.Index(Imps, it.Imp)
+}
 
 // Sorted ordena por importancia y, dentro de cada nivel, lo más reciente primero.
 func Sorted(items []Item) []Item {
 	out := slices.Clone(items)
 	sort.SliceStable(out, func(i, j int) bool {
-		if rank(out[i].Imp) != rank(out[j].Imp) {
-			return rank(out[i].Imp) < rank(out[j].Imp)
+		if rank(out[i]) != rank(out[j]) {
+			return rank(out[i]) < rank(out[j])
 		}
 		return out[i].TS.After(out[j].TS)
 	})
@@ -236,9 +274,15 @@ func Sorted(items []Item) []Item {
 
 // Vigentes quita los hechos que otro hecho reemplazó.
 func Vigentes(items []Item) []Item {
+	// Una línea decisiva solo la deja obsoleta otra con firma válida.
+	decisiva, verificada := map[string]bool{}, map[string]bool{}
+	for _, it := range items {
+		decisiva[it.ID] = it.ExigeFirma()
+		verificada[it.ID] = it.ExigeFirma() && !it.SinVerificar
+	}
 	obsoletos := map[string]bool{}
 	for _, it := range items {
-		if it.Reemplaza != "" {
+		if it.Reemplaza != "" && (!decisiva[it.Reemplaza] || verificada[it.ID]) {
 			obsoletos[it.Reemplaza] = true
 		}
 	}
@@ -268,7 +312,7 @@ func Presupuesto(items []Item, activo string, n int) ([]Item, int) {
 	orden := Sorted(Vigentes(items))
 	grupo := func(it Item) int {
 		switch {
-		case it.Imp == "critica":
+		case it.Imp == "critica" && !it.SinVerificar:
 			return 0
 		case activo != "" && it.Slice == activo:
 			return 1
@@ -293,6 +337,9 @@ func Render(items []Item, filtroCat string) string {
 		if it.Slice != "" {
 			s = " · " + it.Slice
 		}
+		if it.SinVerificar {
+			s += " · " + Marca()
+		}
 		if t := it.TipoEfectivo(); t == "hipotesis" {
 			s += " · HIPÓTESIS"
 		} else if it.Conf == "inferido" {
@@ -314,7 +361,9 @@ type Summarizer func(rest []Item, max int) ([]Item, error)
 func Compact(items []Item, tope int, sum Summarizer, now time.Time) ([]Item, error) {
 	items = Vigentes(items)
 	for i := range items {
-		items[i].Reemplaza = ""
+		if items[i].Firma == "" { // la firma cubre el campo; apuntar a un id ya ido no oculta nada
+			items[i].Reemplaza = ""
+		}
 	}
 	if len(items) <= tope {
 		return items, nil
@@ -360,4 +409,26 @@ func Compact(items []Item, tope int, sum Summarizer, now time.Time) ([]Item, err
 		}
 	}
 	return res, nil
+}
+
+// Confirmar firma una línea que el Owner revisó: la migración de lo que no tiene firma válida.
+func Confirmar(path, id, por string) (Item, error) {
+	soltar, err := orqdir.Candado(path)
+	if err != nil {
+		return Item{}, err
+	}
+	defer soltar()
+	items, err := Load(path)
+	if err != nil {
+		return Item{}, err
+	}
+	for i := range items {
+		if items[i].ID != id {
+			continue
+		}
+		items[i].Por = por
+		items[i] = items[i].Firmado(path)
+		return items[i], Save(path, items)
+	}
+	return Item{}, fmt.Errorf(lang.T("%s does not exist", "no existe %s"), id)
 }

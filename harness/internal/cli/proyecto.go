@@ -159,6 +159,23 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprint(stdout, memoria.Render(items, *cat))
 		return 0
+	case "confirm", "confirmar":
+		if len(args) != 2 {
+			fmt.Fprint(stderr, usageText())
+			return 1
+		}
+		r := p.rolPrivilegiado()
+		if r != "owner" && r != "atena" {
+			fmt.Fprintf(stderr, "orq mem: %s\n", fmt.Sprintf(lang.T("only the Owner or Atena confirm a record (role %q)", "solo el Owner o Atena confirman un registro (rol %q)"), r))
+			return 1
+		}
+		it, err := memoria.Confirmar(p.memPath(), args[1], r)
+		if err != nil {
+			fmt.Fprintln(stderr, "orq mem:", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "%s: %s\n", it.ID, lang.T("signed by you, now verified", "firmada por ti, ya verificada"))
+		return 0
 	case "compactar":
 		// Con el candado tomado, nadie agrega líneas que el resumen borraría.
 		soltar, err := orqdir.Candado(p.memPath())
@@ -1060,7 +1077,7 @@ func (p proyecto) decisionRegistrada(aprobado string) (string, error) {
 		id := f[0]
 		if items, _ := memoria.Load(p.memPath()); strings.HasPrefix(id, "m") {
 			for _, it := range items {
-				if it.ID == id && (it.Fuente == "owner" || it.Fuente == "atena") && (it.Por == "owner" || it.Por == "atena") {
+				if it.ID == id && !it.SinVerificar && (it.Fuente == "owner" || it.Fuente == "atena") && (it.Por == "owner" || it.Por == "atena") {
 					return id, nil
 				}
 			}

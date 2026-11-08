@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"orq/internal/config"
+	"orq/internal/memoria"
 	"orq/internal/plan"
 	"orq/internal/slice"
 	"orq/internal/stops"
@@ -101,14 +102,25 @@ type Velocity struct {
 }
 
 type Board struct {
-	Schema      string    `json:"schema"`
-	GeneratedAt time.Time `json:"generated_at"`
-	Overall     Overall   `json:"overall"`
-	Stoppers    []Stopper `json:"stoppers"`
-	Slices      []Slice   `json:"slices"`
-	Workers     []Worker  `json:"workers"`
-	Velocity    Velocity  `json:"velocity"`
+	Schema      string     `json:"schema"`
+	GeneratedAt time.Time  `json:"generated_at"`
+	Overall     Overall    `json:"overall"`
+	Stoppers    []Stopper  `json:"stoppers"`
+	Slices      []Slice    `json:"slices"`
+	Workers     []Worker   `json:"workers"`
+	Velocity    Velocity   `json:"velocity"`
+	Unverified  Unverified `json:"unverified"`
 }
+
+// Unverified cuenta los registros decisivos cuya firma no vale: se ignoran o se muestran marcados.
+type Unverified struct {
+	Memory   int  `json:"memory"`
+	Stops    int  `json:"stops"`
+	Tasks    int  `json:"tasks"`
+	Autonomy bool `json:"autonomy"`
+}
+
+func (u Unverified) Any() bool { return u.Memory+u.Stops+u.Tasks > 0 || u.Autonomy }
 
 var (
 	colorRank = map[string]int{"red": 0, "amber": 1, "blue": 2, "grey": 3, "green": 4}
@@ -150,6 +162,14 @@ func Build(orqDir string, now time.Time) (Board, error) {
 		}
 		return x.raised.Compare(y.raised)
 	})
+
+	if items, err := memoria.Load(filepath.Join(orqDir, "memoria.jsonl")); err == nil {
+		for _, it := range items {
+			if it.SinVerificar {
+				b.Unverified.Memory++
+			}
+		}
+	}
 
 	// Workers y su veredicto vivo.
 	ws, _ := workers.List(orqDir)
@@ -417,6 +437,13 @@ func rechazados(o Overall) string {
 	return fmt.Sprintf(", %d rejected and counted as 0%%", o.Rejected)
 }
 
+// avisoFirmas: lo que el Owner debe saber de los registros decisivos sin firma válida.
+func avisoFirmas(u Unverified) string {
+	return fmt.Sprintf(lang.T("WARNING · records without a valid signature, not trusted: %d memory, %d stoppers, %d tasks, autonomy %v (edited by hand or from before signing; see docs/v2/specs/identity.md)",
+		"AVISO · registros sin firma válida, no se confía en ellos: %d de memoria, %d stoppers, %d tareas, autonomía %v (editados a mano o anteriores a la firma; ver docs/v2/specs/identity.md)"),
+		u.Memory, u.Stops, u.Tasks, u.Autonomy)
+}
+
 // Text es el tablero para la terminal; color solo si se pide (TTY y sin NO_COLOR).
 func Text(b Board, color bool) string {
 	var s strings.Builder
@@ -438,6 +465,9 @@ func Text(b Board, color bool) string {
 		}
 	} else {
 		s.WriteString("STOPPERS · none, nothing waits on you\n")
+	}
+	if u := b.Unverified; u.Any() {
+		fmt.Fprintf(&s, "\n%s\n", paint("amber", avisoFirmas(u)))
 	}
 	fmt.Fprintf(&s, "\nOVERALL %s %s (%d of %d slices measured%s)\n", unknown(b.Overall.Pct, "%"), bar(b.Overall.Pct), b.Overall.Measured, b.Overall.Total, rechazados(b.Overall))
 	s.WriteString("\nSLICES\n")
@@ -535,6 +565,9 @@ table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px
 			return `<p>unknown</p>`
 		}
 		return fmt.Sprintf(`<div class="bar"><i style="width:%d%%"></i></div>%d%%`, *p, *p)
+	}
+	if u := b.Unverified; u.Any() {
+		fmt.Fprintf(&s, `<div class="card" style="border-color:%s">%s</div>`, cssColor["amber"], esc(avisoFirmas(u)))
 	}
 	fmt.Fprintf(&s, "<h2>Overall</h2>%s <small>(%d of %d slices measured%s)</small>", pct(b.Overall.Pct), b.Overall.Measured, b.Overall.Total, rechazados(b.Overall))
 	s.WriteString("<h2>What we are building</h2>")

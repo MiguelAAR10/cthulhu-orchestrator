@@ -551,11 +551,15 @@ func runHandoff(args []string, stdout, stderr io.Writer) int {
 	items, _ := memoria.Load(p.memPath())
 	var decs []string
 	for _, it := range items {
+		marca := ""
+		if it.SinVerificar {
+			marca = " [" + memoria.Marca() + "]"
+		}
 		if it.Cat == "requisito" && in.Goal == "" {
-			in.Goal = it.Texto
+			in.Goal = it.Texto + marca
 		}
 		if it.TipoEfectivo() == "decision" {
-			decs = append(decs, fmt.Sprintf("%s %s (%s): %s", it.TS.Format("2006-01-02"), it.ID, it.Fuente, it.Texto))
+			decs = append(decs, fmt.Sprintf("%s %s (%s): %s%s", it.TS.Format("2006-01-02"), it.ID, it.Fuente, it.Texto, marca))
 		}
 	}
 	if len(decs) > 5 {

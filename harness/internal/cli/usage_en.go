@@ -28,7 +28,7 @@ Talking and remembering
   orq up                         from Atena's pane: creates the Orchestrator session
   orq msg send --to ROLE --type story|question|answer|status|closing [--attempt S-NN/aK] [--ref ID] [--key K] "text"
   orq msg read [-n 10] | reconcile [--resend ID]
-  orq mem add --imp I --cat C [--source F] [--slice S-NN] "text ≤200" | show [--cat C] | compact
+  orq mem add --imp I --cat C [--source F] [--slice S-NN] "text ≤200" | show [--cat C] | compact | confirm mNN
   orq handoff-note [--file-only] ROLE   writes .orq/relevo-ROLE.md and opens a fresh session (alias: relevo)
   orq learn [--global] show|add "lesson"|confirm ID|refute ID|promote ID
   orq align [--slice NN]         does the change still serve the story? exit 3 = ask Atena
