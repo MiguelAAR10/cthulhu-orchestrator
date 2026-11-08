@@ -4,11 +4,15 @@
 # relevo sin duplicar → cierre interrumpido de verdad en cada etapa y retomado.
 # Uso: validacion/e2e-v05.sh [carpeta-temporal]. No toca nada fuera de esa carpeta.
 set -u
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BASE="${1:-$(mktemp -d)}"
 mkdir -p "$BASE" && cd "$BASE" || exit 1
 export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID=""
 mkdir -p "$BASE/bin" && printf '#!/bin/sh\nexit 1\n' > "$BASE/bin/claude" && chmod +x "$BASE/bin/claude"
 export PATH="$BASE/bin:$PATH"   # el escriba no responde: todo debe funcionar igual
+# Siempre prueba el código de este repo, nunca un orq viejo del PATH (ORQ_BIN lo sobrescribe).
+if [ -n "${ORQ_BIN:-}" ]; then cp "$ORQ_BIN" "$BASE/bin/orq"; else (cd "$REPO/harness" && go build -o "$BASE/bin/orq" ./cmd/orq) || exit 1; fi
+[ "$(command -v orq)" = "$BASE/bin/orq" ] || { echo "orq no es el binario del repo"; exit 1; }
 pasa=0; falla=0
 ok() { if [ "$1" = "$2" ]; then pasa=$((pasa+1)); echo "  ✓ $3"; else falla=$((falla+1)); echo "  ✗ $3 (esperaba $2, salió $1)"; fi; }
 q() { orq "$@" >/tmp/orq-e2e.$$ 2>&1; echo $?; }
