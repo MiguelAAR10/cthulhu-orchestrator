@@ -58,9 +58,15 @@ Python does exactly that and checks that `mem add --source owner`, `autonomy`, `
 `session register` all fail and nothing is written.
 
 **Anchors** live in `~/.config/orq/sessions/<pid>-<start>.json` (0700 folder, next to the token, out of the
-repo and the worktrees; the gate already denies workers any mention of `.config/orq`). This deviates from
-the first proposal (`.orq/sessions/`) on purpose: inside the project a worker could plant an anchor for its
-own orphan. Dead anchors (pid gone or start time changed) are pruned on every registration. Anchors are created by:
+repo and the worktrees). This deviates from the first proposal (`.orq/sessions/`) on purpose: inside the
+project a worker could plant an anchor for its own orphan. **Each anchor is signed**: the file carries
+`mac = HMAC-SHA256(owner token, "pid|start|role")`, and `Anclas()` ignores any anchor whose MAC is missing
+or wrong (fail closed; `TestAnclaPlantadaSinHMAC`). Writing a JSON file into `sessions/` is therefore not
+enough: the forger also needs the token, and with the token rotated every old anchor stops counting.
+`Anclar` refuses when there is no token. For workers the gate also denies `Read/Grep/Glob/LS` **and**
+`Write/Edit/MultiEdit/NotebookEdit` on the orq config dir (`$XDG_CONFIG_HOME/orq`, `~/.config/orq`,
+`sessions/` included), any Bash command naming that dir, and glob/`find -name` patterns for tokens
+(`*.token`, `own?r.tok*`, `find / -name '*token*'`). Dead anchors (pid gone or start time changed) are pruned on every registration. Anchors are created by:
 
 - **first token creation** (`orq init` or `orq token` when no token exists): whoever creates the token is
   the Owner by definition; the parent process is anchored with role `owner`;
@@ -132,8 +138,12 @@ Unit tests anchor the test process in `TestMain`.
   - injecting into a process that already runs under the Owner's terminal or an anchor: a tmux/herdr
     server started by the Owner (`send-keys` to an Owner pane), an editor or language server, `ptrace` of
     an Owner process (same user, if `ptrace_scope` allows it);
-  - writing a forged anchor into `~/.config/orq/sessions` with a tool the gate does not parse (same user;
-    the same exposure as reading the token itself).
+  - a forged anchor now needs the token to sign it, so it reduces to the residual below: a process of the
+    same OS user that reads the token with a tool the gate does not parse can sign anchors too.
+
+  Remaining residual, in short: **same OS user** (token and `sessions/` are readable/writable by any
+  process of that user that the gate does not see), **a new pty** (rule 3), and **ptrace/injection** into an
+  Owner process. **Non-Linux** keeps only the token (see below).
 - **Bootstrap.** If the token file is missing, whoever creates it is trusted and anchored. An orphan that
   deletes the token and recreates it is anchored too. Deleting the token is the Owner's signal to rotate;
   check `~/.config/orq/sessions` after rotating.
