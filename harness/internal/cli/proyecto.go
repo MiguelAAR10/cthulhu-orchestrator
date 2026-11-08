@@ -114,7 +114,12 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if fs.Parse(args[1:]) != nil {
 			return 1
 		}
-		it, n, err := memoria.Add(p.memPath(), memoria.Item{Imp: *imp, Cat: *cat, Fuente: *fuente, Slice: *sl, Tipo: *tipo, Evidencia: *ev, Vence: *vence, Reemplaza: *reemplaza, Texto: texto(fs.Args(), stdin)}, time.Now())
+		por := p.rolPrivilegiado()
+		if err := fuentePermitida(*fuente, por); err != nil {
+			fmt.Fprintln(stderr, "orq mem:", err)
+			return 1
+		}
+		it, n, err := memoria.Add(p.memPath(), memoria.Item{Imp: *imp, Cat: *cat, Fuente: *fuente, Slice: *sl, Tipo: *tipo, Evidencia: *ev, Vence: *vence, Reemplaza: *reemplaza, Texto: texto(fs.Args(), stdin), Por: por}, time.Now())
 		if err != nil {
 			fmt.Fprintln(stderr, "orq mem:", err)
 			return 1
@@ -211,6 +216,10 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		if *de == "" {
 			*de = canal.RolDePane(ses, rn().Current())
+		}
+		if err := fuentePermitida(*de, p.rolPrivilegiado()); err != nil {
+			fmt.Fprintln(stderr, "orq msg:", err)
+			return 1
 		}
 		m := canal.Msg{TS: time.Now().UTC().Truncate(time.Second), De: *de, Para: *para, Tipo: *tipo, Texto: texto(fs.Args(), stdin), Ref: *ref, Clave: *clave}
 		var e *slice.Estado
@@ -987,8 +996,11 @@ func (p proyecto) cambioDeContrato(aprobado string, r slice.Repo, nn string) err
 	if wd, _ := os.Getwd(); gate.IsLinkedWorktree(wd) || gate.IsLinkedWorktree(p.root) {
 		return errors.New("desde un worktree de worker no se cambia el examen ni el alcance: lo pide el Orquestador")
 	}
-	if r := p.rolStop(); strings.HasPrefix(r, "worker") {
+	switch r := p.rolPrivilegiado(); {
+	case strings.HasPrefix(r, "worker"):
 		return errors.New("a worker cannot change the exam or scope (H-01, any autonomy mode): ask the Orchestrator")
+	case r != "owner" && r != "atena" && r != "orquestador" && r != "orchestrator":
+		return fmt.Errorf("cambiar el examen o el alcance exige ORQ_ROL=owner|atena|orquestador (rol actual %q)", r)
 	}
 	e, err := r.Load(nn)
 	if err != nil || e == nil {
@@ -1005,7 +1017,7 @@ func (p proyecto) decisionRegistrada(aprobado string) (string, error) {
 		id := f[0]
 		if items, _ := memoria.Load(p.memPath()); strings.HasPrefix(id, "m") {
 			for _, it := range items {
-				if it.ID == id && (it.Fuente == "owner" || it.Fuente == "atena") {
+				if it.ID == id && (it.Fuente == "owner" || it.Fuente == "atena") && (it.Por == "owner" || it.Por == "atena") {
 					return id, nil
 				}
 			}
@@ -1054,6 +1066,17 @@ func (p proyecto) decisionDelSlice(aprobado, id string, desde time.Time) error {
 		}
 	}
 	return fmt.Errorf("--aprobado %s no se encontró", ref)
+}
+
+// fuentePermitida: owner y atena solo los firma quien tiene ese rol validado (Atena registra al Owner).
+func fuentePermitida(fuente, rol string) error {
+	switch {
+	case fuente == "owner" && (rol == "owner" || rol == "atena"):
+	case fuente == "atena" && rol == "atena":
+	case fuente == "owner" || fuente == "atena":
+		return fmt.Errorf("--fuente %s exige ORQ_ROL=%s (rol actual %q)", fuente, fuente, rol)
+	}
+	return nil
 }
 
 // estrictoPorLimites: limits.json puede volver obligatorio el conteo en todos los slices.

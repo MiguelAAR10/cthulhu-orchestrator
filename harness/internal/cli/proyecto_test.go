@@ -57,6 +57,7 @@ func TestMensajeSeGuardaYSeEntregaAlRolCorrecto(t *testing.T) {
 
 func TestMemoriaPorLineaDeComandos(t *testing.T) {
 	t.Setenv("ORQ_ROOT", t.TempDir())
+	t.Setenv("ORQ_ROL", "owner")
 	if _, _, code := run(t, "mem", "add", "--imp", "critica", "--cat", "requisito", "--fuente", "owner", "el total incluye envío"); code != 0 {
 		t.Fatal("no guardó")
 	}
@@ -128,7 +129,7 @@ func TestAprobadoExigeDecisionRegistrada(t *testing.T) {
 	t.Setenv("ORQ_ROL", "")
 	os.MkdirAll(filepath.Join(root, ".orq"), 0o755)
 	memoria.Add(filepath.Join(root, ".orq", "memoria.jsonl"), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "worker", Texto: "yo me apruebo"}, time.Now())
-	memoria.Add(filepath.Join(root, ".orq", "memoria.jsonl"), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Texto: "sumar examen x"}, time.Now())
+	memoria.Add(filepath.Join(root, ".orq", "memoria.jsonl"), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Por: "atena", Texto: "sumar examen x"}, time.Now())
 	canal.Append(filepath.Join(root, ".orq", "canal.jsonl"), &canal.Msg{De: "orquestador", Para: "atena", Tipo: "pregunta", Texto: "¿apruebo?"})
 	canal.Append(filepath.Join(root, ".orq", "canal.jsonl"), &canal.Msg{De: "atena", Para: "orquestador", Tipo: "respuesta", Texto: "sí"})
 	p := proyecto{root, filepath.Join(root, ".orq")}
@@ -151,12 +152,12 @@ func TestAprobadoLigadoAlSlice(t *testing.T) {
 	mem, can := filepath.Join(root, ".orq", "memoria.jsonl"), filepath.Join(root, ".orq", "canal.jsonl")
 	desde := time.Date(2026, 11, 8, 10, 0, 0, 0, time.UTC)
 	antes, despues := desde.Add(-time.Hour), desde.Add(time.Hour)
-	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Texto: "S-07: sumar examen x"}, antes)         // m1 vieja
-	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Texto: "sumar examen de S-03"}, despues)       // m2 otro slice
-	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "atena", Texto: "sumar examen x"}, despues)             // m3 sin slice
-	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Texto: "S-07 suma examen x"}, despues)         // m4 bien por texto
-	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "atena", Slice: "S-07", Texto: "alcance api"}, despues) // m5 bien por campo
-	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Texto: "S-070 otra cosa"}, despues)            // m6 id parecido
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Por: "atena", Texto: "S-07: sumar examen x"}, antes)         // m1 vieja
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Por: "atena", Texto: "sumar examen de S-03"}, despues)       // m2 otro slice
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "atena", Por: "atena", Texto: "sumar examen x"}, despues)             // m3 sin slice
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Por: "atena", Texto: "S-07 suma examen x"}, despues)         // m4 bien por texto
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "atena", Por: "atena", Slice: "S-07", Texto: "alcance api"}, despues) // m5 bien por campo
+	memoria.Add(mem, memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Por: "atena", Texto: "S-070 otra cosa"}, despues)            // m6 id parecido
 	canal.Append(can, &canal.Msg{De: "atena", Para: "orquestador", Tipo: "respuesta", Texto: "sí para S-07", TS: antes})        // c1 vieja
 	canal.Append(can, &canal.Msg{De: "atena", Para: "orquestador", Tipo: "respuesta", Texto: "sí para S-07", TS: despues})      // c2 bien
 	p := proyecto{root, filepath.Join(root, ".orq")}

@@ -46,6 +46,16 @@ func (p proyecto) rolStop() string {
 	return "owner"
 }
 
+// rolPrivilegiado: el rol para acciones que cambian el contrato, la autonomía o resuelven stoppers.
+// Un worker sigue siendo worker; fuera de eso hace falta un rol explícito (ORQ_ROL o el panel
+// registrado). Sin rol devuelve "": el cwd del checkout principal nunca equivale a Owner.
+func (p proyecto) rolPrivilegiado() string {
+	if r := p.rolStop(); strings.HasPrefix(r, "worker") {
+		return r
+	}
+	return p.rolActual()
+}
+
 func nnDe(sliceID string) string { return strings.TrimPrefix(sliceID, "S-") }
 
 func listaCSV(s string) []string {
@@ -320,6 +330,7 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		cfg, _ := config.Load(p.dir)
+		rol := p.rolPrivilegiado()
 		if err := stops.CanResolve(rol, *s, cfg, *note); err != nil {
 			fmt.Fprintln(stderr, "orq stop:", err)
 			return 1
@@ -357,7 +368,7 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 			if r := []rune(txt); len(r) > memoria.MaxTexto {
 				txt = string(r[:memoria.MaxTexto-1]) + "…"
 			}
-			it := memoria.Item{Imp: "alta", Cat: "decision", Tipo: "decision", Fuente: fuente, Texto: txt, Slice: got.Slice, Evidencia: got.ID}
+			it := memoria.Item{Imp: "alta", Cat: "decision", Tipo: "decision", Fuente: fuente, Texto: txt, Slice: got.Slice, Evidencia: got.ID, Por: rol}
 			if _, _, err := memoria.Add(p.memPath(), it, now); err != nil {
 				fmt.Fprintln(stderr, "orq stop: decision not saved to memory:", err)
 			}
@@ -374,7 +385,7 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 		if fs.Parse(args[2:]) != nil {
 			return 1
 		}
-		s, err := stops.Cancel(path, args[1], rol, *note, now)
+		s, err := stops.Cancel(path, args[1], p.rolPrivilegiado(), *note, now)
 		if err != nil {
 			return secreto(err)
 		}
@@ -413,8 +424,8 @@ func runAutonomy(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	if r := p.rolStop(); r != "owner" && r != "atena" {
-		fmt.Fprintf(stderr, "orq autonomy: only the Owner (through Atena) changes autonomy; role %q cannot\n", r)
+	if r := p.rolPrivilegiado(); r != "owner" && r != "atena" {
+		fmt.Fprintf(stderr, "orq autonomy: only the Owner (through Atena) changes autonomy; role %q cannot (set ORQ_ROL=owner|atena)\n", r)
 		return 1
 	}
 	switch args[0] {

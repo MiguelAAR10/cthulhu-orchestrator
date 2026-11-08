@@ -45,6 +45,8 @@ type Item struct {
 	Tipo      string `json:"tipo,omitempty"`
 	Evidencia string `json:"evidencia,omitempty"` // recibo, commit, archivo:línea o id de mensaje
 	Vence     string `json:"vence,omitempty"`     // S-NN: deja de valer al cerrarse ese slice
+	// Por es el rol validado de quien escribió la línea (no el que dice --fuente); solo owner|atena aprueban.
+	Por string `json:"por,omitempty"`
 }
 
 // TipoEfectivo da tipo también a líneas viejas: una decisión es decisión; lo inferido, hipótesis.

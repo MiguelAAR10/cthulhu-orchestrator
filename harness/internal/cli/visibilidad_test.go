@@ -251,6 +251,7 @@ func TestAccWorkerBeatWatchDone(t *testing.T) {
 // worker-state acceptance 6.
 func TestAccHandoff(t *testing.T) {
 	root := proyectoVis(t)
+	t.Setenv("ORQ_ROL", "atena")
 	run(t, "mem", "add", "--imp", "alta", "--cat", "requisito", "--fuente", "owner", "Small shops take card payments online")
 	run(t, "stop", "raise", "--type", "api_key", "--severity", "blocking", "--slice", "S-04", "--tasks", "T2", "--text", "Need the Stripe test key in STRIPE_TEST_KEY")
 	if _, errs, code := run(t, "handoff"); code != 0 {
