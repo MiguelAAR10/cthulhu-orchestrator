@@ -78,6 +78,9 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 			if d, ok := workerBashRutas(cmd, p.Cwd); ok {
 				return d
 			}
+			if rmFuera(cmd, p.Cwd) {
+				return negadoRm()
+			}
 		}
 		p.ToolInput = map[string]any{"command": Normalizar(cmd)}
 	}
