@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"orq/internal/admision"
 	"orq/internal/limits"
-	"orq/internal/state"
 )
 
 type Payload struct {
@@ -34,6 +34,8 @@ type Env struct {
 	IsWorktree func(string) bool
 	// Bundle devuelve el paquete del examen del slice abierto (rutas relativas a la raíz), si lo hay.
 	Bundle func(cwd string) []string
+	// Worktrees cuenta los worktrees que orq registró en el proyecto de cwd (max_worktrees).
+	Worktrees func(cwd string) (int, error)
 }
 
 type Decision struct {
@@ -87,39 +89,17 @@ func isLaunch(p Payload) bool {
 	return false
 }
 
+// evaluateLaunch delega en admision, la misma puerta que usa `orq slice lanzar`.
 func evaluateLaunch(p Payload, l limits.Limits, env Env) Decision {
 	if p.AgentID != "" {
 		return deny("orq: un subagente no lanza workers. Devuelve el resultado al orquestador.")
 	}
-	if reason, halted := state.ReadHalt(env.StateDir); halted {
-		return deny("orq: HALT activo (%s). Libera espacio y luego `orq halt --clear`.", reason)
+	ae := admision.Env{DiskFreeGB: env.DiskFreeGB, Workers: env.Workers, Now: env.Now, StateDir: env.StateDir}
+	if env.Worktrees != nil {
+		ae.Worktrees = func() (int, error) { return env.Worktrees(p.Cwd) }
 	}
-	for path, min := range l.MinFreeGB {
-		free, err := env.DiskFreeGB(path)
-		if err != nil {
-			return deny("orq: no pude medir el disco en %s (%v). Sin dato no hay lanzamiento.", path, err)
-		}
-		if free < min {
-			return deny("orq: %s tiene %.0f GB libres y el mínimo es %.0f GB. Libera espacio antes de lanzar.", path, free, min)
-		}
-	}
-	snap, err := state.LoadSnapshot(env.StateDir)
-	if err != nil {
-		return deny("orq: falta la medición de scratch. Ejecuta `orq watch` y vuelve a intentar.")
-	}
-	age := env.Now().Sub(snap.TS)
-	if age > time.Duration(*l.StateMaxAgeHours*float64(time.Hour)) {
-		return deny("orq: la medición de scratch tiene %.0f h. Ejecuta `orq watch` y vuelve a intentar.", age.Hours())
-	}
-	if snap.ScratchGB > *l.Scratch.QuotaGB {
-		return deny("orq: scratch ocupa %.0f GB y la cuota es %.0f GB. Limpia snapshots antes de lanzar.", snap.ScratchGB, *l.Scratch.QuotaGB)
-	}
-	n, err := env.Workers()
-	if err != nil {
-		return deny("orq: no pude contar workers (%v). Sin dato no hay lanzamiento.", err)
-	}
-	if n >= *l.MaxWorkers {
-		return deny("orq: hay %d worker(s) vivos y el tope es %d. Cierra paneles antes de lanzar otro.", n, *l.MaxWorkers)
+	if err := admision.Evaluar(l, ae); err != nil {
+		return deny("%s.", err.Error())
 	}
 	return allow()
 }

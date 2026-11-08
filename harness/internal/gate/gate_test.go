@@ -29,6 +29,7 @@ type fakes struct {
 	workers int
 	now     time.Time
 	wt      bool
+	wtrees  int
 }
 
 func (f fakes) env(t *testing.T, stateDir string) Env {
@@ -38,6 +39,7 @@ func (f fakes) env(t *testing.T, stateDir string) Env {
 		Now:        func() time.Time { return f.now },
 		StateDir:   stateDir,
 		IsWorktree: func(string) bool { return f.wt },
+		Worktrees:  func(string) (int, error) { return f.wtrees, nil },
 	}
 }
 
@@ -88,6 +90,7 @@ func TestLaunchDecisions(t *testing.T) {
 		{"disco C bajo aunque raíz sobre", Payload{ToolName: "Agent"}, fakes{free: map[string]float64{"/": 400, "/mnt/c": 20}, now: now}, 5, now, "", false, "/mnt/c tiene 20 GB"},
 		{"medición vieja", Payload{ToolName: "Agent"}, ok, 5, now.Add(-30 * time.Hour), "", false, "30 h"},
 		{"scratch sobre cuota", Payload{ToolName: "Agent"}, ok, 25, now, "", false, "cuota"},
+		{"tope de worktrees (max_worktrees por defecto 12)", Payload{ToolName: "Agent"}, fakes{free: ok.free, wtrees: 12, now: now}, 5, now, "", false, "max_worktrees"},
 		{"tope de workers", Payload{ToolName: "Agent"}, fakes{free: ok.free, workers: 1, now: now}, 5, now, "", false, "tope es 1"},
 	}
 	for _, c := range cases {
