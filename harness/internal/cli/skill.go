@@ -59,8 +59,18 @@ func (p proyecto) forced() perfil.Forced {
 }
 
 // profile is the detected profile with the Owner's forced values on top.
+// Criticality comes from the single accessor (profile.json wins; config.json is legacy).
 func (p proyecto) profile() (perfil.Profile, []string) {
-	return perfil.ApplyForced(perfil.DetectProfile(p.root), p.forced())
+	f := p.forced()
+	crit, note := perfil.Criticality(p.dir)
+	if crit != "" {
+		f["criticality"] = crit
+	}
+	pr, warn := perfil.ApplyForced(perfil.DetectProfile(p.root), f)
+	if note != "" {
+		warn = append(warn, note)
+	}
+	return pr, warn
 }
 
 func (p proyecto) catalog() perfil.Catalog {

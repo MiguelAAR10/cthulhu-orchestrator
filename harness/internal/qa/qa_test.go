@@ -149,3 +149,24 @@ func TestConfigTolerante(t *testing.T) {
 		t.Fatalf("valor raro → medium: %q", c.Crit())
 	}
 }
+
+func TestProfileCriticalityWins(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"criticality":"high"}`), 0o644)
+	os.WriteFile(filepath.Join(dir, "profile.json"), []byte(`{"criticality":"low"}`), 0o644)
+	c := LoadConfig(dir)
+	if c.Crit() != "low" {
+		t.Fatalf("profile.json gana: %q", c.Crit())
+	}
+	if err := PuedeCerrar(dir, "01", c); err != nil {
+		t.Fatalf("criticality=low no exige recibo: %v", err)
+	}
+	os.WriteFile(filepath.Join(dir, "profile.json"), []byte(`{"criticality":"trivial"}`), 0o644)
+	if c := LoadConfig(dir); c.Crit() != "low" {
+		t.Fatalf("trivial cuenta como low: %q", c.Crit())
+	}
+	os.Remove(filepath.Join(dir, "profile.json"))
+	if c := LoadConfig(dir); c.Crit() != "high" || c.Note == "" {
+		t.Fatalf("config.json solo como legado con nota: %+v", c)
+	}
+}

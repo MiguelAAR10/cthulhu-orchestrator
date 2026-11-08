@@ -731,7 +731,11 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		}
 		// Rigor proporcional: desde la criticidad configurada, aceptar exige un recibo QA verde.
 		if e, err := r.Load(nn); *ok && err == nil && e != nil {
-			if err := qa.PuedeCerrar(p.dir, e.NN, qa.LoadConfig(p.dir)); err != nil {
+			cfg := qa.LoadConfig(p.dir)
+			if cfg.Note != "" {
+				fmt.Fprintln(stderr, "warning:", cfg.Note)
+			}
+			if err := qa.PuedeCerrar(p.dir, e.NN, cfg); err != nil {
 				fmt.Fprintln(stderr, "orq slice:", err)
 				return 1
 			}

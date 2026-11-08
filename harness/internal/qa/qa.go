@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"orq/internal/perfil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,7 +52,7 @@ var niveles = map[string]int{"low": 0, "medium": 1, "high": 2}
 // normalizar acepta sinónimos; lo desconocido es medium.
 func normalizar(c string) string {
 	switch strings.ToLower(strings.TrimSpace(c)) {
-	case "low", "baja", "small", "prototype":
+	case "low", "trivial", "baja", "small", "prototype":
 		return "low"
 	case "high", "alta", "large", "critical", "production-critical":
 		return "high"
@@ -71,15 +72,17 @@ type Layer struct {
 
 type Config struct {
 	Criticality string  `json:"-"`
+	Note        string  `json:"-"` // aviso de deprecación si la criticidad vino de config.json
 	Layers      []Layer `json:"layers"`
 	RequireFrom string  `json:"require_receipt_from,omitempty"` // desde qué criticidad se exige recibo (medium)
 }
 
 func (c Config) Crit() string { return normalizar(c.Criticality) }
 
-// LoadConfig lee .orq/config.json con tolerancia: criticality en raíz o en project, qa opcional.
+// LoadConfig lee la pirámide de .orq/config.json; la criticidad viene de perfil.Criticality (profile.json gana).
 func LoadConfig(orqDir string) Config {
 	var c Config
+	c.Criticality, c.Note = perfil.Criticality(orqDir)
 	raw, err := os.ReadFile(filepath.Join(orqDir, "config.json"))
 	if err != nil {
 		return c
@@ -87,16 +90,6 @@ func LoadConfig(orqDir string) Config {
 	var m map[string]json.RawMessage
 	if json.Unmarshal(raw, &m) != nil {
 		return c
-	}
-	var s string
-	if json.Unmarshal(m["criticality"], &s) == nil {
-		c.Criticality = s
-	}
-	var p struct {
-		Criticality string `json:"criticality"`
-	}
-	if json.Unmarshal(m["project"], &p) == nil && p.Criticality != "" {
-		c.Criticality = p.Criticality
 	}
 	var q Config
 	if json.Unmarshal(m["qa"], &q) == nil {

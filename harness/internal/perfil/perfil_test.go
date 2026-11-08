@@ -94,3 +94,18 @@ func TestVerificarDetectaFaltaDepCambioYNunca(t *testing.T) {
 		t.Fatalf("%+v", ps)
 	}
 }
+
+func TestCriticalityAccessor(t *testing.T) {
+	dir := t.TempDir()
+	if v, _ := Criticality(dir); v != "" {
+		t.Fatalf("sin nada: %q", v)
+	}
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"project":{"criticality":"high"}}`), 0o644)
+	if v, note := Criticality(dir); v != "high" || note == "" {
+		t.Fatalf("legado: %q %q", v, note)
+	}
+	os.WriteFile(filepath.Join(dir, "profile.json"), []byte(`{"criticality":"low"}`), 0o644)
+	if v, note := Criticality(dir); v != "low" || note != "" {
+		t.Fatalf("profile gana: %q %q", v, note)
+	}
+}

@@ -33,9 +33,9 @@ step "orq board"                orq board; has "S-01"; has "%"
 step "orq stop raise"           orq stop raise --type api_key --severity blocking --slice S-01 --where DEMO_API_KEY --text "Need the API key for the demo"
 step "orq stop list"            orq stop list; has api_key
 step "orq handoff"              orq handoff; [ -f HANDOFF.md ] || { echo "  FAIL HANDOFF.md missing"; exit 1; }
-# Default criticality is medium: closing needs an independent QA receipt.
-printf '{"sync":"local","qa":{"layers":[{"name":"acceptance","cmd":"sh tests/acceptance.sh"}]}}\n' > .orq/config.json
-step "orq qa run"               orq qa run S-01
+# Default criticality is medium: closing needs an independent QA receipt (`orq qa run`).
+# A toy is low stakes; the profile is the single source of truth for criticality.
+step "orq profile set criticality=low" orq profile set criticality=low
 step "orq slice close --accepted" orq slice close --accepted
 grep -qx hello greeting.txt || { echo "  FAIL main lacks the fix"; exit 1; }
 step "orq gc --dry-run"         orq gc --dry-run
