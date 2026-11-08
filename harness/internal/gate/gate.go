@@ -65,6 +65,9 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 		if d, ok := workerLee(p); ok {
 			return d
 		}
+		if d, ok := workerEscribeOrq(p, env); ok {
+			return d
+		}
 	}
 	if p.ToolName == "Bash" {
 		cmd, _ := p.ToolInput["command"].(string)

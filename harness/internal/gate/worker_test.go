@@ -2,7 +2,11 @@ package gate
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"orq/internal/limits"
 )
 
 // Evaluador B: cada vía conocida para esquivar la lista negra queda negada a un worker.
@@ -220,5 +224,80 @@ func TestWorkerNoEscribeConfigNiBuscaTokens(t *testing.T) {
 	}
 	if d := Evaluate(Payload{ToolName: "Write", Cwd: "/", ToolInput: map[string]any{"file_path": ses}}, baseLimits(), fakes{}.env(t, t.TempDir())); !d.Allow {
 		t.Errorf("el Owner no escribe su config: %s", d.Reason)
+	}
+}
+
+// Un worker no escribe en .orq ni en el estado de orq, por ninguna herramienta.
+func TestWorkerNoEscribeOrqNiEstado(t *testing.T) {
+	base := t.TempDir()
+	main := filepath.Join(base, "repo")
+	wt := filepath.Join(base, "wt")
+	st := filepath.Join(base, "state")
+	for _, d := range []string{filepath.Join(main, ".orq"), wt, st} {
+		os.MkdirAll(d, 0o755)
+	}
+	os.Symlink(filepath.Join(main, ".orq"), filepath.Join(wt, "lnk"))
+	os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: x"), 0o644)
+	env := Env{IsWorktree: func(string) bool { return true }, WorkerID: "w1", Rol: "w1", StateDir: st, Now: time.Now}
+	mem := filepath.Join(main, ".orq", "memoria.jsonl")
+	for _, tl := range []struct {
+		name string
+		in   map[string]any
+	}{
+		{"Write", map[string]any{"file_path": mem}},
+		{"Edit", map[string]any{"file_path": mem}},
+		{"MultiEdit", map[string]any{"file_path": filepath.Join(wt, "lnk", "x")}},
+		{"NotebookEdit", map[string]any{"notebook_path": filepath.Join(main, ".orq", "n.ipynb")}},
+		{"Write", map[string]any{"file_path": filepath.Join(st, "HALT")}},
+	} {
+		if d := Evaluate(Payload{ToolName: tl.name, Cwd: wt, ToolInput: tl.in}, limits.Limits{}, env); d.Allow {
+			t.Errorf("%s %v pasó", tl.name, tl.in)
+		}
+	}
+	for _, c := range []string{
+		"echo x >> " + mem,
+		"echo x > lnk/memoria.jsonl",
+		"cd " + main + " && echo x >> .orq/memoria.jsonl",
+		"sed -i s/a/b/ " + mem,
+		"rm -f " + mem,
+		"rm " + filepath.Join(st, "HALT"),
+		"rm -f ~/.local/state/orq/HALT",
+		"echo x > ~/.local/state/orq/state.json",
+		"echo x > $HOME/.local/state/orq/state.json",
+		"echo x >> $M/.orq/memoria.jsonl",
+		"tee -a " + mem,
+		"cp a " + mem,
+		"mv " + mem + " /tmp/y",
+		"truncate -s0 " + mem,
+		"dd if=a of=" + mem,
+		"touch " + filepath.Join(st, "HALT"),
+		"find " + main + "/.orq -delete",
+		`python3 -c "open('` + mem + `','a').write('x')"`,
+		"perl -pi -e s/a/b/ " + mem,
+		"ln -s x " + mem,
+	} {
+		if d := Evaluate(Payload{ToolName: "Bash", Cwd: wt, ToolInput: map[string]any{"command": c}}, limits.Limits{}, env); d.Allow {
+			t.Errorf("pasó: %s", c)
+		}
+	}
+	// Legítimo: su worktree (aun viviendo bajo una carpeta .orq), leer .orq y reportar por orq.
+	for _, c := range []string{"echo x > out.txt", "sed -i s/a/b/ src.go", "rm -f out.txt", "cat " + mem, "orq worker beat --phase running", "orq worker done --summary ok", "orq mem add --imp baja --cat tecnico hola"} {
+		if d := Evaluate(Payload{ToolName: "Bash", Cwd: wt, ToolInput: map[string]any{"command": c}}, limits.Limits{}, env); !d.Allow {
+			t.Errorf("legítimo negado: %s: %s", c, d.Reason)
+		}
+	}
+	if d := Evaluate(Payload{ToolName: "Write", Cwd: wt, ToolInput: map[string]any{"file_path": filepath.Join(wt, "a.go")}}, limits.Limits{}, env); !d.Allow {
+		t.Error(d.Reason)
+	}
+	dentro := filepath.Join(main, ".orq", "worktrees", "w1")
+	os.MkdirAll(dentro, 0o755)
+	os.WriteFile(filepath.Join(dentro, ".git"), []byte("gitdir: x"), 0o644)
+	if d := Evaluate(Payload{ToolName: "Write", Cwd: dentro, ToolInput: map[string]any{"file_path": filepath.Join(dentro, "a.go")}}, limits.Limits{}, env); !d.Allow {
+		t.Errorf("worktree bajo .orq negado: %s", d.Reason)
+	}
+	// Una sesión del checkout principal sigue escribiendo.
+	s := Env{IsWorktree: func(string) bool { return false }, Rol: "orquestador", StateDir: st, Now: time.Now}
+	if d := Evaluate(Payload{ToolName: "Bash", Cwd: main, ToolInput: map[string]any{"command": "echo x > .orq/nota"}}, limits.Limits{}, s); !d.Allow {
+		t.Errorf("orquestador negado: %s", d.Reason)
 	}
 }
