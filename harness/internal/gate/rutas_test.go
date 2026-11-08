@@ -120,3 +120,72 @@ func TestHookIncluyeLS(t *testing.T) {
 		t.Fatal(string(raw))
 	}
 }
+
+// Item 2: buscar tokens o owner.* por patrón, con los casos exactos de identity.md.
+func TestWorkerGlobDeTokensNegado(t *testing.T) {
+	repo, _, env := escenario(t)
+	malos := []map[string]any{
+		{"pattern": "**/*.tok*", "path": "/"},
+		{"pattern": "**/*.tok*", "path": "~"},
+		{"pattern": "*.token"},
+		{"pattern": "**/owner.*"},
+		{"pattern": "owner.*"},
+		{"pattern": "*tok*"},
+		{"pattern": "**/own?r.tok*"},
+		{"pattern": "**/own[e]r.*"},
+		{"pattern": "**/*t?k*"},
+		{"pattern": "**/OWNER.*"},
+		{"pattern": "**/o{wn,x}er.*"},
+		{"pattern": "**/o*", "path": "/"},
+		{"pattern": ".c*/o*/*", "path": "~"},
+		{"pattern": "*.go", "path": "tokens"},
+		{"pattern": "*", "path": "/somewhere/owner.d/owner.x"},
+	}
+	for _, in := range malos {
+		if d := herr(repo, "Glob", in, env); d.Allow {
+			t.Errorf("Glob %v pasó", in)
+		}
+	}
+	for _, in := range []map[string]any{{"pattern": "x", "glob": "**/owner.*"}, {"pattern": "x", "glob": "*.tok*", "path": "src"}} {
+		if d := herr(repo, "Grep", in, env); d.Allow {
+			t.Errorf("Grep %v pasó", in)
+		}
+	}
+	buenos := []map[string]any{{"pattern": "**/*.go"}, {"pattern": "src/*.ts", "path": repo}, {"pattern": "**/*"}, {"pattern": "**/*.md", "path": "src"}}
+	for _, in := range buenos {
+		if d := herr(repo, "Glob", in, env); !d.Allow {
+			t.Errorf("Glob %v negado: %s", in, d.Reason)
+		}
+	}
+	if d := herr(repo, "Glob", map[string]any{"pattern": "*.token"}, fakes{}.env(t, t.TempDir())); !d.Allow {
+		t.Errorf("sesión negada: %s", d.Reason)
+	}
+}
+
+// Un repo que se llama stock o tokyo no deja al worker sin Glob dentro de su worktree.
+func TestWorkerGlobRepoConTokEnElNombre(t *testing.T) {
+	_, _, env := escenario(t)
+	h, _ := os.UserHomeDir()
+	repo := filepath.Join(h, "stock-app")
+	os.MkdirAll(filepath.Join(repo, "src"), 0o755)
+	for _, in := range []map[string]any{{"pattern": "**/*.go"}, {"pattern": "*.go", "path": filepath.Join(repo, "src")}, {"pattern": filepath.Join(repo, "*.go")}} {
+		if d := herr(repo, "Glob", in, env); !d.Allow {
+			t.Errorf("Glob %v negado: %s", in, d.Reason)
+		}
+	}
+}
+
+func TestWorkerFindDeTokensNegado(t *testing.T) {
+	repo, _, env := escenario(t)
+	for _, c := range []string{`find / -name "owner.*"`, `find / -iname 'OWNER.*'`, `find ~ -name 'own?r.*'`, `find . -name "*tok*"`, `find / -path '*/owner.*'`,
+		`ls /x/owner.*`, `rg --files -g 'owner.*' /`, `fd 'owner.' /`, `locate owner.token`, `locate owner.`} {
+		if d := herr(repo, "Bash", map[string]any{"command": c}, env); d.Allow {
+			t.Errorf("%q pasó", c)
+		}
+	}
+	for _, c := range []string{`find . -name "*.go"`, `find src -type f`, `rg --files -g '*.ts'`} {
+		if d := herr(repo, "Bash", map[string]any{"command": c}, env); !d.Allow {
+			t.Errorf("%q negado: %s", c, d.Reason)
+		}
+	}
+}
