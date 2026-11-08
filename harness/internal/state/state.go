@@ -18,10 +18,14 @@ type Snapshot struct {
 	DiskFreeGB map[string]float64 `json:"disk_free_gb"`
 }
 
-// Dir respeta ORQ_STATE para pruebas y usa ~/.local/state/orq por defecto.
+// Dir: ORQ_STATE gana; si no, XDG_STATE_HOME/orq; si no, ~/.local/state/orq. Aislar XDG_CONFIG_HOME
+// no aísla el estado: quien quiera una raíz aparte fija también ORQ_STATE o XDG_STATE_HOME.
 func Dir() string {
 	if p := os.Getenv("ORQ_STATE"); p != "" {
 		return p
+	}
+	if x := os.Getenv("XDG_STATE_HOME"); x != "" {
+		return filepath.Join(x, "orq")
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".local", "state", "orq")

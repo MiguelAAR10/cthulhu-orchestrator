@@ -8,6 +8,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BASE="${1:-$(mktemp -d)}"
 mkdir -p "$BASE" && cd "$BASE" || exit 1
 export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID="" ORQ_LANG=es   # asserts Spanish messages
+export ORQ_STATE="$BASE/state" XDG_STATE_HOME="$BASE/xdgstate"
 export XDG_CONFIG_HOME="$BASE/config" ORQ_TOKEN="" ORQ_WORKER_ID="" ORQ_SHIM=""   # token del Owner hermético
 mkdir -p "$BASE/bin" && printf '#!/bin/sh\nexit 1\n' > "$BASE/bin/claude" && chmod +x "$BASE/bin/claude"
 export PATH="$BASE/bin:$PATH"   # el escriba no responde: todo debe funcionar igual

@@ -17,6 +17,8 @@ func TestMain(m *testing.M) {
 	// como el Owner (ORQ_TOKEN). Las que prueban suplantación lo vacían.
 	cfg, _ := os.MkdirTemp("", "orq-cfg")
 	os.Setenv("XDG_CONFIG_HOME", cfg)
+	stateTmp, _ := os.MkdirTemp("", "orq-state")
+	os.Setenv("ORQ_STATE", stateTmp) // nunca el estado real del Owner
 	tok, err := identidad.Asegurar()
 	if err != nil {
 		panic(err)
