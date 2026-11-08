@@ -89,6 +89,13 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
                                  ~/.config/orq/agents.json). detect busca claude, codex, cursor-agent,
                                  gemini, opencode y aider en el PATH y escribe una propuesta; el Owner gana.
                                  El adversario es de otra familia que el planificador (lo impone orq)
+  orq worker beat|done|list      estado vivo del worker (.orq/workers/<id>/state.json, ORQ_WORKER_ID)
+  orq stop raise|list|resolve|cancel   pedidos al Owner (credential|api_key|decision|confirmation|access,
+                                 blocking|soon|fyi); solo atena/owner resuelven; nunca un secreto en texto
+  orq autonomy [ver|guided|free --scope ...]   autonomía; free lo aprueba el Owner
+  orq board [--json|--html [--out F]]   tablero del Owner: stoppers, slices, workers, velocidad
+  orq handoff [--out F]          HANDOFF.md para que otra persona retome el proyecto
+  orq sync push|pull [--theirs]  memoria en la rama orq/state (orq init --sync=local|commit|branch)
   orq version
 `
 
@@ -146,6 +153,18 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runAprender(args[1:], stdout, stderr)
 	case "alinear":
 		return runAlinear(args[1:], stdout, stderr)
+	case "worker":
+		return runWorker(args[1:], stdout, stderr)
+	case "stop":
+		return runStop(args[1:], stdout, stderr)
+	case "autonomy":
+		return runAutonomy(args[1:], stdout, stderr)
+	case "board":
+		return runBoard(args[1:], stdout, stderr)
+	case "handoff":
+		return runHandoff(args[1:], stdout, stderr)
+	case "sync":
+		return runSync(args[1:], stdout, stderr)
 	case "metricas":
 		return runMetricas(args[1:], stdout, stderr)
 	case "skill", "--skill":
@@ -223,6 +242,10 @@ func runGate(stdin io.Reader, stderr io.Writer) int {
 }
 
 func runWatch(stdout, stderr io.Writer) int {
+	// El vigía de workers corre aunque falten los límites de disco.
+	if p, err := abrirProyecto(); err == nil {
+		p.vigilarWorkers(stdout)
+	}
 	l, err := limits.Load(limits.DefaultPath())
 	if err != nil {
 		fmt.Fprintln(stderr, err)

@@ -78,6 +78,10 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	if err := p.initSync(args, stdout); err != nil {
+		fmt.Fprintln(stderr, "orq init:", err)
+		return 1
+	}
 	fmt.Fprintf(stdout, "modo: %s (%d archivos de código) · stack: %s\n", pf.Modo, pf.Fuentes, strings.Join(append([]string{"-"}, pf.Senales...)[min(1, len(pf.Senales)):], ", "))
 	if nuevas, distintas := instalarSkillsOrq(p.root); len(nuevas)+len(distintas) > 0 {
 		if len(nuevas) > 0 {

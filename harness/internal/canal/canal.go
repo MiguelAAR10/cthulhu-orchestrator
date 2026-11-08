@@ -38,7 +38,9 @@ type Msg struct {
 }
 
 // esRol: filtro, orquestador o un worker del equipo (los workers se hablan entre ellos).
-func esRol(r string) bool { return slices.Contains(Roles, r) || strings.HasPrefix(r, "worker-") }
+func esRol(r string) bool {
+	return slices.Contains(Roles, r) || strings.HasPrefix(r, "worker-") || r == "vigia" // vigia: el vigía de workers (código)
+}
 
 func (m Msg) Validate() error {
 	switch {

@@ -5,10 +5,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"orq/internal/orqdir"
 	"orq/internal/plan"
+	"orq/internal/workers"
 )
 
 func (p proyecto) planPath(nn string) string { return plan.Path(p.dir, nn) }
@@ -44,7 +47,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		args = []string{"ver"}
 	}
-	uso := "uso: orq plan [--slice NN] cargar ARCHIVO.json | ver | revisar | hecha ID | soltar ID | debatido"
+	uso := "uso: orq plan [--slice NN] cargar ARCHIVO.json | ver | listas | revisar | hecha ID | soltar ID | debatido"
 	switch args[0] {
 	case "cargar":
 		if len(args) != 2 {
@@ -126,6 +129,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
+		workers.AppendTaskEvent(p.dir, "S-"+pl.Slice, t.ID, "done", t.Worker, time.Now())
 		listas, _ := plan.Listas(pl)
 		fmt.Fprintf(stdout, "%s hecha (%s). Quedan %d; listas ahora: %s\n", t.ID, t.Worker, pl.Pendientes(), ids(listas))
 		return 0
@@ -140,12 +144,34 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		var t *plan.Tarea
-		_, err = plan.Actualizar(path, func(pl *plan.Plan) (err error) { t, err = plan.Soltar(pl, args[1]); return err })
+		var w string
+		pl, err := plan.Actualizar(path, func(pl *plan.Plan) (err error) {
+			if x := slices.IndexFunc(pl.Tareas, func(x plan.Tarea) bool { return x.ID == args[1] }); x >= 0 {
+				w = pl.Tareas[x].Worker
+			}
+			t, err = plan.Soltar(pl, args[1])
+			return err
+		})
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
+		workers.AppendTaskEvent(p.dir, "S-"+pl.Slice, t.ID, "reopened", w, time.Now())
 		fmt.Fprintf(stdout, "%s vuelve a pendiente; relánzala con orq slice lanzar --tarea %s\n", t.ID, t.ID)
+		return 0
+	case "listas":
+		pl, _, err := p.planDe(nn)
+		if err != nil {
+			fmt.Fprintln(stderr, "orq plan:", err)
+			return 1
+		}
+		listas, bloq := plan.Listas(pl)
+		fmt.Fprintf(stdout, "ready: %s\n", ids(listas))
+		for _, t := range pl.Tareas {
+			if r, ok := bloq[t.ID]; ok {
+				fmt.Fprintf(stdout, "  %s waits: %s\n", t.ID, r)
+			}
+		}
 		return 0
 	case "revisar":
 		pl, _, err := p.planDe(nn)
