@@ -1,6 +1,9 @@
 package identidad
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -64,6 +67,20 @@ type Ancla struct {
 	PID   int    `json:"pid"`
 	Start uint64 `json:"start"`
 	Rol   string `json:"role"`
+	MAC   string `json:"mac"` // HMAC-SHA256(pid|start|role) con el token del Owner
+}
+
+func firmar(token string, a Ancla) []byte {
+	m := hmac.New(sha256.New, []byte(token))
+	fmt.Fprintf(m, "%d|%d|%s", a.PID, a.Start, a.Rol)
+	return m.Sum(nil)
+}
+
+// verificaMAC: el ancla lleva la firma que solo puede hacer quien tiene el token del Owner.
+func verificaMAC(a Ancla) bool {
+	tok := Leer()
+	got, err := hex.DecodeString(a.MAC)
+	return tok != "" && err == nil && hmac.Equal(got, firmar(tok, a))
 }
 
 // AnclasDir: las anclas viven junto al token (~/.config/orq/sessions, 0700), fuera del repo y de
@@ -80,10 +97,15 @@ func Anclar(t Procesos, pid int, rol string) (Ancla, error) {
 	if err != nil {
 		return Ancla{}, fmt.Errorf("orq: process %d: %w", pid, err)
 	}
+	tok := Leer()
+	if tok == "" {
+		return Ancla{}, errors.New("orq: no owner token; anchors are signed with it (run `orq token` from the Owner's terminal)")
+	}
 	if err := os.MkdirAll(AnclasDir(), 0o700); err != nil {
 		return Ancla{}, err
 	}
 	a := Ancla{PID: pid, Start: in.Start, Rol: rol}
+	a.MAC = hex.EncodeToString(firmar(tok, a))
 	raw, _ := json.Marshal(a)
 	nombre := filepath.Join(AnclasDir(), fmt.Sprintf("%d-%d.json", pid, in.Start))
 	if err := os.WriteFile(nombre, raw, 0o600); err != nil {
@@ -93,14 +115,14 @@ func Anclar(t Procesos, pid int, rol string) (Ancla, error) {
 	return a, nil
 }
 
-// Anclas lee las anclas registradas.
+// Anclas lee las anclas registradas con firma válida; las demás se ignoran (falla cerrado).
 func Anclas() []Ancla {
 	ents, _ := os.ReadDir(AnclasDir())
 	var out []Ancla
 	for _, e := range ents {
 		raw, err := os.ReadFile(filepath.Join(AnclasDir(), e.Name()))
 		var a Ancla
-		if err == nil && json.Unmarshal(raw, &a) == nil && a.PID > 0 {
+		if err == nil && json.Unmarshal(raw, &a) == nil && a.PID > 0 && verificaMAC(a) {
 			out = append(out, a)
 		}
 	}

@@ -186,3 +186,39 @@ func TestWorkerDefensaEnProfundidad(t *testing.T) {
 		t.Error("el Owner no lee su config")
 	}
 }
+
+// Un worker tampoco escribe en la carpeta de config de orq (sessions/ incluida) ni busca tokens.
+func TestWorkerNoEscribeConfigNiBuscaTokens(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	w := fakes{}.env(t, t.TempDir())
+	w.WorkerID = "w1"
+	home, _ := os.UserHomeDir()
+	ses := xdg + "/orq/sessions/1-1.json"
+	for _, p := range []Payload{
+		{ToolName: "Write", ToolInput: map[string]any{"file_path": ses, "content": "{}"}},
+		{ToolName: "Edit", ToolInput: map[string]any{"file_path": xdg + "/orq/owner.token"}},
+		{ToolName: "MultiEdit", ToolInput: map[string]any{"file_path": home + "/.config/orq/sessions/x.json"}},
+		{ToolName: "NotebookEdit", ToolInput: map[string]any{"notebook_path": xdg + "/orq/n.ipynb"}},
+	} {
+		p.Cwd = t.TempDir()
+		if d := Evaluate(p, baseLimits(), w); d.Allow {
+			t.Errorf("un worker escribió %v", p.ToolInput)
+		}
+	}
+	for _, c := range []string{
+		`echo '{"pid":1}' > ` + ses,
+		`cp a.json ` + xdg + `/orq/sessions/`,
+		`cat ~/*/*.token`,
+		`find / -name '*token*'`,
+		`find ~ -iname "*.tok*"`,
+		`ls /home/u/*/orq/*.token`,
+	} {
+		if d := Evaluate(bash(c), baseLimits(), w); d.Allow {
+			t.Errorf("un worker pudo: %q", c)
+		}
+	}
+	if d := Evaluate(Payload{ToolName: "Write", Cwd: "/", ToolInput: map[string]any{"file_path": ses}}, baseLimits(), fakes{}.env(t, t.TempDir())); !d.Allow {
+		t.Errorf("el Owner no escribe su config: %s", d.Reason)
+	}
+}

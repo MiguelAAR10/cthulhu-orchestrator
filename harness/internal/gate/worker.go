@@ -120,6 +120,8 @@ var (
 		regexp.MustCompile(`\.config\S*[*?\[]|(~|\$HOME|\$\{HOME\}|/home/[^/\s]+)/\.[^\s/]*[*?\[]`),
 		// ${!ORQ@}, ${!ORQ*}, ${ORQ...}: enumerar o expandir la identidad
 		regexp.MustCompile(`[!{]ORQ`),
+		// buscar tokens por patrón: *.token, own?r.tok*, find -name '*token*'
+		regexp.MustCompile(`(?i)\S*[*?\[]\S*tok|\btok\S*[*?\[]`),
 		// unset/export que nombran ORQ de forma indirecta: $(printf "ORQ_%s=..."), $(compgen | grep ORQ)
 		regexp.MustCompile(`\b(unset|export|declare|typeset|readonly)\b[^;&]*ORQ`),
 	}
@@ -138,6 +140,9 @@ func workerOrq(cmd string) (Decision, bool) {
 		if re.MatchString(c) {
 			return no()
 		}
+	}
+	if d := dirConfigOrq(); d != "" && strings.Contains(c, d) {
+		return no()
 	}
 	if escapaDelArbol(c) || interpreteEscapa(c) {
 		return deny("%s", lang.T("orq: a worker does not detach from its process tree (setsid, nohup, disown, systemd-run, at, tmux new, herdr): orq recognises workers by their ancestors.",
@@ -210,10 +215,20 @@ func escapaDelArbol(c string) bool {
 	return false
 }
 
-// workerLee: Read/Grep/Glob de un worker no tocan la config de orq ni el entorno de otros procesos.
+// dirConfigOrq: la carpeta de config de orq (XDG_CONFIG_HOME/orq o ~/.config/orq), con token y sessions/.
+func dirConfigOrq() string {
+	cfg, err := os.UserConfigDir()
+	if err != nil || cfg == "" {
+		return ""
+	}
+	return filepath.Join(cfg, "orq")
+}
+
+// workerLee: Read/Grep/Glob (y Write/Edit) de un worker no tocan la config de orq ni el entorno de
+// otros procesos: ni leer el token ni plantar un ancla en sessions/.
 func workerLee(p Payload) (Decision, bool) {
 	switch p.ToolName {
-	case "Read", "Grep", "Glob", "LS", "NotebookRead":
+	case "Read", "Grep", "Glob", "LS", "NotebookRead", "Write", "Edit", "MultiEdit", "NotebookEdit":
 	default:
 		return Decision{}, false
 	}
@@ -242,8 +257,8 @@ func workerLee(p Payload) (Decision, bool) {
 			(cfg != "" && (r == cfg || strings.HasPrefix(r, cfg+"/"))) ||
 			r == "/proc" || (strings.HasPrefix(r, "/proc/") && (strings.Contains(r, "environ") || strings.ContainsAny(r, "*?[")))
 		if malo {
-			return deny("%s", lang.T("orq: a worker does not read orq's config directory or another process's environment.",
-				"orq: un worker no lee la carpeta de config de orq ni el entorno de otro proceso.")), true
+			return deny("%s", lang.T("orq: a worker does not read or write orq's config directory or another process's environment.",
+				"orq: un worker no lee ni escribe la carpeta de config de orq ni el entorno de otro proceso.")), true
 		}
 	}
 	return Decision{}, false
