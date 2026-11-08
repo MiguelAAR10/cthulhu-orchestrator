@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"orq/internal/lang"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -70,15 +71,15 @@ func mostrarGC(w io.Writer, res []worktrees.Resultado) {
 	n := map[string]int{}
 	for _, r := range res {
 		n[r.Accion]++
-		linea := fmt.Sprintf("  %-10s %s", r.Accion, r.Path)
+		linea := fmt.Sprintf("  %-10s %s", accionGC(r.Accion), r.Path)
 		if r.Motivo != "" {
-			linea += " · " + r.Motivo
+			linea += " · " + lang.Traducir(r.Motivo)
 		}
 		if r.Bundle != "" {
 			linea += " · bundle " + r.Bundle
 		}
 		if r.Backup != "" {
-			linea += " · respaldo " + r.Backup
+			linea += lang.T(" · backup ", " · respaldo ") + r.Backup
 		}
 		fmt.Fprintln(w, linea)
 	}
@@ -105,4 +106,14 @@ func runGC(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// accionGC: el nombre de la acción para mostrar (en datos sigue en español).
+func accionGC(a string) string {
+	en := map[string]string{worktrees.Retirado: "removed", worktrees.Retiraria: "would-remove", worktrees.Conservado: "kept",
+		worktrees.Cuarentena: "quarantined", worktrees.Podado: "pruned"}
+	if e, ok := en[a]; ok && !lang.ES() {
+		return e
+	}
+	return a
 }

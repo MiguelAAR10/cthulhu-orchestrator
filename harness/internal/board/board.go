@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"math"
+	"orq/internal/lang"
 	"os"
 	"path/filepath"
 	"slices"
@@ -406,14 +407,14 @@ func Text(b Board, color bool) string {
 		s.WriteString("  none yet\n")
 	}
 	for _, c := range b.Slices {
-		fmt.Fprintf(&s, "  %s %s · %s (%s)\n", paint(c.Color, "■ "+c.Status), c.ID, c.Title, c.Phase)
+		fmt.Fprintf(&s, "  %s %s · %s (%s)\n", paint(c.Color, "■ "+c.Status), c.ID, c.Title, lang.Traducir(c.Phase))
 		fmt.Fprintf(&s, "     %s done %s · %d of %d tasks · missing: %s\n", unknown(c.Pct, "%"), bar(c.Pct), c.Tasks.Done, c.Tasks.Total, missing(c.Missing))
 		for _, f := range c.Fronts {
 			fmt.Fprintf(&s, "     front %s: %s · %d of %d tasks\n", f.ID, f.Goal, f.Tasks.Done, f.Tasks.Total)
 		}
 		fmt.Fprintf(&s, "     who: %s · rework %d", who(c.Who), c.Rework)
 		if c.BlockedReason != "" {
-			fmt.Fprintf(&s, " · blocked: %s", c.BlockedReason)
+			fmt.Fprintf(&s, " · blocked: %s", lang.Traducir(c.BlockedReason))
 		}
 		s.WriteString("\n")
 	}
@@ -494,7 +495,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px
 	s.WriteString("<h2>What we are building</h2>")
 	for _, c := range b.Slices {
 		fmt.Fprintf(&s, `<div class="card" style="border-color:%s"><span class="w" style="color:%s">%s</span> %s · <b>%s</b> <small>(%s)</small>%s<br>Missing: %s<br>Who: %s · rework %d`,
-			cssColor[c.Color], cssColor[c.Color], esc(c.Status), esc(c.ID), esc(c.Title), esc(c.Phase), pct(c.Pct), esc(missing(c.Missing)), esc(who(c.Who)), c.Rework)
+			cssColor[c.Color], cssColor[c.Color], esc(c.Status), esc(c.ID), esc(c.Title), esc(lang.Traducir(c.Phase)), pct(c.Pct), esc(missing(c.Missing)), esc(who(c.Who)), c.Rework)
 		if c.BlockedReason != "" {
 			fmt.Fprintf(&s, "<br>Blocked: %s", esc(c.BlockedReason))
 		}

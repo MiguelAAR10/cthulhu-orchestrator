@@ -52,6 +52,20 @@ func normalizeArgs(args []string) []string {
 		return args
 	}
 	out := append([]string{}, args...)
+	// Opciones globales delante del comando (orq --slice 01 slice close): pasan detrás de él.
+	var globales []string
+	for len(out) > 1 && (out[0] == "--slice" || out[0] == "--repo" || strings.HasPrefix(out[0], "--slice=")) {
+		if strings.HasPrefix(out[0], "--slice=") {
+			globales = append(globales, "--slice", strings.TrimPrefix(out[0], "--slice="))
+			out = out[1:]
+			continue
+		}
+		globales = append(globales, out[0], out[1])
+		out = out[2:]
+	}
+	if len(globales) > 0 && len(out) > 0 {
+		out = append(append([]string{out[0]}, globales...), out[1:]...)
+	}
 	if c, ok := cmdEN[out[0]]; ok {
 		out[0] = c
 	}

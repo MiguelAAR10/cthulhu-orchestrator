@@ -8,6 +8,7 @@ import (
 	"io"
 	"orq/internal/agentes"
 	"orq/internal/identidad"
+	"orq/internal/lang"
 	"orq/internal/plan"
 	"os"
 	"os/exec"
@@ -328,7 +329,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			ms = ms[len(ms)-*n:]
 		}
 		for _, m := range ms {
-			fmt.Fprintf(stdout, "%s %s→%s [%s] %s\n", m.TS.Local().Format("02-01 15:04"), m.De, m.Para, m.Tipo, m.Texto)
+			fmt.Fprintf(stdout, "%s %s→%s [%s] %s\n", m.TS.Local().Format("02-01 15:04"), verNombre(m.De), verNombre(m.Para), verNombre(m.Tipo), m.Texto)
 		}
 		return 0
 	}
@@ -797,7 +798,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		if err := p.escribirFicha(); err != nil {
 			fmt.Fprintf(stdout, "aviso: la ficha del proyecto no se actualizó (%v)\n", err)
 		} else {
-			fmt.Fprintf(stdout, "ficha del proyecto actualizada: %s\n", p.fichaPath())
+			fmt.Fprintf(stdout, lang.T("project card updated: %s\n", "ficha del proyecto actualizada: %s\n"), p.fichaPath())
 		}
 		// Higiene: lo que orq creó y ya no se usa se retira con el protocolo seguro.
 		if res, err := p.gc(false); err != nil {
@@ -920,7 +921,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	case "recibo":
 		e, err := r.Load(nn)
 		if err != nil || e == nil || e.Recibo == nil {
-			fmt.Fprintln(stdout, "sin recibo vigente; el historial está en .orq/recibos.jsonl")
+			fmt.Fprintln(stdout, lang.T("no current receipt; the history is in .orq/recibos.jsonl", "sin recibo vigente; el historial está en .orq/recibos.jsonl"))
 			return 0
 		}
 		raw, _ := json.MarshalIndent(e.Recibo, "", "  ")
@@ -1092,4 +1093,17 @@ func fuentePermitida(fuente, rol string) error {
 func estrictoPorLimites() bool {
 	l, err := limits.Load(limits.DefaultPath())
 	return err == nil && l.ConteoEstricto
+}
+
+// verNombre muestra en inglés los tipos y roles guardados en español (el dato no cambia).
+func verNombre(x string) string {
+	if lang.ES() {
+		return x
+	}
+	en := map[string]string{"estado": "status", "historia": "story", "pregunta": "question", "respuesta": "answer", "cierre": "closing",
+		"orquestador": "orchestrator", "planificador": "planner", "verificador": "verifier", "vigia": "watchdog"}
+	if e, ok := en[x]; ok {
+		return e
+	}
+	return x
 }

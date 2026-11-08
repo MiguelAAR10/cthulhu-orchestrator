@@ -70,7 +70,23 @@ func Traducir(s string) string {
 	return strings.Join(lineas, "\n")
 }
 
+// terminos: fragmentos que llegan como datos (fase, motivo, resultado) dentro de una línea ya
+// traducida. Se reemplazan después del patrón; los datos guardados siguen en español.
+var terminos = strings.NewReplacer(
+	"el examen no pasa; falla igual sin cambios reales: sin progreso", "the exam does not pass; it fails the same with no real changes: no progress",
+	"el examen no pasa", "the exam does not pass",
+	"IMPLEMENTANDO", "IMPLEMENTING", "VERIFICADO", "VERIFIED", "BLOQUEADO", "BLOCKED",
+	"INTEGRANDO", "INTEGRATING", "CERRANDO", "CLOSING",
+	"closed as rechazado", "closed as rejected", "closed as aceptado", "closed as accepted",
+	"(nadie)", "(nobody)",
+	"mode: nuevo", "mode: new", "mode: mejora", "mode: improve",
+)
+
 func traducirLinea(l string) string {
+	return terminos.Replace(traducirPatron(l))
+}
+
+func traducirPatron(l string) string {
 	for _, p := range patrones {
 		m := p.re.FindStringSubmatchIndex(l)
 		if m == nil {
