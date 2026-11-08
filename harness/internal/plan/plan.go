@@ -29,12 +29,12 @@ var (
 
 type Tarea struct {
 	ID         string   `json:"id"`
-	Zona       string   `json:"zona"`
-	Rutas      []string `json:"rutas"`
-	DependeDe  []string `json:"depende_de,omitempty"`
-	Dificultad string   `json:"dificultad,omitempty"` // baja | media | alta → modelo y esfuerzo
-	Que        string   `json:"que,omitempty"`        // una línea: qué deja hecho
-	Estado     string   `json:"estado,omitempty"`     // pendiente | en_curso | hecha
+	Zona       string   `json:"zone"`
+	Rutas      []string `json:"paths"`
+	DependeDe  []string `json:"depends_on,omitempty"`
+	Dificultad string   `json:"difficulty,omitempty"` // baja | media | alta → modelo y esfuerzo
+	Que        string   `json:"what,omitempty"`       // una línea: qué deja hecho
+	Estado     string   `json:"status,omitempty"`     // pendiente | en_curso | hecha
 	Worker     string   `json:"worker,omitempty"`
 	Front      string   `json:"front,omitempty"` // id del front (sub-orquestador como dato) al que pertenece
 }
@@ -43,8 +43,8 @@ type Plan struct {
 	Slice string `json:"slice"`
 	// Debatido se calcula al leer: vale solo si DebatidoRev es la revisión actual del plan.
 	Debatido    bool    `json:"-"`
-	DebatidoRev string  `json:"debatido_rev,omitempty"` // revisión que el adversario atacó y aprobó
-	Tareas      []Tarea `json:"tareas"`
+	DebatidoRev string  `json:"debated_rev,omitempty"` // revisión que el adversario atacó y aprobó
+	Tareas      []Tarea `json:"tasks"`
 	// Fronts: sub-orquestadores como DATO, no procesos. Opcional.
 	Fronts []Front `json:"fronts,omitempty"`
 	// Retenidas: tarea → motivo ("stop ST-NNNN") por un stopper blocking abierto. Lo llena Leer.
