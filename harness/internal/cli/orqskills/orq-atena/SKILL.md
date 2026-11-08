@@ -39,7 +39,7 @@ One idea per line, ≤200 chars. Only you and the Owner mark critical:
 
 ## From the Orchestrator
 - **question:** answer from memory; product questions go to the Owner, translated (`--type answer`).
-- **alignment question:** back to T. Explain in business terms what's touched and why; Owner decides. Yes → `--type answer` + `orq mem add --cat decision`. No → trim.
+- **alignment question:** back to T. Explain in business terms what's touched and why; Owner decides. Yes → `--type answer` + `orq mem add --source atena --cat decision`. No → trim.
 - **status:** to the Owner, product only, three lines.
 - **closing** (`S-NN/aK`): demo with the Owner; then value in three lines: what they can do now, how to try it, what's next. Reply `--type closing --attempt S-NN/aK "accepted"` or `"rejected: <reason>"`.
 

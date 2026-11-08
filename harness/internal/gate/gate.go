@@ -75,6 +75,12 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 			if d, ok := workerOrq(cmd); ok {
 				return d
 			}
+			if d, ok := workerBashRutas(cmd, p.Cwd); ok {
+				return d
+			}
+			if rmFuera(cmd, p.Cwd) {
+				return negadoRm()
+			}
 		}
 		p.ToolInput = map[string]any{"command": Normalizar(cmd)}
 	}
@@ -161,22 +167,39 @@ func protectedTarget(p Payload, l limits.Limits, env Env) (string, bool) {
 // en la parte que ya existe.
 func resolver(cwd, p string) string {
 	p = strings.Trim(p, `'"`)
-	if strings.HasPrefix(p, "~/") {
+	if p == "~" || strings.HasPrefix(p, "~/") {
 		if h, err := os.UserHomeDir(); err == nil {
-			p = filepath.Join(h, p[2:])
+			p = filepath.Join(h, p[1:])
 		}
 	}
 	if !filepath.IsAbs(p) {
 		p = filepath.Join(cwd, p)
 	}
-	p = filepath.Clean(p)
+	return rutaReal(filepath.Clean(p), 0)
+}
+
+// rutaReal resuelve los enlaces hasta el padre más profundo que exista, y también un enlace
+// colgante: escribir a través de él crea el archivo en su destino.
+func rutaReal(p string, prof int) string {
 	if r, err := filepath.EvalSymlinks(p); err == nil {
 		return r
 	}
-	if r, err := filepath.EvalSymlinks(filepath.Dir(p)); err == nil {
-		return filepath.Join(r, filepath.Base(p))
+	if prof > 40 {
+		return p
 	}
-	return p
+	if fi, err := os.Lstat(p); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		if t, err := os.Readlink(p); err == nil {
+			if !filepath.IsAbs(t) {
+				t = filepath.Join(filepath.Dir(p), t)
+			}
+			return rutaReal(filepath.Clean(t), prof+1)
+		}
+	}
+	padre := filepath.Dir(p)
+	if padre == p {
+		return p
+	}
+	return filepath.Join(rutaReal(padre, prof+1), filepath.Base(p))
 }
 
 // redirRe captura el destino de >, >>, 2>, &>, >|. Destinos como &1 no se capturan.

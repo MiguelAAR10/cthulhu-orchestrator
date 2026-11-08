@@ -211,3 +211,62 @@ func TestFrontsGroupedInJSON(t *testing.T) {
 		t.Fatalf("%s", raw)
 	}
 }
+
+func cerrar(t *testing.T, orq string, regs ...slice.Registro) {
+	t.Helper()
+	var s strings.Builder
+	for _, r := range regs {
+		raw, _ := json.Marshal(r)
+		s.Write(raw)
+		s.WriteByte('\n')
+	}
+	os.WriteFile(filepath.Join(orq, "slices.jsonl"), []byte(s.String()), 0o644)
+}
+
+// Un slice rechazado no es "NOT PLANNED" ni deja el total en 100%.
+func TestSliceRechazadoNoEngana(t *testing.T) {
+	orq := t.TempDir()
+	cerrar(t, orq,
+		slice.Registro{NN: "01", Titulo: "Customers can pay", Result: "aceptado"},
+		slice.Registro{NN: "02", Titulo: "Refunds", Result: "rechazado", Motivo: "exam failed twice"})
+	b, err := Build(orq, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := find(b, "S-02")
+	if s.Status != "REJECTED" || s.Pct == nil || *s.Pct != 0 || s.RejectedReason != "exam failed twice" {
+		t.Fatalf("%+v", s)
+	}
+	if b.Overall.Pct == nil || *b.Overall.Pct != 50 || b.Overall.Rejected != 1 || b.Overall.Measured != 2 {
+		t.Fatalf("%+v", b.Overall)
+	}
+	txt := Text(b, false)
+	for _, w := range []string{"OVERALL 50%", "1 rejected", "REJECTED S-02", "rejected: exam failed twice", "not delivered"} {
+		if !strings.Contains(txt, w) {
+			t.Errorf("falta %q en:\n%s", w, txt)
+		}
+	}
+	if strings.Contains(txt, "NOT PLANNED") || strings.Contains(txt, "OVERALL 100%") || strings.Contains(txt, "missing: nothing\n     who: nobody · rework 0 · rejected") {
+		t.Fatal(txt)
+	}
+	h := HTML(b)
+	for _, w := range []string{"REJECTED", "exam failed twice", "1 rejected"} {
+		if !strings.Contains(h, w) {
+			t.Errorf("html sin %q", w)
+		}
+	}
+}
+
+// Con plan avanzado sigue sin contar: nada llegó, y el aceptado sin plan tampoco se pierde del total.
+func TestRechazadoConPlanYAceptadoSinPlan(t *testing.T) {
+	orq := t.TempDir()
+	cerrar(t, orq, slice.Registro{NN: "01", Titulo: "A", Result: "aceptado"}, slice.Registro{NN: "02", Titulo: "B", Result: "rechazado"})
+	savePlan(t, orq, "02", plan.Tarea{ID: "T1", Estado: "hecha"}, plan.Tarea{ID: "T2", Estado: "pendiente"})
+	b, _ := Build(orq, now)
+	if s := find(b, "S-02"); s.Status != "REJECTED" || *s.Pct != 0 {
+		t.Fatalf("%+v", s)
+	}
+	if *b.Overall.Pct != 50 {
+		t.Fatalf("%+v", b.Overall)
+	}
+}

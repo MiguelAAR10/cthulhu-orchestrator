@@ -107,7 +107,7 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fs.SetOutput(stderr)
 		imp := fs.String("imp", "", memoria.Opciones(memoria.Imps))
 		cat := fs.String("cat", "", memoria.Opciones(memoria.Cats))
-		fuente := fs.String("fuente", os.Getenv("ORQ_ROL"), memoria.Opciones(memoria.Fuentes))
+		fuente := fs.String("fuente", "", memoria.Opciones(memoria.Fuentes))
 		sl := fs.String("slice", "", "S-NN")
 		tipo := fs.String("tipo", "", memoria.Opciones(memoria.Tipos))
 		ev := fs.String("evidencia", "", "recibo, commit, archivo:línea o id de mensaje")
@@ -117,6 +117,17 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 1
 		}
 		por := p.rolPrivilegiado()
+		if *fuente == "" {
+			*fuente = fuentePorDefecto(p.rolStop())
+		}
+		if *fuente == "" {
+			fmt.Fprintln(stderr, "orq mem:", lang.T("--source is required here: an Owner or Atena record is signed on purpose (--source owner|atena).", "--source es obligatorio aquí: un registro del Owner o de Atena se firma a propósito (--source owner|atena)."))
+			return 1
+		}
+		if esRolDeWorker(p.rolStop()) && fuenteCanon(*fuente) != "worker" && fuenteCanon(*fuente) != "scout" {
+			fmt.Fprintf(stderr, "orq mem: %s\n", fmt.Sprintf(lang.T("a worker only signs as worker or scout, not %q", "un worker solo firma como worker o scout, no %q"), *fuente))
+			return 1
+		}
 		if err := fuentePermitida(*fuente, por); err != nil {
 			fmt.Fprintln(stderr, "orq mem:", err)
 			return 1
@@ -1100,12 +1111,46 @@ func (p proyecto) decisionDelSlice(aprobado, id string, desde time.Time) error {
 	return fmt.Errorf("--aprobado %s no se encontró", ref)
 }
 
-// fuentePermitida: owner y atena solo los firma quien tiene ese rol validado (Atena registra al Owner).
-func fuentePermitida(fuente, rol string) error {
+// fuenteCanon: la forma guardada de una fuente (orchestrator es orquestador).
+func fuenteCanon(f string) string {
+	it := memoria.Item{Fuente: f}
+	it.Normalizar()
+	return it.Fuente
+}
+
+// esRolDeWorker: rolStop dice worker-*, o un rol que no es de sesión (w1, tester, scout, sin ORQ_WORKER_ID).
+func esRolDeWorker(efectivo string) bool {
+	switch fuenteCanon(efectivo) {
+	case "owner", "atena", "orquestador", "planificador", "astra", "filtro", "liaison", "escriba":
+		return false
+	}
+	return true
+}
+
+// fuentePorDefecto: la fuente de `mem add` sin --source, según el rol efectivo. "" significa que hay
+// que decirla: owner y atena nunca se firman por omisión.
+func fuentePorDefecto(efectivo string) string {
+	c := fuenteCanon(efectivo)
 	switch {
-	case fuente == "owner" && (rol == "owner" || rol == "atena"):
-	case fuente == "atena" && rol == "atena":
-	case fuente == "owner" || fuente == "atena":
+	case c == "owner" || c == "atena":
+		return ""
+	case c == "scout":
+		return "scout"
+	case esRolDeWorker(efectivo):
+		return "worker"
+	}
+	return c
+}
+
+// fuentePermitida: owner, atena y filtro solo los firma quien tiene ese rol validado (Atena registra
+// al Owner).
+func fuentePermitida(fuente, rol string) error {
+	f := fuenteCanon(fuente)
+	switch {
+	case f == "owner" && (rol == "owner" || rol == "atena"):
+	case f == "atena" && rol == "atena":
+	case f == "filtro" && (rol == "owner" || rol == "atena"):
+	case f == "owner" || f == "atena" || f == "filtro":
 		return fmt.Errorf("--fuente %s exige ORQ_ROL=%s y ORQ_TOKEN (rol actual %q)", fuente, fuente, rol)
 	}
 	return nil

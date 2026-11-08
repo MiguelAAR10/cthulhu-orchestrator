@@ -12,7 +12,7 @@ You answer "how are we doing?" from files, not from memory. `orq board` reads `.
 2. Explain the result in this order, the same order the board uses:
    1. **Stoppers first.** These are the things only the Owner can unblock. For each one, say what is needed and where to put it (for example, "a Stripe test key, in the env var `STRIPE_TEST_KEY`"). Say which work waits on it and that everything else keeps going.
    2. **Overall progress**: `overall.pct` and "`measured` of `total` slices measured".
-   3. **One line per slice**: the product title, the status word (BLOCKED, AT RISK, IN PROGRESS, NOT PLANNED, DONE), the % done, and what is still missing (`missing`, in product words).
+   3. **One line per slice**: the product title, the status word (BLOCKED, AT RISK, IN PROGRESS, NOT PLANNED, REJECTED, DONE), the % done, and what is still missing (`missing`, in product words).
    4. **Workers**: only mention the ones whose verdict is not `ok` (stuck, dead, timeout).
    5. **Velocity** and rework, only if the Owner asks or something looks off.
 3. If the Owner wants something to look at or share, run `orq board --html`. It writes `.orq/board.html`, a single file that opens offline. Use `--out PATH` to write it somewhere else.

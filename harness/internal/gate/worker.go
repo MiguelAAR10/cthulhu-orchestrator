@@ -79,6 +79,9 @@ func OrqPermitidoAWorker(args []string) bool {
 		}
 		switch k {
 		case "--fuente", "--source":
+			if cmd == "mem" && v != "worker" && v != "scout" {
+				return false // la misma regla que `orq mem add`: otra fuente suplanta a una sesión
+			}
 			if v == "owner" || v == "atena" {
 				return false
 			}
@@ -222,44 +225,4 @@ func dirConfigOrq() string {
 		return ""
 	}
 	return filepath.Join(cfg, "orq")
-}
-
-// workerLee: Read/Grep/Glob (y Write/Edit) de un worker no tocan la config de orq ni el entorno de
-// otros procesos: ni leer el token ni plantar un ancla en sessions/.
-func workerLee(p Payload) (Decision, bool) {
-	switch p.ToolName {
-	case "Read", "Grep", "Glob", "LS", "NotebookRead", "Write", "Edit", "MultiEdit", "NotebookEdit":
-	default:
-		return Decision{}, false
-	}
-	home, _ := os.UserHomeDir()
-	cfg, _ := os.UserConfigDir()
-	var rutas []string
-	for _, k := range []string{"file_path", "path", "notebook_path"} {
-		if v, _ := p.ToolInput[k].(string); v != "" {
-			rutas = append(rutas, v)
-		}
-	}
-	if p.ToolName == "Glob" {
-		if v, _ := p.ToolInput["pattern"].(string); v != "" {
-			rutas = append(rutas, v)
-		}
-	}
-	for _, r := range rutas {
-		if strings.HasPrefix(r, "~") && home != "" {
-			r = home + r[1:]
-		}
-		if !filepath.IsAbs(r) && p.Cwd != "" {
-			r = filepath.Join(p.Cwd, r)
-		}
-		r = filepath.Clean(r)
-		malo := strings.Contains(r, "/.config") || strings.Contains(r, "owner.token") ||
-			(cfg != "" && (r == cfg || strings.HasPrefix(r, cfg+"/"))) ||
-			r == "/proc" || (strings.HasPrefix(r, "/proc/") && (strings.Contains(r, "environ") || strings.ContainsAny(r, "*?[")))
-		if malo {
-			return deny("%s", lang.T("orq: a worker does not read or write orq's config directory or another process's environment.",
-				"orq: un worker no lee ni escribe la carpeta de config de orq ni el entorno de otro proceso.")), true
-		}
-	}
-	return Decision{}, false
 }
