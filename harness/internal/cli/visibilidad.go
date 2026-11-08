@@ -130,7 +130,7 @@ func runWorker(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "beat":
-		fs := flag.NewFlagSet("worker beat", flag.ContinueOnError)
+		fs := nuevoFS("worker beat", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		phase := fs.String("phase", "", "running|blocked|question")
 		summary := fs.String("summary", "", "one plain line")
@@ -180,7 +180,7 @@ func runWorker(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s %s · head %.8s · commits %d\n", st.ID, st.Phase, st.Head, st.Commits)
 		return 0
 	case "done":
-		fs := flag.NewFlagSet("worker done", flag.ContinueOnError)
+		fs := nuevoFS("worker done", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		summary := fs.String("summary", "", "what is done, one plain line")
 		ask := fs.Bool("ask-verification", false, "ask the Orchestrator to run orq slice verificar")
@@ -237,7 +237,7 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "raise":
-		fs := flag.NewFlagSet("stop raise", flag.ContinueOnError)
+		fs := nuevoFS("stop raise", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		typ := fs.String("type", "", strings.Join(stops.Types, "|"))
 		sev := fs.String("severity", "", "blocking|soon|fyi")
@@ -333,7 +333,7 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		fs := flag.NewFlagSet("stop resolve", flag.ContinueOnError)
+		fs := nuevoFS("stop resolve", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		at := fs.String("provided-at", "", "env:NAME | file:PATH | vault:REF")
 		choice := fs.String("choice", "", "chosen option of a decision")
@@ -397,7 +397,7 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		fs := flag.NewFlagSet("stop cancel", flag.ContinueOnError)
+		fs := nuevoFS("stop cancel", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		note := fs.String("note", "", "why it is no longer needed")
 		if fs.Parse(args[2:]) != nil {
@@ -450,7 +450,7 @@ func runAutonomy(args []string, stdout, stderr io.Writer) int {
 	case "guided":
 		cfg.Autonomy = &config.Autonomy{Mode: "guided", ApprovedBy: "owner", ApprovedAt: time.Now().UTC()}
 	case "free":
-		fs := flag.NewFlagSet("autonomy free", flag.ContinueOnError)
+		fs := nuevoFS("autonomy free", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		scope := fs.String("scope", "", "paths the Owner pre-approves, comma separated")
 		mins := fs.Int("minutes", 45, "minutes per task")
@@ -491,7 +491,7 @@ func runBoard(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	fs := flag.NewFlagSet("board", flag.ContinueOnError)
+	fs := nuevoFS("board", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "schema orq.board/v1")
 	asHTML := fs.Bool("html", false, "one static file, no scripts or network")
@@ -532,7 +532,7 @@ func runHandoff(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	fs := flag.NewFlagSet("handoff", flag.ContinueOnError)
+	fs := nuevoFS("handoff", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	out := fs.String("out", filepath.Join(p.root, "HANDOFF.md"), "output path")
 	if fs.Parse(args) != nil {

@@ -77,7 +77,7 @@ func runQA(args []string, stdout, stderr io.Writer) int {
 		return 0
 	case len(args) >= 3 && args[0] == "finding" && args[1] == "add":
 		nn := nnDe(args[2])
-		fs := flag.NewFlagSet("qa finding add", flag.ContinueOnError)
+		fs := nuevoFS("qa finding add", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		var f qa.Finding
 		fs.StringVar(&f.Requirement, "requirement", "", "requisito o línea de la historia")
@@ -129,7 +129,7 @@ func runEvidence(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	nn := nnDe(args[1])
-	fs := flag.NewFlagSet("evidence", flag.ContinueOnError)
+	fs := nuevoFS("evidence", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	kind := fs.String("kind", "", "target|before|after")
 	file := fs.String("file", "", "PNG")

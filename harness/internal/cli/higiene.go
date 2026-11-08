@@ -88,7 +88,7 @@ func mostrarGC(w io.Writer, res []worktrees.Resultado) {
 }
 
 func runGC(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("gc", flag.ContinueOnError)
+	fs := nuevoFS("gc", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	dry := fs.Bool("dry-run", false, "solo muestra qué haría")
 	if fs.Parse(args) != nil {

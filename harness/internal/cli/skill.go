@@ -236,7 +236,7 @@ func runSkills(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 {
 		sub, args = args[0], args[1:]
 	}
-	fs := flag.NewFlagSet("skills", flag.ContinueOnError)
+	fs := nuevoFS("skills", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	phase := fs.String("phase", "", "T|C|A|D|V|DOC")
 	role := fs.String("role", "", strings.Join(perfil.Roles, "|"))

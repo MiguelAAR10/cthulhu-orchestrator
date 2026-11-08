@@ -25,6 +25,7 @@ var tabla = []struct{ es, en string }{
 	{"orq: no estás dentro de un repositorio git", "orq: you are not inside a git repository"},
 
 	// init, doctor, gc, hooks
+	{"en cuarentena: %s\n", "quarantined: %s\n"},
 	{"modo: %s (%d archivos de código) · stack: %s\n", "mode: %s (%d code files) · stack: %s\n"},
 	{"hooks instalados en %s: guardia, contexto al arrancar y relevo antes de compactar\n", "hooks installed in %s: guard, context at start and handoff before compacting\n"},
 	{"ya existe %s: une a mano el bloque hooks de `orq init --hooks`\n", "%s already exists: merge the hooks block from `orq init --hooks` by hand\n"},

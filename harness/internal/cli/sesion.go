@@ -47,7 +47,7 @@ func runSesion(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "abrir":
-		fs := flag.NewFlagSet("sesion abrir", flag.ContinueOnError)
+		fs := nuevoFS("sesion abrir", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		a := flagsArranque(fs)
 		if len(args) < 2 || (args[1] != "planificador" && args[1] != "astra") || fs.Parse(args[2:]) != nil {

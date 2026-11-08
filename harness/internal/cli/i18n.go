@@ -42,10 +42,12 @@ var valueEN = map[string]string{
 	"story": "historia", "question": "pregunta", "answer": "respuesta", "closing": "cierre",
 	"planner": "planificador", "orchestrator": "orquestador", "verifier": "verificador",
 	"improve": "mejora", "new": "nuevo", "status": "estado", "fact": "hecho", "hypothesis": "hipotesis",
+	"critical": "critica", "requirement": "requisito", "domain": "dominio", "technical": "tecnico", "risk": "riesgo",
+	"learning": "aprendizaje", "filter": "filtro", "scribe": "escriba",
 }
 
 // flags whose values (and positional role arguments) are translated.
-var valueFlags = map[string]bool{"dificultad": true, "tipo": true, "para": true, "modo": true, "imp": true}
+var valueFlags = map[string]bool{"dificultad": true, "tipo": true, "para": true, "modo": true, "imp": true, "cat": true, "fuente": true}
 
 func normalizeArgs(args []string) []string {
 	if len(args) == 0 {

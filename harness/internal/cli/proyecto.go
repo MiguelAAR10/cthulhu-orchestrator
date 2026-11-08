@@ -103,7 +103,7 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "add":
-		fs := flag.NewFlagSet("mem add", flag.ContinueOnError)
+		fs := nuevoFS("mem add", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		imp := fs.String("imp", "", strings.Join(memoria.Imps, "|"))
 		cat := fs.String("cat", "", strings.Join(memoria.Cats, "|"))
@@ -132,7 +132,7 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "ver":
-		fs := flag.NewFlagSet("mem ver", flag.ContinueOnError)
+		fs := nuevoFS("mem ver", flag.ContinueOnError)
 		cat := fs.String("cat", "", "filtra por categoría")
 		if fs.Parse(args[1:]) != nil {
 			return 1
@@ -202,7 +202,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "send":
-		fs := flag.NewFlagSet("msg send", flag.ContinueOnError)
+		fs := nuevoFS("msg send", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		para := fs.String("para", "", "atena|orquestador")
 		tipo := fs.String("tipo", "", strings.Join(canal.Tipos, "|"))
@@ -327,7 +327,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "si el destino no lo recibió: orq msg reconciliar --reenviar ID")
 		return 3
 	case "leer":
-		fs := flag.NewFlagSet("msg leer", flag.ContinueOnError)
+		fs := nuevoFS("msg leer", flag.ContinueOnError)
 		n := fs.Int("n", 10, "últimos N")
 		if fs.Parse(args[1:]) != nil {
 			return 1
@@ -430,7 +430,7 @@ func lanzar(p proyecto, ses map[string]canal.Sesion, rol string, a *arranque) (c
 }
 
 func runUp(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("up", flag.ContinueOnError)
+	fs := nuevoFS("up", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	a := flagsArranque(fs)
 	if fs.Parse(args) != nil {
@@ -482,7 +482,7 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 const lineasRelevo = 25
 
 func runRelevo(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("relevo", flag.ContinueOnError)
+	fs := nuevoFS("relevo", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	a := flagsArranque(fs)
 	soloArchivo := fs.Bool("solo-archivo", false, "escribe el relevo sin abrir sesión nueva")
@@ -595,7 +595,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "abrir":
-		fs := flag.NewFlagSet("slice abrir", flag.ContinueOnError)
+		fs := nuevoFS("slice abrir", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		titulo := fs.String("titulo", "", "historia en pocas palabras")
 		test := fs.String("test", "", "ruta del examen de aceptación, relativa a la raíz")
@@ -639,7 +639,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s abierto en rojo sobre %s (%s). Worktree: %s\nPaquete protegido: %s\nAsigna el escritor: orq slice tomar <quien>\n", e.Attempt(), e.Base, e.SHARojo[:8], e.Worktree, strings.Join(e.Bundle, ", "))
 		return 0
 	case "tomar":
-		fs := flag.NewFlagSet("slice tomar", flag.ContinueOnError)
+		fs := nuevoFS("slice tomar", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		relevo := fs.Bool("relevo", false, "reemplaza al escritor actual en el mismo worktree")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil {
@@ -654,7 +654,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s: escribe %s en %s\n", e.Attempt(), e.Escritor, e.Worktree)
 		return 0
 	case "alcance":
-		fs := flag.NewFlagSet("slice alcance", flag.ContinueOnError)
+		fs := nuevoFS("slice alcance", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		aprobado := fs.String("aprobado", "", "quién lo aprobó y por qué (req o mem de Atena/Owner)")
 		zona := fs.String("zona", "", "también la suma a la zona de ese worker ya lanzado")
@@ -752,7 +752,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s abierto en el mismo worktree. Recibos anteriores ya no valen. Asigna escritor: orq slice tomar <quien>\n", e.Attempt())
 		return 0
 	case "cerrar":
-		fs := flag.NewFlagSet("slice cerrar", flag.ContinueOnError)
+		fs := nuevoFS("slice cerrar", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		ok := fs.Bool("aceptado", false, "el Owner aceptó la demo")
 		motivo := fs.String("rechazado", "", "motivo del rechazo en una línea")
@@ -828,7 +828,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "lanzar":
-		fs := flag.NewFlagSet("slice lanzar", flag.ContinueOnError)
+		fs := nuevoFS("slice lanzar", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		agente := fs.String("agente", "", "agente de orq.agents.json (por defecto, el de roles.worker por riesgo)")
 		zona := fs.String("zona", "", "front, back, test…: suma el worker al equipo del slice")
@@ -855,7 +855,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s trabajando en su worktree con el contrato. Mira el avance con `orq slice estado`.\n", nombre)
 		return 0
 	case "examen":
-		fs := flag.NewFlagSet("slice examen", flag.ContinueOnError)
+		fs := nuevoFS("slice examen", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		cmd := fs.String("cmd", "", "comando nuevo del examen si debe correr también los archivos sumados")
 		aprobado := fs.String("aprobado", "", "req de Atena u Owner que aprueba el examen nuevo")
@@ -918,7 +918,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "contrato":
-		fs := flag.NewFlagSet("slice contrato", flag.ContinueOnError)
+		fs := nuevoFS("slice contrato", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		worker := fs.String("worker", "", "nombre del worker (por defecto, el escritor)")
 		alcance := fs.String("alcance", "solo lo necesario para que el examen pase", "qué sí y qué no")
