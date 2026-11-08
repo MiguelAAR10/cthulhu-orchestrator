@@ -10,6 +10,7 @@
 1. Orchestrator: `orq qa run S-NN`. Runs the pyramid declared in `.orq/config.json` in order, inside the slice worktree:
    `{"qa":{"layers":[{"name":"unit","cmd":"go test ./..."},{"name":"integration","cmd":"..."},{"name":"e2e","cmd":"npx playwright test"},{"name":"mutation","cmd":"...","min_criticality":"high"}],"require_receipt_from":"medium"}}`
    Writes `.orq/qa/S-NN/receipt.json` with head, criticality and per-layer exit/passed/failed. Playwright is just a command; orq never launches a browser itself.
+   It also records HEAD and `git status --porcelain` of the worktree before and after the layers: if anything changed outside the allowed reports (`out.tap` plus `qa.reports` globs), the receipt is `invalid` and does not count.
 2. Tester: `orq qa finding add S-NN --requirement --commit --repro --observed --expected --impact`. Missing fields are rejected. orq re-runs `--repro`: **confirmed only if it fails**. A repro that passes is stored but never counts.
 3. Repairer fixes; orchestrator re-runs `orq qa run`.
 
