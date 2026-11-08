@@ -2,6 +2,7 @@ package qa
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -168,5 +169,47 @@ func TestProfileCriticalityWins(t *testing.T) {
 	os.Remove(filepath.Join(dir, "profile.json"))
 	if c := LoadConfig(dir); c.Crit() != "high" || c.Note == "" {
 		t.Fatalf("config.json solo como legado con nota: %+v", c)
+	}
+}
+
+// Un tester que escribe en el worktree con un script de python (el gate no lo ve) invalida el
+// recibo; escribir el informe permitido (out.tap) no.
+func TestTesterQueEscribeInvalidaElRecibo(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("sin python3")
+	}
+	dir := t.TempDir()
+	git := func(a ...string) {
+		if out, err := exec.Command("git", append([]string{"-C", dir, "-c", "user.email=a@b", "-c", "user.name=a"}, a...)...).CombinedOutput(); err != nil {
+			t.Fatal(err, string(out))
+		}
+	}
+	git("init", "-q")
+	os.WriteFile(filepath.Join(dir, "app.py"), []byte("print(1)\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("cache/\n"), 0o644)
+	git("add", ".")
+	git("commit", "-q", "-m", "x")
+	limpio := []Layer{{Name: "unit", Cmd: `python3 -c "open('out.tap','w').write('ok 1\n'); import os; os.makedirs('cache',exist_ok=True); open('cache/x','w').write('1')"`}}
+	rec := RunVigilado(dir, "07", limpio, "medium", ShellRunner, t0, []string{"out.tap"})
+	if rec.Result != "pass" || rec.Tree == nil || rec.Tree.Before.Head == "" {
+		t.Fatalf("informe permitido: %+v", rec)
+	}
+	for _, cmd := range []string{
+		`python3 -c "open('app.py','w').write('print(2)\n')"`,
+		`python3 -c "open('nuevo_test.py','w').write('')"`,
+		`git -c user.email=a@b -c user.name=a commit -q --allow-empty -m sneaky`,
+	} {
+		rec := RunVigilado(dir, "07", []Layer{{Name: "unit", Cmd: cmd}}, "medium", ShellRunner, t0, []string{"out.tap"})
+		if rec.Result != "invalid" || len(rec.Tree.Changed) == 0 {
+			t.Errorf("%s: %+v", cmd, rec)
+		}
+		git("reset", "-q", "--hard", "HEAD@{0}")
+		exec.Command("git", "-C", dir, "clean", "-qfd").Run()
+	}
+	// un archivo ya sucio que el tester reescribe también cuenta
+	os.WriteFile(filepath.Join(dir, "app.py"), []byte("print(3)\n"), 0o644)
+	rec = RunVigilado(dir, "07", []Layer{{Name: "unit", Cmd: `python3 -c "open('app.py','w').write('print(4)\n')"`}}, "medium", ShellRunner, t0, nil)
+	if rec.Result != "invalid" {
+		t.Fatalf("reescritura de un archivo sucio: %+v", rec.Tree)
 	}
 }

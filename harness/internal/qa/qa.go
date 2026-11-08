@@ -6,6 +6,7 @@ package qa
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,7 +76,12 @@ type Config struct {
 	Note        string  `json:"-"` // aviso de deprecación si la criticidad vino de config.json
 	Layers      []Layer `json:"layers"`
 	RequireFrom string  `json:"require_receipt_from,omitempty"` // desde qué criticidad se exige recibo (medium)
+	// Reports: archivos que las capas pueden escribir en el worktree (globs); out.tap siempre vale.
+	Reports []string `json:"reports,omitempty"`
 }
+
+// Permitidos: los informes que una corrida de QA puede dejar en el worktree.
+func (c Config) Permitidos() []string { return append([]string{"out.tap"}, c.Reports...) }
 
 func (c Config) Crit() string { return normalizar(c.Criticality) }
 
@@ -93,7 +99,7 @@ func LoadConfig(orqDir string) Config {
 	}
 	var q Config
 	if json.Unmarshal(m["qa"], &q) == nil {
-		c.Layers, c.RequireFrom = q.Layers, q.RequireFrom
+		c.Layers, c.RequireFrom, c.Reports = q.Layers, q.RequireFrom, q.Reports
 	}
 	return c
 }
@@ -116,8 +122,103 @@ type Receipt struct {
 	Head        string        `json:"head"`
 	Criticality string        `json:"criticality"`
 	Layers      []LayerResult `json:"layers"`
-	Result      string        `json:"result"` // pass|fail
+	Result      string        `json:"result"` // pass|fail|invalid
 	TS          time.Time     `json:"ts"`
+	// Tree: HEAD y git status del worktree antes y después de las capas. Si el tester cambió algo
+	// fuera de los informes permitidos, el recibo es invalid: no prueba el código que se entregó.
+	Tree *TreeCheck `json:"tree,omitempty"`
+}
+
+type TreeCheck struct {
+	Before  Arbol    `json:"before"`
+	After   Arbol    `json:"after"`
+	Changed []string `json:"changed,omitempty"`
+}
+
+// Arbol es la foto estructural de un worktree: HEAD más `git status --porcelain` (tracked y
+// untracked no ignorados), sin los informes permitidos.
+type Arbol struct {
+	Head   string   `json:"head"`
+	Status []string `json:"status"`
+}
+
+// FotoArbol toma la foto; fuera de un repo git devuelve un árbol vacío (Head "").
+func FotoArbol(dir string, permitidos []string) Arbol {
+	var a Arbol
+	h, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return a
+	}
+	a.Head = strings.TrimSpace(string(h))
+	out, _ := exec.Command("git", "-C", dir, "status", "--porcelain=v1", "-z", "--untracked-files=all").Output()
+	for _, e := range strings.Split(string(out), "\x00") {
+		if len(e) < 4 {
+			continue
+		}
+		ruta := e[3:]
+		if permitido(ruta, permitidos) {
+			continue
+		}
+		// El contenido cuenta, no solo el estado: un archivo ya sucio que el tester reescribe cambia.
+		sum := ""
+		if raw, err := os.ReadFile(filepath.Join(dir, ruta)); err == nil {
+			sum = fmt.Sprintf(" %x", sha256.Sum256(raw))
+		}
+		a.Status = append(a.Status, e[:2]+" "+ruta+sum)
+	}
+	return a
+}
+
+func permitido(ruta string, pats []string) bool {
+	for _, p := range pats {
+		if ok, _ := filepath.Match(p, ruta); ok || ruta == p {
+			return true
+		}
+		if ok, _ := filepath.Match(p, filepath.Base(ruta)); ok && !strings.Contains(p, "/") {
+			return true
+		}
+	}
+	return false
+}
+
+// Diferencias entre dos fotos.
+func Diferencias(a, b Arbol) []string {
+	var d []string
+	if a.Head != b.Head {
+		d = append(d, fmt.Sprintf("HEAD %.12s -> %.12s", a.Head, b.Head))
+	}
+	en := func(xs []string) map[string]bool {
+		m := map[string]bool{}
+		for _, x := range xs {
+			m[x] = true
+		}
+		return m
+	}
+	ma, mb := en(a.Status), en(b.Status)
+	for _, x := range b.Status {
+		if !ma[x] {
+			d = append(d, "+ "+x)
+		}
+	}
+	for _, x := range a.Status {
+		if !mb[x] {
+			d = append(d, "- "+x)
+		}
+	}
+	return d
+}
+
+// RunVigilado corre la pirámide entre dos fotos del worktree; si las capas cambiaron algo fuera de
+// los informes permitidos, el recibo queda invalid.
+func RunVigilado(dir, nn string, layers []Layer, crit string, run Runner, now time.Time, permitidos []string) Receipt {
+	antes := FotoArbol(dir, permitidos)
+	rec := Run(dir, nn, antes.Head, layers, crit, run, now)
+	despues := FotoArbol(dir, permitidos)
+	rec.Tree = &TreeCheck{Before: antes, After: despues, Changed: Diferencias(antes, despues)}
+	if len(rec.Tree.Changed) > 0 {
+		rec.Result = "invalid"
+	}
+	return rec
 }
 
 var (

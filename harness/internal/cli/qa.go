@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"orq/internal/escriba"
@@ -40,7 +41,7 @@ func runQA(args []string, stdout, stderr io.Writer) int {
 	}
 	switch {
 	case len(args) >= 2 && args[0] == "run":
-		if rol := os.Getenv("ORQ_ROL"); rol == "tester" || rol == "repairer" || os.Getenv("ORQ_WORKER_ID") != "" {
+		if _, w := workerEfectivo(); w || os.Getenv("ORQ_ROL") == "tester" || os.Getenv("ORQ_ROL") == "repairer" {
 			fmt.Fprintln(stderr, "orq qa: `qa run` lo pide solo el Orquestador")
 			return 1
 		}
@@ -51,8 +52,7 @@ func runQA(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		dir, _ := p.dirSlice(nn)
-		head, _ := slice.Git(dir, "rev-parse", "HEAD")
-		rec := qa.Run(dir, nn, head, cfg.Layers, cfg.Crit(), qaRunner, time.Now())
+		rec := qa.RunVigilado(dir, nn, cfg.Layers, cfg.Crit(), qaRunner, time.Now(), cfg.Permitidos())
 		if err := qa.Guardar(p.dir, rec); err != nil {
 			fmt.Fprintln(stderr, "orq qa:", err)
 			return 1
@@ -63,6 +63,12 @@ func runQA(args []string, stdout, stderr io.Writer) int {
 				continue
 			}
 			fmt.Fprintf(stdout, "  %-12s exit %d · %d pasan · %d fallan\n", l.Name, l.Exit, l.Passed, l.Failed)
+		}
+		if rec.Result == "invalid" {
+			fmt.Fprintf(stderr, "orq qa: the run changed the worktree outside the allowed reports (%s); the receipt is invalid:\n", strings.Join(cfg.Permitidos(), ", "))
+			for _, c := range rec.Tree.Changed {
+				fmt.Fprintln(stderr, "  "+c)
+			}
 		}
 		fmt.Fprintf(stdout, "QA %s %s (criticidad %s) → .orq/qa/%s/receipt.json\n", rec.Slice, rec.Result, rec.Criticality, rec.Slice)
 		if rec.Result != "pass" {
