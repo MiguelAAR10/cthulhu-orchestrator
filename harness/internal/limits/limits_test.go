@@ -58,3 +58,12 @@ func TestCampoDesconocidoFalla(t *testing.T) {
 		t.Fatal("debía rechazar un campo mal escrito")
 	}
 }
+
+func TestTopeFronts(t *testing.T) {
+	if (Limits{}).TopeFronts() != 3 {
+		t.Fatal("defecto 3")
+	}
+	if (Limits{MaxFronts: 5}).TopeFronts() != 5 {
+		t.Fatal("max_fronts manda")
+	}
+}

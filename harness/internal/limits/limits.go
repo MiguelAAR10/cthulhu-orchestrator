@@ -32,6 +32,16 @@ type Limits struct {
 	ConteoEstricto bool `json:"conteo_estricto,omitempty"`
 	// MaxWorktrees: worktrees vinculados que orq registró por proyecto; ausente = MaxWorktreesDefecto.
 	MaxWorktrees *int `json:"max_worktrees,omitempty"`
+	// MaxFronts: fronts (sub-orquestadores como dato) por plan; 0 = 3.
+	MaxFronts int `json:"max_fronts,omitempty"`
+}
+
+// TopeFronts devuelve max_fronts o 3 si falta.
+func (l Limits) TopeFronts() int {
+	if l.MaxFronts <= 0 {
+		return 3
+	}
+	return l.MaxFronts
 }
 
 // MaxWorktreesDefecto: con 344 worktrees WSL se trabó; 12 deja margen para 4 slices con equipo.

@@ -169,6 +169,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runSesion(args[1:], stdout, stderr)
 	case "plan":
 		return runPlan(args[1:], stdout, stderr)
+	case "front":
+		return runFront(args[1:], stdout, stderr)
 	case "aprender":
 		return runAprender(args[1:], stdout, stderr)
 	case "alinear":

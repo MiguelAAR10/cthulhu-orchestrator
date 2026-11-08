@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -76,7 +77,11 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		if viejo, err := plan.Leer(p.planPath(e.NN)); err == nil {
 			kept, reabiertas = plan.Conservar(pl, viejo)
 		}
-		if err := plan.Validar(pl, e.Alcance); err != nil {
+		err = plan.Validar(pl, e.Alcance)
+		if ferr := plan.ValidarFronts(pl, maxFronts()); ferr != nil {
+			err = errors.Join(err, ferr)
+		}
+		if err != nil {
 			fmt.Fprintf(stderr, "orq plan: el plan no sirve así:\n%s\n", err)
 			return 1
 		}

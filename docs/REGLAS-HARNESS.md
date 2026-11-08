@@ -68,7 +68,7 @@ Cada worktree que orq crea (slice, zona, integración) queda en `.orq/worktrees.
 - **tester** (`ORQ_ROL=tester`, sesión fresca): el gate le niega Edit/Write/MultiEdit/NotebookEdit y todo Bash que escriba (redirecciones salvo `/dev/null`, `rm/mv/cp/tee/touch/sed -i`, `mkdir`, `git add/commit/checkout…`, instalaciones, intérpretes en línea) y los comandos del Orquestador. Prueba y registra hallazgos.
 - **repairer** (`ORQ_ROL=repairer`, worker aparte): edita producto; el paquete del examen fijado por huella (H-01) le está protegido aunque no esté en un worktree enlazado.
 - **`orq qa run S-NN`** (solo Orquestador; el gate y la CLI lo niegan a tester, repairer y workers): corre en orden las capas de `qa.layers` en `.orq/config.json` dentro del worktree del slice; recibo en `.orq/qa/S-NN/receipt.json` con conteos por capa. Las capas con `min_criticality: high` (mutación, adversarial) solo corren si la criticidad es high.
-- **Criticidad**: `criticality` o `project.criticality` en `.orq/config.json` (low|medium|high y sinónimos), lectura tolerante, **medium** por defecto.
+- **Criticidad (una sola fuente)**: `orq profile set criticality=trivial|low|medium|high` (`.orq/profile.json`) manda, y la leen la regla de cierre QA, el enrutado de skills y `orq profile` por el mismo accesor (`perfil.Criticality`). `criticality`/`project.criticality` en `.orq/config.json` queda solo como respaldo heredado y avisa que está obsoleto. Sin ninguno: **medium**. trivial cuenta como low para QA.
 - **`orq qa finding add`** exige requirement, commit, repro, observed, expected, impact. orq re-ejecuta el repro: **confirmado solo si falla**; uno que pasa queda registrado y no cuenta.
 - **Cierre**: `orq slice cerrar --aceptado` exige recibo QA verde y ningún hallazgo confirmado posterior cuando criticidad ≥ `qa.require_receipt_from` (medium).
 - **Evidencia**: `orq evidence add S-NN --kind target|before|after --file PNG [--note] [--pulir]` guarda en `docs/slices/S-NN/`, calcula el % de píxeles distintos after vs target (stdlib, determinista) y regenera `README.md` ≤40 líneas. El pulido con el modelo `docs` es opcional y con tiempo máximo; si falla, queda el determinista.
@@ -82,6 +82,12 @@ Detalle en inglés: `docs/v2/SKILLS.md`.
 - **Enrutado** (`orq skills plan --phase X --role R`): solo lo que encaja con tipo, stacks, fase, rol y criticidad efectiva (producción sube un nivel). Trivial ⇒ 0 o 1 skill; crítica en producción ⇒ todas las que encajan. `orq skill ROL` y `orq contexto` muestran solo el conjunto fase×rol: worker D, scout C, planificador/astra A, verificador V; atena y orquestador siguen la fase del proyecto. Matt Pocock va solo al frente (grilling en T desde medium).
 - **Instalar** (`orq skills install [ID…]`): instala solo la selección, en `.claude/skills/` y `.agents/skills/`, y fija la huella en `.orq/skills.lock.json`. Rechaza la never-list, lo rechazado en la galería, lo que no pasa `vet` y lo que difiere del sha256 del catálogo o del lock.
 - **Vet** (`orq skills vet ID [--file F]`): exige frontmatter con name/description y ≤20000 bytes. Rechaza `git push`, `--force`, `rm -rf`, `reset --hard`/`branch -D`, lanzar agentes y `curl|sh`; una línea que lo prohíbe no cuenta. El veredicto validated|rejected va con su motivo a `.orq/skills.gallery.json`.
+
+## Fronts (slice 6): sub-orquestadores como dato
+- El plan admite `fronts`: `[{id, goal, paths, owner_role}]` (goal en palabras de producto). No son procesos nuevos: la admisión sigue siendo global (max_workers compartido).
+- `orq plan cargar` rechaza: más de `max_fronts` (limits.json, **3** por defecto), rutas de fronts que se solapan, tareas sin front cuando hay fronts, front inexistente y tareas con rutas fuera de su front.
+- `orq front brief F` imprime una página: goal, alcance (paths), aceptación (el examen del slice) y tareas. `orq front receipt F` agrega: tareas hechas/total, tests de los últimos recibos de sus workers, hallazgos QA abiertos del slice y stoppers de sus tareas.
+- `orq board` (y `--json`, campo `slices[].fronts`) agrupa las tareas del slice por front. El orquestador principal solo consume briefs y recibos.
 
 ## Comandos
 

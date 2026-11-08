@@ -117,6 +117,14 @@ skill to phases, roles, project types, stacks and minimum criticality. `orq skil
 picks the set; `orq skills vet ID` statically rejects skills that push, force, `rm -rf` or spawn agents;
 `orq skills install` pins content hashes in `.orq/skills.lock.json`. Details: [`docs/v2/SKILLS.md`](docs/v2/SKILLS.md).
 
+## Fronts
+
+A big slice can be split into up to 3 fronts (`max_fronts` in limits.json): sub-orchestrators kept as data in the
+plan, not new processes. Each front has a product goal, its own non-overlapping paths and an owner role; every task
+names its front. `orq front brief F` gives a one-page brief, `orq front receipt F` one page of results (tasks done,
+tests, open findings, stoppers), and the board groups tasks by front. Admission stays global, and the main
+orchestrator only reads briefs and receipts. Criticality has one source: `orq profile set criticality=…`.
+
 ## Verified vs not yet verified
 
 Honest status of v2 (`harness/v2` branch):
@@ -132,7 +140,6 @@ Honest status of v2 (`harness/v2` branch):
 - No real **herdr**, **Claude** or **Codex** end-to-end run of v2 (launch → work → verify → close) yet; the
   `herdr`/`tmux` runners are tested with fakes only.
 - Worker **exit_code** capture is missing: a `process` worker that dies is noticed by heartbeat/state, not by its exit code.
-- `orq profile set criticality=…` does not yet feed the QA close rule, which reads `.orq/config.json`.
 - Codex has no PreToolUse hook equivalent, so its tool calls do not pass through the gate.
 
 ## Install

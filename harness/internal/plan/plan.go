@@ -36,6 +36,7 @@ type Tarea struct {
 	Que        string   `json:"que,omitempty"`        // una línea: qué deja hecho
 	Estado     string   `json:"estado,omitempty"`     // pendiente | en_curso | hecha
 	Worker     string   `json:"worker,omitempty"`
+	Front      string   `json:"front,omitempty"` // id del front (sub-orquestador como dato) al que pertenece
 }
 
 type Plan struct {
@@ -44,6 +45,8 @@ type Plan struct {
 	Debatido    bool    `json:"-"`
 	DebatidoRev string  `json:"debatido_rev,omitempty"` // revisión que el adversario atacó y aprobó
 	Tareas      []Tarea `json:"tareas"`
+	// Fronts: sub-orquestadores como DATO, no procesos. Opcional.
+	Fronts []Front `json:"fronts,omitempty"`
 	// Retenidas: tarea → motivo ("stop ST-NNNN") por un stopper blocking abierto. Lo llena Leer.
 	Retenidas map[string]string `json:"-"`
 }

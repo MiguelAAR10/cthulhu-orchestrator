@@ -60,6 +60,15 @@ type Slice struct {
 	Who           []string  `json:"who"`
 	Rework        int       `json:"rework"`
 	BlockedReason string    `json:"blocked_reason"`
+	Fronts        []Front   `json:"fronts,omitempty"`
+}
+
+// Front agrupa las tareas de un slice por sub-orquestador (dato del plan).
+type Front struct {
+	ID      string    `json:"id"`
+	Goal    string    `json:"goal"`
+	Tasks   TaskCount `json:"tasks"`
+	TaskIDs []string  `json:"task_ids"`
 }
 
 type WorkerTests struct {
@@ -235,6 +244,23 @@ func Build(orqDir string, now time.Time) (Board, error) {
 		hasPlan := false
 		if pl, err := plan.Leer(plan.Path(orqDir, s.nn)); err == nil && len(pl.Tareas) > 0 {
 			hasPlan = true
+			for _, f := range pl.Fronts {
+				g := Front{ID: f.ID, Goal: f.Goal, TaskIDs: []string{}}
+				for _, t := range pl.Tareas {
+					if t.Front != f.ID {
+						continue
+					}
+					w := weight(t.Dificultad)
+					g.Tasks.Total++
+					g.Tasks.WeightTotal += w
+					if t.Estado == "hecha" {
+						g.Tasks.Done++
+						g.Tasks.WeightDone += w
+					}
+					g.TaskIDs = append(g.TaskIDs, t.ID)
+				}
+				c.Fronts = append(c.Fronts, g)
+			}
 			for _, t := range pl.Tareas {
 				w := weight(t.Dificultad)
 				c.Tasks.Total++
@@ -382,6 +408,9 @@ func Text(b Board, color bool) string {
 	for _, c := range b.Slices {
 		fmt.Fprintf(&s, "  %s %s · %s (%s)\n", paint(c.Color, "■ "+c.Status), c.ID, c.Title, c.Phase)
 		fmt.Fprintf(&s, "     %s done %s · %d of %d tasks · missing: %s\n", unknown(c.Pct, "%"), bar(c.Pct), c.Tasks.Done, c.Tasks.Total, missing(c.Missing))
+		for _, f := range c.Fronts {
+			fmt.Fprintf(&s, "     front %s: %s · %d of %d tasks\n", f.ID, f.Goal, f.Tasks.Done, f.Tasks.Total)
+		}
 		fmt.Fprintf(&s, "     who: %s · rework %d", who(c.Who), c.Rework)
 		if c.BlockedReason != "" {
 			fmt.Fprintf(&s, " · blocked: %s", c.BlockedReason)

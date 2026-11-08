@@ -49,6 +49,7 @@ Slices (with several open slices, pass --slice NN)
   orq slice close --accepted | --rejected "reason"   integrates, revalidates, publishes and cleans up; resumable
   orq slice status | receipt | contract | reopen "reason" | refingerprint "reason" | prune
   orq plan [--slice NN] load FILE.json | show | ready | review | done ID | release ID | debated
+  orq front brief|receipt F [--slice NN]   one-page brief / aggregated receipt of a front (plan.fronts)
   orq session show | open planner|astra | close NAME   (alias: sesion)
 
 Owner visibility

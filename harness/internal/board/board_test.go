@@ -178,3 +178,36 @@ func TestAmberOnStuckWorker(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+func TestFrontsGroupedInJSON(t *testing.T) {
+	orq := t.TempDir()
+	openSlice(t, orq, "01", "Customers can pay", slice.Implementando)
+	p := &plan.Plan{Slice: "01",
+		Fronts: []plan.Front{{ID: "F1", Goal: "pay", Paths: []string{"pay"}}, {ID: "F2", Goal: "see receipt", Paths: []string{"web"}}},
+		Tareas: []plan.Tarea{
+			{ID: "a", Front: "F1", Estado: "hecha", Dificultad: "media"},
+			{ID: "b", Front: "F1", Estado: "pendiente", Dificultad: "media"},
+			{ID: "c", Front: "F2", Estado: "en_curso", Worker: "w1", Dificultad: "media"},
+		}}
+	if err := plan.Guardar(plan.Path(orq, "01"), p); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := Build(orq, now)
+	raw, _ := JSON(b)
+	var got struct {
+		Slices []struct {
+			Fronts []struct {
+				ID    string    `json:"id"`
+				Goal  string    `json:"goal"`
+				Tasks TaskCount `json:"tasks"`
+				IDs   []string  `json:"task_ids"`
+			} `json:"fronts"`
+		} `json:"slices"`
+	}
+	json.Unmarshal(raw, &got)
+	fs := got.Slices[0].Fronts
+	if len(fs) != 2 || fs[0].ID != "F1" || fs[0].Tasks.Done != 1 || fs[0].Tasks.Total != 2 ||
+		strings.Join(fs[0].IDs, ",") != "a,b" || fs[1].Goal != "see receipt" || fs[1].Tasks.Total != 1 {
+		t.Fatalf("%s", raw)
+	}
+}
