@@ -972,11 +972,11 @@ func partir(s string) []string {
 // worktree de worker, aunque falte el hook) y con una decisión registrada de Atena u Owner.
 func (p proyecto) cambioDeContrato(aprobado string, r slice.Repo, nn string) error {
 	// H-01 vale en cualquier modo de autonomía: un worker nunca cambia el contrato.
-	if r := p.rolStop(); strings.HasPrefix(r, "worker") {
-		return errors.New("a worker cannot change the exam or scope (H-01, any autonomy mode): ask the Orchestrator")
-	}
 	if wd, _ := os.Getwd(); gate.IsLinkedWorktree(wd) || gate.IsLinkedWorktree(p.root) {
 		return errors.New("desde un worktree de worker no se cambia el examen ni el alcance: lo pide el Orquestador")
+	}
+	if r := p.rolStop(); strings.HasPrefix(r, "worker") {
+		return errors.New("a worker cannot change the exam or scope (H-01, any autonomy mode): ask the Orchestrator")
 	}
 	e, err := r.Load(nn)
 	if err != nil || e == nil {

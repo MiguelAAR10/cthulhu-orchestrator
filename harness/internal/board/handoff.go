@@ -75,7 +75,7 @@ func Handoff(in HandoffInput) string {
 		}
 		add(fmt.Sprintf("- %s [%s] %s %s: %s", s.ID, s.Severity, s.Slice, s.Type, s.Text))
 	}
-	add("", "## 4. How to resume", "1. `orq revive` (reopens sessions after a restart; until slice 4 ships it, `orq up` from the Atena pane)", "2. `orq board` (where things stand)")
+	add("", "## 4. How to resume", "1. `orq revive ROLE` (compact context pack for atena, orquestador, planificador...: slice, plan, stoppers, last receipt, channel, memory)", "2. `orq board` (where things stand)")
 	if len(in.Active) == 0 {
 		add("3. No open slice: start from the next approved story.")
 	}

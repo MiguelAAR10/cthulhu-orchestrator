@@ -161,6 +161,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runAutonomy(args[1:], stdout, stderr)
 	case "board":
 		return runBoard(args[1:], stdout, stderr)
+	case "revive":
+		return runRevive(args[1:], stdout, stderr)
 	case "handoff":
 		return runHandoff(args[1:], stdout, stderr)
 	case "sync":

@@ -19,6 +19,7 @@ import (
 	"orq/internal/board"
 	"orq/internal/canal"
 	"orq/internal/config"
+	"orq/internal/gate"
 	"orq/internal/memoria"
 	"orq/internal/memsync"
 	"orq/internal/plan"
@@ -27,10 +28,17 @@ import (
 	"orq/internal/workers"
 )
 
-// rolStop: con ORQ_WORKER_ID es un worker; sin rol registrado, quien teclea es el Owner.
+// rolStop: con ORQ_WORKER_ID es un worker; dentro de un worktree enlazado también lo es, aunque
+// falte el entorno (nunca owner ni atena desde ahí); sin rol registrado, quien teclea es el Owner.
 func (p proyecto) rolStop() string {
-	if os.Getenv("ORQ_WORKER_ID") != "" {
-		return "worker-" + os.Getenv("ORQ_WORKER_ID")
+	if id := os.Getenv("ORQ_WORKER_ID"); id != "" {
+		if strings.HasPrefix(id, "worker") {
+			return id
+		}
+		return "worker-" + id
+	}
+	if wd, _ := os.Getwd(); gate.IsLinkedWorktree(wd) || gate.IsLinkedWorktree(p.root) {
+		return "worker-worktree"
 	}
 	if r := p.rolActual(); r != "" {
 		return r

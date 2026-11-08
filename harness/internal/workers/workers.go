@@ -142,9 +142,9 @@ func List(orqDir string) ([]State, error) {
 	return out, err
 }
 
-// Launched crea el estado de un worker recién lanzado (phase=running).
-// TODO(slice-5): llamarlo desde cli/v05.go lanzarWorker cuando el refactor del Runner termine;
-// hoy ese archivo lo cambia otro worker. Exporta ORQ_WORKER_ID=<id> al panel del agente.
+// Launched crea el estado de un worker recién lanzado (phase=running). Lo llama lanzarWorker
+// tras arrancar el agente, que recibe ORQ_WORKER_ID=<id>. ExitCode queda null: hoy ningún runner
+// informa a orq cómo salió el agente.
 func Launched(orqDir string, st State, now time.Time) error {
 	st.Phase, st.Started, st.Heartbeat = "running", now.UTC(), now.UTC()
 	if st.Host == "" {

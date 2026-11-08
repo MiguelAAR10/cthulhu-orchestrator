@@ -11,12 +11,14 @@ import (
 	"orq/internal/plan"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"orq/internal/canal"
 	"orq/internal/memoria"
 	"orq/internal/slice"
+	"orq/internal/workers"
 )
 
 // memVigente es la memoria que vale hoy: sin reemplazados ni vencidos con slices cerrados.
@@ -327,7 +329,8 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 	}
 	ses, _ := canal.LoadSesiones(p.sesPath())
 	registrarLlamador(ses, os.Getenv("ORQ_ROL"), run.Current(), time.Now())
-	env := map[string]string{"ORQ_ROL": nombre}
+	// ORQ_WORKER_ID y ORQ_ROL hacen del panel un worker: nunca resuelve stoppers ni cambia la autonomía.
+	env := map[string]string{"ORQ_ROL": nombre, "ORQ_WORKER_ID": nombre}
 	var pane, tab string
 	if otro, ok := panelDelSlice(ses, e.NN); ok {
 		tab = otro.Tab
@@ -350,6 +353,15 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 		return "", fmt.Errorf("%v (panel %s cerrado; la tarea volvió a pendiente)", err, pane)
 	}
 	arranco = true
+	// Estado vivo del worker (orq.worker/v1). exit_code queda null: ningún runner informa la salida
+	// del agente a orq (el proceso hijo lo espera en una goroutine que muere con este comando).
+	st := workers.State{ID: nombre, Slice: e.ID(), Agent: agente, Model: el.Model, Worktree: dir, Base: baseDe(e, w), BudgetMin: minutosDe(pres)}
+	if tareaPl != nil {
+		st.Task = tareaPl.ID
+	}
+	if err := workers.Launched(p.dir, st, time.Now()); err != nil {
+		fmt.Fprintf(os.Stderr, "orq: worker state not saved: %v\n", err)
+	}
 	ses[nombre] = canal.Sesion{Agente: nombre, Pane: pane, Tab: tab, Desde: time.Now().UTC().Truncate(time.Second), Gen: 1, Gate: gateDe(cfg, agente)}
 	canal.SaveSesiones(p.sesPath(), ses)
 	if tareaPl != nil {
@@ -376,4 +388,22 @@ func registrarLlamador(ses map[string]canal.Sesion, rol, pane string, now time.T
 		return
 	}
 	ses[rol] = canal.Sesion{Agente: pane, Pane: pane, Desde: now.UTC().Truncate(time.Second), Gen: ses[rol].Gen}
+}
+
+// baseDe: rama desde la que se cuentan los commits del worker (la del slice si trabaja en zona).
+func baseDe(e *slice.Estado, w *slice.Worker) string {
+	if w != nil {
+		return e.Rama
+	}
+	return e.Base
+}
+
+// minutosDe lee "45 min" / "45" como minutos; otra unidad (tokens) deja 0.
+func minutosDe(pres string) int {
+	f := strings.Fields(pres)
+	if len(f) == 0 || (len(f) > 1 && !strings.HasPrefix(f[1], "min")) {
+		return 0
+	}
+	n, _ := strconv.Atoi(f[0])
+	return n
 }
