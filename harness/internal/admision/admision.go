@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"orq/internal/lang"
 	"orq/internal/limits"
 	"orq/internal/state"
 )
@@ -33,49 +34,49 @@ func Evaluar(l limits.Limits, env Env) error { return evaluar(l, env, 0) }
 
 func evaluar(l limits.Limits, env Env, reservas int) error {
 	if len(l.MinFreeGB) == 0 || l.MaxWorkers == nil || l.StateMaxAgeHours == nil || l.Scratch.QuotaGB == nil {
-		return errors.New("orq: límites incompletos (min_free_gb, max_workers, state_max_age_hours, scratch.quota_gb). Sin límites no hay lanzamiento")
+		return errors.New(lang.T("orq: incomplete limits (min_free_gb, max_workers, state_max_age_hours, scratch.quota_gb). No limits, no launch", "orq: límites incompletos (min_free_gb, max_workers, state_max_age_hours, scratch.quota_gb). Sin límites no hay lanzamiento"))
 	}
 	if reason, halted := state.ReadHalt(env.StateDir); halted {
-		return fmt.Errorf("orq: HALT activo (%s). Libera espacio y luego `orq halt --clear`", reason)
+		return fmt.Errorf(lang.T("orq: HALT active (%s). Free space, then `orq halt --clear`", "orq: HALT activo (%s). Libera espacio y luego `orq halt --clear`"), reason)
 	}
 	for path, min := range l.MinFreeGB {
 		if env.DiskFreeGB == nil {
-			return errors.New("orq: no hay forma de medir el disco. Sin dato no hay lanzamiento")
+			return errors.New(lang.T("orq: no way to measure the disk. No data, no launch", "orq: no hay forma de medir el disco. Sin dato no hay lanzamiento"))
 		}
 		free, err := env.DiskFreeGB(path)
 		if err != nil {
-			return fmt.Errorf("orq: no pude medir el disco en %s (%v). Sin dato no hay lanzamiento", path, err)
+			return fmt.Errorf(lang.T("orq: could not measure the disk at %s (%v). No data, no launch", "orq: no pude medir el disco en %s (%v). Sin dato no hay lanzamiento"), path, err)
 		}
 		if free < min {
-			return fmt.Errorf("orq: %s tiene %.0f GB libres y el mínimo es %.0f GB. Libera espacio (orq gc) antes de lanzar", path, free, min)
+			return fmt.Errorf(lang.T("orq: %s has %.0f GB free and the minimum is %.0f GB. Free space (orq gc) before launching", "orq: %s tiene %.0f GB libres y el mínimo es %.0f GB. Libera espacio (orq gc) antes de lanzar"), path, free, min)
 		}
 	}
 	snap, err := state.LoadSnapshot(env.StateDir)
 	if err != nil {
-		return errors.New("orq: falta la medición de scratch. Ejecuta `orq watch` y vuelve a intentar")
+		return errors.New(lang.T("orq: scratch measurement missing. Run `orq watch` and try again", "orq: falta la medición de scratch. Ejecuta `orq watch` y vuelve a intentar"))
 	}
 	if age := env.Now().Sub(snap.TS); age > time.Duration(*l.StateMaxAgeHours*float64(time.Hour)) {
-		return fmt.Errorf("orq: la medición de scratch tiene %.0f h. Ejecuta `orq watch` y vuelve a intentar", age.Hours())
+		return fmt.Errorf(lang.T("orq: the scratch measurement is %.0f h old. Run `orq watch` and try again", "orq: la medición de scratch tiene %.0f h. Ejecuta `orq watch` y vuelve a intentar"), age.Hours())
 	}
 	if snap.ScratchGB > *l.Scratch.QuotaGB {
-		return fmt.Errorf("orq: scratch ocupa %.0f GB y la cuota es %.0f GB. Limpia antes de lanzar", snap.ScratchGB, *l.Scratch.QuotaGB)
+		return fmt.Errorf(lang.T("orq: scratch uses %.0f GB and the quota is %.0f GB. Clean up before launching", "orq: scratch ocupa %.0f GB y la cuota es %.0f GB. Limpia antes de lanzar"), snap.ScratchGB, *l.Scratch.QuotaGB)
 	}
 	if env.Workers == nil || env.Worktrees == nil {
-		return errors.New("orq: no hay forma de contar workers o worktrees. Sin dato no hay lanzamiento")
+		return errors.New(lang.T("orq: no way to count workers or worktrees. No data, no launch", "orq: no hay forma de contar workers o worktrees. Sin dato no hay lanzamiento"))
 	}
 	n, err := env.Workers()
 	if err != nil {
-		return fmt.Errorf("orq: no pude contar workers (%v). Sin dato no hay lanzamiento", err)
+		return fmt.Errorf(lang.T("orq: could not count workers (%v). No data, no launch", "orq: no pude contar workers (%v). Sin dato no hay lanzamiento"), err)
 	}
 	if n+reservas >= *l.MaxWorkers {
-		return fmt.Errorf("orq: hay %d worker(s) vivos y %d reservado(s); el tope es %d. Cierra paneles antes de lanzar otro", n, reservas, *l.MaxWorkers)
+		return fmt.Errorf(lang.T("orq: %d live worker(s) and %d reserved; the cap is %d. Close panes before launching another", "orq: hay %d worker(s) vivos y %d reservado(s); el tope es %d. Cierra paneles antes de lanzar otro"), n, reservas, *l.MaxWorkers)
 	}
 	w, err := env.Worktrees()
 	if err != nil {
-		return fmt.Errorf("orq: no pude contar worktrees (%v). Sin dato no hay lanzamiento", err)
+		return fmt.Errorf(lang.T("orq: could not count worktrees (%v). No data, no launch", "orq: no pude contar worktrees (%v). Sin dato no hay lanzamiento"), err)
 	}
 	if max := l.TopeWorktrees(); w+reservas >= max {
-		return fmt.Errorf("orq: hay %d worktrees de orq y %d reservado(s); el tope max_worktrees es %d. Corre `orq gc` o cierra slices antes de lanzar", w, reservas, max)
+		return fmt.Errorf(lang.T("orq: %d orq worktrees and %d reserved; max_worktrees is %d. Run `orq gc` or close slices before launching", "orq: hay %d worktrees de orq y %d reservado(s); el tope max_worktrees es %d. Corre `orq gc` o cierra slices antes de lanzar"), w, reservas, max)
 	}
 	return nil
 }

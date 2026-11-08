@@ -83,7 +83,7 @@ func TestOrqSkillDaLaGuiaDelRol(t *testing.T) {
 		g, _ := guias.ReadFile("guias/" + rol + ".md")
 		for _, l := range strings.Split(string(g), "`orq ")[1:] {
 			cmd := strings.TrimRight(strings.Fields(l)[0], "`.,;)")
-			if !strings.Contains(usage, "orq "+cmd) {
+			if !strings.Contains(usageEN+usageES, "orq "+cmd) {
 				t.Errorf("%s: la guía usa `orq %s`, que no existe", rol, cmd)
 			}
 		}

@@ -22,7 +22,7 @@ import (
 
 const Version = "1.0.0"
 
-const usage = `orq ` + Version + ` · harness de orquestador-2
+const usageES = `orq ` + Version + ` · harness de orquestador-2
 
   orq gate            hook PreToolUse: lee el JSON por stdin; exit 2 = bloquea
   orq watch           mide scratch y disco; escribe HALT si corresponde
@@ -115,8 +115,9 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
 // Run devuelve el código de salida. En `gate`, cualquier pánico termina en 2 (bloquear).
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	slice.Version = "orq " + Version
+	usage := usageText()
 	if len(args) == 0 {
-		fmt.Fprint(stderr, usage)
+		fmt.Fprint(stderr, usageText())
 		return 1
 	}
 	defer func() {
@@ -125,7 +126,11 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 			code = 2
 		}
 	}()
+	args = normalizeArgs(args)
 	switch args[0] {
+	case "help", "-h", "--help":
+		fmt.Fprint(stdout, usage)
+		return 0
 	case "gate":
 		return runGate(stdin, stderr)
 	case "watch":
@@ -196,7 +201,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		fmt.Fprintln(stdout, Version)
 		return 0
 	default:
-		fmt.Fprint(stderr, usage)
+		fmt.Fprint(stderr, usageText())
 		return 1
 	}
 }
@@ -367,6 +372,6 @@ func runHalt(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprint(stderr, usage)
+	fmt.Fprint(stderr, usageText())
 	return 1
 }

@@ -46,10 +46,10 @@ func itoa(n int) string { b, _ := json.Marshal(n); return string(b) }
 func TestLanzarPasaPorLaAdmision(t *testing.T) {
 	casos := map[string]func(t *testing.T, st, orq string){
 		"HALT": func(t *testing.T, st, _ string) { state.WriteHalt(st, "disco crítico", time.Now()) },
-		"medición": func(t *testing.T, st, _ string) {
+		"measurement": func(t *testing.T, st, _ string) {
 			state.SaveSnapshot(st, state.Snapshot{TS: time.Now().Add(-48 * time.Hour)})
 		},
-		"cuota": func(t *testing.T, st, _ string) {
+		"quota": func(t *testing.T, st, _ string) {
 			state.SaveSnapshot(st, state.Snapshot{TS: time.Now(), ScratchGB: 99})
 		},
 		"max_worktrees": func(t *testing.T, _, orq string) {

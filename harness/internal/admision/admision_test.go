@@ -32,17 +32,17 @@ func TestAdmiteEnCondicionesSanas(t *testing.T) {
 func TestRechazos(t *testing.T) {
 	now := time.Now()
 	casos := map[string]func(*Env, *limits.Limits){
-		"HALT":   func(e *Env, _ *limits.Limits) { state.WriteHalt(e.StateDir, "disco", now) },
-		"mínimo": func(e *Env, _ *limits.Limits) { e.DiskFreeGB = func(string) (float64, error) { return 10, nil } },
-		"medición": func(e *Env, _ *limits.Limits) {
+		"HALT":    func(e *Env, _ *limits.Limits) { state.WriteHalt(e.StateDir, "disco", now) },
+		"minimum": func(e *Env, _ *limits.Limits) { e.DiskFreeGB = func(string) (float64, error) { return 10, nil } },
+		"measurement": func(e *Env, _ *limits.Limits) {
 			state.SaveSnapshot(e.StateDir, state.Snapshot{TS: now.Add(-48 * time.Hour)})
 		},
-		"cuota": func(e *Env, _ *limits.Limits) {
+		"quota": func(e *Env, _ *limits.Limits) {
 			state.SaveSnapshot(e.StateDir, state.Snapshot{TS: now, ScratchGB: 500})
 		},
 		"worker":    func(e *Env, _ *limits.Limits) { e.Workers = func() (int, error) { return 2, nil } },
 		"worktrees": func(e *Env, _ *limits.Limits) { e.Worktrees = func() (int, error) { return 3, nil } },
-		"límites":   func(_ *Env, l *limits.Limits) { l.MaxWorkers = nil },
+		"limits":    func(_ *Env, l *limits.Limits) { l.MaxWorkers = nil },
 	}
 	for want, mod := range casos {
 		e, l := env(t, now), lims()

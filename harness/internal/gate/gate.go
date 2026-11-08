@@ -6,6 +6,7 @@ package gate
 
 import (
 	"fmt"
+	"orq/internal/lang"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -75,7 +76,7 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 		return d
 	}
 	if target, ok := protectedTarget(p, l, env); ok {
-		return deny("orq: %q está protegido dentro de un worktree. Solo el orquestador, desde el checkout principal, lo edita.", target)
+		return deny(lang.T("orq: %q is protected inside a worktree. Only the orchestrator, from the main checkout, edits it.", "orq: %q está protegido dentro de un worktree. Solo el orquestador, desde el checkout principal, lo edita."), target)
 	}
 	if !isLaunch(p) {
 		return allow()
@@ -97,7 +98,7 @@ func isLaunch(p Payload) bool {
 // evaluateLaunch delega en admision, la misma puerta que usa `orq slice lanzar`.
 func evaluateLaunch(p Payload, l limits.Limits, env Env) Decision {
 	if p.AgentID != "" {
-		return deny("orq: un subagente no lanza workers. Devuelve el resultado al orquestador.")
+		return deny("%s", lang.T("orq: a subagent does not launch workers. Return your result to the orchestrator.", "orq: un subagente no lanza workers. Devuelve el resultado al orquestador."))
 	}
 	ae := admision.Env{DiskFreeGB: env.DiskFreeGB, Workers: env.Workers, Now: env.Now, StateDir: env.StateDir}
 	if env.Worktrees != nil {
@@ -265,13 +266,14 @@ func Normalizar(cmd string) string {
 var destructivoRe = []struct {
 	re  *regexp.Regexp
 	por string
+	en  string
 }{
-	{regexp.MustCompile(`git\s+push\s+.*(--force|-f\b|--force-with-lease|\+\S+:)`), "push forzado"},
-	{regexp.MustCompile(`git\s+push\b`), "push: el harness es local, publicar lo decide el Owner"},
-	{regexp.MustCompile(`git\s+branch\s+.*(-D\b|--delete\s+--force|-d\s+-f|-df|-fd)`), "borrar una rama a la fuerza; usa -d o deja que `orq slice cerrar` la mande a cuarentena"},
-	{regexp.MustCompile(`git\s+worktree\s+(remove|prune)\s+.*(--force|-f\b)`), "quitar un worktree a la fuerza"},
-	{regexp.MustCompile(`git\s+(reset\s+.*--hard|clean\s+.*(-[a-zA-Z]*f|--force)|checkout\s+.*(-f\b|--force))`), "descartar trabajo sin respaldo"},
-	{regexp.MustCompile(`\brm\s+.*(worktrees|\.orq|\.git)\b`), "borrar worktrees, .orq o .git con rm"},
+	{regexp.MustCompile(`git\s+push\s+.*(--force|-f\b|--force-with-lease|\+\S+:)`), "push forzado", "forced push"},
+	{regexp.MustCompile(`git\s+push\b`), "push: el harness es local, publicar lo decide el Owner", "push: the harness is local; publishing is the Owner's call"},
+	{regexp.MustCompile(`git\s+branch\s+.*(-D\b|--delete\s+--force|-d\s+-f|-df|-fd)`), "borrar una rama a la fuerza; usa -d o deja que `orq slice cerrar` la mande a cuarentena", "force-deleting a branch; use -d or let `orq slice close` quarantine it"},
+	{regexp.MustCompile(`git\s+worktree\s+(remove|prune)\s+.*(--force|-f\b)`), "quitar un worktree a la fuerza", "force-removing a worktree"},
+	{regexp.MustCompile(`git\s+(reset\s+.*--hard|clean\s+.*(-[a-zA-Z]*f|--force)|checkout\s+.*(-f\b|--force))`), "descartar trabajo sin respaldo", "discarding work without a backup"},
+	{regexp.MustCompile(`\brm\s+.*(worktrees|\.orq|\.git)\b`), "borrar worktrees, .orq o .git con rm", "deleting worktrees, .orq or .git with rm"},
 }
 
 // pushRamaRe: un solo comando, sin comillas ni encadenados: `git [-C dir] push [-u] remoto rama`.
@@ -307,14 +309,15 @@ func destructivo(p Payload) (Decision, bool) {
 	cmd, _ := p.ToolInput["command"].(string)
 	for _, d := range destructivoRe {
 		if d.re.MatchString(cmd) {
-			return deny("orq: bloqueado (%s). Si de verdad hace falta, lo hace el Owner a mano.", d.por), true
+			return deny(lang.T("orq: blocked (%s). If it is really needed, the Owner does it by hand.", "orq: bloqueado (%s). Si de verdad hace falta, lo hace el Owner a mano."), lang.T(d.en, d.por)), true
 		}
 	}
 	return Decision{}, false
 }
 
 // soloOrqRe: transiciones que solo pide el Orquestador desde el checkout principal.
-var soloOrqRe = regexp.MustCompile(`(^|[\s;&|(])orq\s+(slice\s+(abrir|cerrar|reintentar|tomar|lanzar|juntar|examen|alcance)|plan\s+(cargar|hecha|debatido)|sesion\s+(abrir|cerrar)|aprender\s+promover|msg\s+send\s+.*--tipo\s+cierre|halt\s+--clear|qa\s+run)`)
+// Both the English names and their Spanish aliases.
+var soloOrqRe = regexp.MustCompile(`(^|[\s;&|(])orq\s+(slice\s+(abrir|cerrar|reintentar|tomar|lanzar|juntar|examen|alcance|open|close|retry|take|launch|merge|exam|scope)\b|plan(\s+--slice\s+\S+)?\s+(cargar|hecha|debatido|load|done|debated)\b|(sesion|session)\s+(abrir|cerrar|open|close)\b|(aprender|learn)\s+(promover|promote)\b|msg\s+send\s+.*--(tipo|type)(\s+|=)(cierre|closing)\b|halt\s+--clear|qa\s+run)`)
 
 func soloOrquestador(p Payload, env Env) (Decision, bool) {
 	if p.ToolName != "Bash" {
@@ -325,7 +328,7 @@ func soloOrquestador(p Payload, env Env) (Decision, bool) {
 		return Decision{}, false
 	}
 	if p.AgentID != "" || env.IsWorktree(p.Cwd) || env.Rol == "tester" || env.Rol == "repairer" {
-		return deny("orq: un worker no abre, toma, reintenta ni cierra slices, ni cambia su examen o alcance. Pide verificación al Orquestador con tu resultado."), true
+		return deny("%s", lang.T("orq: a worker does not open, take, retry or close slices, nor change its exam or scope. Ask the Orchestrator for verification with your result.", "orq: un worker no abre, toma, reintenta ni cierra slices, ni cambia su examen o alcance. Pide verificación al Orquestador con tu resultado.")), true
 	}
 	return Decision{}, false
 }
@@ -339,7 +342,7 @@ func soloLectura(p Payload, env Env) (Decision, bool) {
 	if env.Rol != "tester" {
 		return Decision{}, false
 	}
-	no := deny("orq: el tester es de solo lectura. Registra lo que encuentres con `orq qa finding add`; repara el repairer.")
+	no := deny("%s", lang.T("orq: the tester is read-only. Record what you find with `orq qa finding add`; the repairer repairs.", "orq: el tester es de solo lectura. Registra lo que encuentres con `orq qa finding add`; repara el repairer."))
 	switch p.ToolName {
 	case "Edit", "Write", "MultiEdit", "NotebookEdit":
 		return no, true
