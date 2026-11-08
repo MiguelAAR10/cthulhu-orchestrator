@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"orq/internal/canal"
+	"orq/internal/config"
 	"orq/internal/escriba"
 	"orq/internal/gate"
 	"orq/internal/herdr"
@@ -59,6 +60,9 @@ func (p proyecto) slices() slice.Repo {
 
 // excluir deja .orq fuera de git sin tocar archivos versionados del proyecto.
 func (p proyecto) excluir() error {
+	if cfg, _ := config.Load(p.dir); cfg.SyncMode() == "commit" {
+		return nil // sync=commit: .orq se versiona; .gitignore ya excluye lo efímero
+	}
 	path := filepath.Join(p.root, ".git", "info", "exclude")
 	raw, _ := os.ReadFile(path)
 	if strings.Contains(string(raw), "/.orq/") {
@@ -986,6 +990,10 @@ func rolArgs(kind, modelo, esfuerzo, name, root string) []string {
 // cambioDeContrato: el examen y el alcance solo cambian desde el checkout principal (no desde un
 // worktree de worker, aunque falte el hook) y con una decisión registrada de Atena u Owner.
 func (p proyecto) cambioDeContrato(aprobado string, r slice.Repo, nn string) error {
+	// H-01 vale en cualquier modo de autonomía: un worker nunca cambia el contrato.
+	if r := p.rolStop(); strings.HasPrefix(r, "worker") {
+		return errors.New("a worker cannot change the exam or scope (H-01, any autonomy mode): ask the Orchestrator")
+	}
 	if wd, _ := os.Getwd(); gate.IsLinkedWorktree(wd) || gate.IsLinkedWorktree(p.root) {
 		return errors.New("desde un worktree de worker no se cambia el examen ni el alcance: lo pide el Orquestador")
 	}

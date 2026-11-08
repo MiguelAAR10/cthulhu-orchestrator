@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"orq/internal/orqdir"
+	"orq/internal/stops"
 )
 
 var (
@@ -43,6 +44,8 @@ type Plan struct {
 	Debatido    bool    `json:"-"`
 	DebatidoRev string  `json:"debatido_rev,omitempty"` // revisión que el adversario atacó y aprobó
 	Tareas      []Tarea `json:"tareas"`
+	// Retenidas: tarea → motivo ("stop ST-NNNN") por un stopper blocking abierto. Lo llena Leer.
+	Retenidas map[string]string `json:"-"`
 }
 
 func Path(orqDir, nn string) string { return filepath.Join(orqDir, "planes", nn+".json") }
@@ -65,6 +68,9 @@ func Leer(path string) (*Plan, error) {
 		}
 	}
 	p.Debatido = p.DebatidoRev != "" && p.DebatidoRev == p.Revision()
+	// planes/NN.json vive en .orq: los stoppers blocking del slice retienen sus tareas.
+	nn := strings.TrimSuffix(filepath.Base(path), ".json")
+	p.Retenidas = stops.HoldsFor(filepath.Dir(filepath.Dir(path)), "S-"+nn)
 	return &p, nil
 }
 
@@ -254,6 +260,10 @@ func Listas(p *Plan) (listas []Tarea, bloqueadas map[string]string) {
 	}
 	for _, t := range p.Tareas {
 		if t.Estado != "pendiente" {
+			continue
+		}
+		if r, ok := p.Retenidas[t.ID]; ok {
+			bloqueadas[t.ID] = r
 			continue
 		}
 		var faltan []string
