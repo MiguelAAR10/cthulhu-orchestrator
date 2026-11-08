@@ -45,6 +45,26 @@ func TestWatchMideYEscribeHalt(t *testing.T) {
 	}
 }
 
+func TestWatchAvisaBajoMinimoSinHalt(t *testing.T) {
+	l := limits.Limits{
+		MinFreeGB:        map[string]float64{"/": 1e9},
+		MaxWorkers:       ptrI(1),
+		Scratch:          limits.Scratch{Paths: []string{t.TempDir()}, QuotaGB: ptrF(100), CriticalFreeGB: ptrF(0)},
+		StateMaxAgeHours: ptrF(24),
+	}
+	dir := t.TempDir()
+	r, err := Run(l, dir, time.Now())
+	if err != nil || r.Halt != "" {
+		t.Fatalf("bajo el mínimo (no el crítico) no es HALT: %v %q", err, r.Halt)
+	}
+	if len(r.Avisos) != 1 {
+		t.Fatalf("sin aviso: %v", r.Avisos)
+	}
+	if _, ok := state.ReadHalt(dir); ok {
+		t.Fatal("escribió HALT")
+	}
+}
+
 func TestWatchSinHaltBajoCuota(t *testing.T) {
 	l := limits.Limits{
 		MinFreeGB:        map[string]float64{"/": 1},

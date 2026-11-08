@@ -16,6 +16,7 @@ import (
 	"orq/internal/state"
 	"orq/internal/sysinfo"
 	"orq/internal/watch"
+	"orq/internal/worktrees"
 )
 
 const Version = "1.0.0"
@@ -24,6 +25,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
 
   orq gate            hook PreToolUse: lee el JSON por stdin; exit 2 = bloquea
   orq watch           mide scratch y disco; escribe HALT si corresponde
+  orq gc [--dry-run]  retira worktrees de orq sin perder nada (nunca --force); lo dudoso a cuarentena
   orq status          muestra límites, medición, HALT y workers
   orq halt            muestra HALT
   orq halt --clear    quita HALT (solo tras liberar espacio)
@@ -103,6 +105,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runGate(stdin, stderr)
 	case "watch":
 		return runWatch(stdout, stderr)
+	case "gc":
+		return runGC(args[1:], stdout, stderr)
 	case "status":
 		return runStatus(stdout, stderr)
 	case "halt":
@@ -157,6 +161,7 @@ func realEnv() gate.Env {
 		StateDir:   state.Dir(),
 		IsWorktree: gate.IsLinkedWorktree,
 		Bundle:     bundleAbierto,
+		Worktrees:  worktreesDe,
 	}
 }
 
@@ -227,6 +232,19 @@ func runWatch(stdout, stderr io.Writer) int {
 	}
 	for p, gb := range r.Snapshot.DiskFreeGB {
 		fmt.Fprintf(stdout, "libre %-6s %.0f GB (mínimo %.0f, crítico %.0f)\n", p, gb, l.MinFreeGB[p], *l.Scratch.CriticalFreeGB)
+	}
+	for _, a := range r.Avisos {
+		fmt.Fprintf(stdout, "AVISO %s\n", a)
+	}
+	// Dentro de un proyecto con .orq, watch también retira lo seguro y cuenta worktrees.
+	if p, err := abrirProyecto(); err == nil {
+		if res, err := p.gc(false); err != nil {
+			fmt.Fprintf(stdout, "gc: %v\n", err)
+		} else if len(res) > 0 {
+			mostrarGC(stdout, res)
+		}
+		n, _ := worktrees.Contar(p.dir)
+		fmt.Fprintf(stdout, "worktrees de orq: %d (tope max_worktrees %d)\n", n, l.TopeWorktrees())
 	}
 	if r.Halt != "" {
 		fmt.Fprintf(stdout, "HALT escrito: %s\n", r.Halt)

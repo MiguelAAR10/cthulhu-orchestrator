@@ -772,6 +772,12 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		} else {
 			fmt.Fprintf(stdout, "ficha del proyecto actualizada: %s\n", p.fichaPath())
 		}
+		// Higiene: lo que orq creó y ya no se usa se retira con el protocolo seguro.
+		if res, err := p.gc(false); err != nil {
+			fmt.Fprintf(stdout, "aviso: gc no corrió (%v)\n", err)
+		} else if len(res) > 0 {
+			mostrarGC(stdout, res)
+		}
 		fmt.Fprintf(stdout, "S-%s cerrado como %s. Canal limpio; memoria actualizada.\n", reg.NN, reg.Result)
 		if !*ok {
 			fmt.Fprintf(stdout, "La rama %s se conserva para revisar.\n", "slice/"+reg.NN)

@@ -1,6 +1,7 @@
 {
   "min_free_gb": {"/": 60, "/mnt/c": 40},
   "max_workers": 4,
+  "max_worktrees": 12,
   "scratch": {
     "paths": [
       "~/.local/state/orq/scratch",

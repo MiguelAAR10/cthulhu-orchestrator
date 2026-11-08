@@ -20,6 +20,7 @@ import (
 
 	"orq/internal/orqdir"
 	"orq/internal/sysinfo"
+	"orq/internal/worktrees"
 )
 
 // Fases del slice. ACORDADO vive en el canal (historia aprobada); aquí empieza en IMPLEMENTANDO,
@@ -179,6 +180,10 @@ func (r Repo) viejoPath() string           { return filepath.Join(r.OrqDir, "sli
 func (r Repo) logPath() string             { return filepath.Join(r.OrqDir, "slices.jsonl") }
 func (r Repo) recibosPath() string         { return filepath.Join(r.OrqDir, "recibos.jsonl") }
 func (r Repo) CuarentenaPath() string      { return filepath.Join(r.OrqDir, "cuarentena.jsonl") }
+
+// IntPathDe: carpeta del worktree de integración del slice.
+func (r Repo) IntPathDe(e *Estado) string { return r.intPath(e) }
+
 func (r Repo) intPath(e *Estado) string {
 	if e.IntDir != "" {
 		return e.IntDir
@@ -317,6 +322,11 @@ func appendJSON(path string, v any) error {
 	return err
 }
 
+// crearWorktree es el único camino de slice a `git worktree add`: deja el worktree en el registro de orq.
+func (r Repo) crearWorktree(path, kind, slice string, args ...string) error {
+	return worktrees.Crear(r.Root, r.OrqDir, worktrees.Entrada{Path: path, Kind: kind, Slice: slice}, args...)
+}
+
 func existe(p string) bool { _, err := os.Stat(p); return err == nil }
 
 // Opciones extra al abrir.
@@ -442,7 +452,7 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 		Sano: o.Sano, Alcance: o.Alcance, Base: base, SHARojo: sha, Rama: rama, Worktree: wt, Procedencia: "git", Host: host,
 		Abierto: now.UTC().Truncate(time.Second), Huella: huella, SalidaRojo: cola(out, 20),
 		Reporte: o.Reporte, Formato: o.Formato, Omitir: o.PermiteOmitir, Aislado: o.Aislado, TimeoutSeg: o.Timeout, Estricto: o.Estricto}
-	if _, err := Git(r.Root, "worktree", "add", e.Worktree, "-b", e.Rama); err == nil {
+	if err := r.crearWorktree(e.Worktree, worktrees.KindSlice, e.ID(), "-b", e.Rama); err == nil {
 		prepararDeps(r.Root, e.Worktree)
 	} else {
 		return nil, out, err
@@ -980,7 +990,7 @@ func (r Repo) integrar(e *Estado) (string, error) {
 	if err := r.save(e); err != nil {
 		return "", err
 	}
-	if _, err := Git(r.Root, "worktree", "add", "--detach", ip, e.Base); err == nil {
+	if err := r.crearWorktree(ip, worktrees.KindInt, e.ID(), "--detach", e.Base); err == nil {
 		prepararDeps(r.Root, ip)
 	} else {
 		return "", err
@@ -1163,7 +1173,7 @@ func (r Repo) Sumar(nn, nombre, agente, zona string, rutas []string) (*Estado, *
 	if err != nil {
 		return e, nil, err
 	}
-	if _, err := Git(r.Root, "worktree", "add", w.Worktree, "-b", w.Rama, tip); err == nil {
+	if err := r.crearWorktree(w.Worktree, worktrees.KindZone, e.ID(), "-b", w.Rama, tip); err == nil {
 		prepararDeps(r.Root, w.Worktree)
 	} else {
 		return e, nil, err

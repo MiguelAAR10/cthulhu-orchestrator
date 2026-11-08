@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"orq/internal/gate"
+	"orq/internal/admision"
 	"orq/internal/herdr"
 	"orq/internal/limits"
 	"orq/internal/orqdir"
 	"orq/internal/plan"
-	"orq/internal/sysinfo"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -228,10 +227,13 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 	if err != nil {
 		return "", err
 	}
-	procs, _ := sysinfo.ListProcs()
-	if n := len(sysinfo.Workers(procs, l.WorkerProcessName, gate.IsLinkedWorktree)); n >= *l.MaxWorkers {
-		return "", fmt.Errorf("hay %d worker(s) vivos y el tope es %d; espera a que uno termine", n, *l.MaxWorkers)
+	// La misma puerta que el gate: HALT, disco, medición fresca, cuota, workers y worktrees.
+	// El cupo queda reservado hasta que el worker arranca (o falla) para que dos lanzamientos no lo compartan.
+	liberar, err := admision.Reservar(l, p.admision(l))
+	if err != nil {
+		return "", err
 	}
+	defer liberar()
 	r := p.slices()
 	e, err := r.Load(nn)
 	if err != nil || e == nil {

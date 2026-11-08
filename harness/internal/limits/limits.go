@@ -30,6 +30,19 @@ type Limits struct {
 	MaxSlices int `json:"max_slices,omitempty"`
 	// ConteoEstricto: todo slice exige --reporte/--formato; sin contadores no hay verde (por defecto, laxo).
 	ConteoEstricto bool `json:"conteo_estricto,omitempty"`
+	// MaxWorktrees: worktrees vinculados que orq registró por proyecto; ausente = MaxWorktreesDefecto.
+	MaxWorktrees *int `json:"max_worktrees,omitempty"`
+}
+
+// MaxWorktreesDefecto: con 344 worktrees WSL se trabó; 12 deja margen para 4 slices con equipo.
+const MaxWorktreesDefecto = 12
+
+// TopeWorktrees devuelve max_worktrees o el defecto si falta.
+func (l Limits) TopeWorktrees() int {
+	if l.MaxWorktrees == nil {
+		return MaxWorktreesDefecto
+	}
+	return *l.MaxWorktrees
 }
 
 // DefaultPath respeta ORQ_LIMITS para pruebas y usa ~/.config/orq/limits.json por defecto.
