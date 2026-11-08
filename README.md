@@ -176,3 +176,6 @@ Made by the **AI EDGE RUNNERS** team — an applied-AI lab that builds software 
 <sub>The octopuses are original AI EDGE RUNNERS characters, drawn as pixel art. The Dreamer is our take on Cthulhu (H. P. Lovecraft, 1928).</sub>
 
 </div>
+
+## Auditing v2
+See [docs/v2/AUDIT-GUIDE.md](docs/v2/AUDIT-GUIDE.md).
