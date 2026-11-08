@@ -69,5 +69,5 @@ Quality
   orq evidence add S-NN --kind target|before|after --file PNG [--note "..."]
   orq version | orq help
 
-Messages are in English; ORQ_LANG=es switches help, gate and admission messages to Spanish.
+Messages are in English; ORQ_LANG=es switches them (help, errors, status lines) to Spanish.
 `

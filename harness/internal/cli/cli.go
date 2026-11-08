@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"orq/internal/gate"
+	"orq/internal/lang"
 	"orq/internal/limits"
 	"orq/internal/state"
 	"orq/internal/sysinfo"
@@ -115,6 +116,15 @@ const usageES = `orq ` + Version + ` · harness de orquestador-2
 // Run devuelve el código de salida. En `gate`, cualquier pánico termina en 2 (bloquear).
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	slice.Version = "orq " + Version
+	// Messages are English by default: stderr always, stdout unless it carries user content.
+	errW := lang.Writer(stderr)
+	defer errW.Flush()
+	stderr = errW
+	if !conContenido(normalizeArgs(args)) {
+		outW := lang.Writer(stdout)
+		defer outW.Flush()
+		stdout = outW
+	}
 	usage := usageText()
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usageText())
@@ -376,4 +386,34 @@ func runHalt(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprint(stderr, usageText())
 	return 1
+}
+
+// conContenido: commands whose stdout carries messages, memory, plans, guides or JSON
+// written by people and agents; orq does not translate those.
+func conContenido(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	for _, a := range args {
+		if a == "--json" || a == "--html" {
+			return true
+		}
+	}
+	sub := ""
+	if len(args) > 1 {
+		sub = args[1]
+	}
+	switch args[0] {
+	case "help", "-h", "--help", "contexto", "skill", "--skill", "handoff", "doc", "fase", "aprender", "board", "gate":
+		return true
+	case "msg":
+		return sub == "leer"
+	case "mem":
+		return sub != "add" && sub != "compactar"
+	case "plan":
+		return strings.Contains(strings.Join(args, " "), " ver")
+	case "slice":
+		return strings.Contains(strings.Join(args, " "), " recibo") || strings.Contains(strings.Join(args, " "), " contrato")
+	}
+	return false
 }

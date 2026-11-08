@@ -64,6 +64,7 @@ func TestLanzarPasaPorLaAdmision(t *testing.T) {
 	}
 	for want, prep := range casos {
 		t.Run(want, func(t *testing.T) {
+			t.Setenv("ORQ_LANG", "")
 			st, orq, llamadas := lanzarAislado(t, 2)
 			prep(t, st, orq)
 			_, errs, code := run(t, "slice", "lanzar", "--agente", "claude")

@@ -7,7 +7,7 @@ set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BASE="${1:-$(mktemp -d)}"
 mkdir -p "$BASE" && cd "$BASE" || exit 1
-export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID=""
+export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID="" ORQ_LANG=es   # asserts Spanish messages
 mkdir -p "$BASE/bin" && printf '#!/bin/sh\nexit 1\n' > "$BASE/bin/claude" && chmod +x "$BASE/bin/claude"
 export PATH="$BASE/bin:$PATH"   # el escriba no responde: todo debe funcionar igual
 # Siempre prueba el código de este repo, nunca un orq viejo del PATH (ORQ_BIN lo sobrescribe).
