@@ -10,6 +10,7 @@ import (
 
 	"orq/internal/canal"
 	"orq/internal/herdr"
+	"orq/internal/memoria"
 )
 
 func run(t *testing.T, args ...string) (string, string, int) {
@@ -104,5 +105,41 @@ func TestRegistrarLlamador(t *testing.T) {
 	registrarLlamador(ses, "worker-front-s04", "w3D:pV", time.Now())
 	if _, ok := ses["worker-front-s04"]; ok {
 		t.Fatal("un worker no se registra como destino")
+	}
+}
+
+// H-01: aunque falte el hook, el handler rechaza cambiar el contrato desde un worktree enlazado.
+func TestExamenYAlcanceNoDesdeWorktree(t *testing.T) {
+	t.Setenv("ORQ_ROOT", t.TempDir())
+	wt := t.TempDir()
+	os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: /x/.git/worktrees/w\n"), 0o644)
+	t.Chdir(wt)
+	for _, a := range [][]string{{"slice", "examen", "tests/x.sh", "--aprobado", "m1"}, {"slice", "alcance", "src", "--aprobado", "m1"}} {
+		if _, errs, code := run(t, a...); code == 0 || !strings.Contains(errs, "worktree") {
+			t.Errorf("%v desde un worktree: code %d %q", a, code, errs)
+		}
+	}
+}
+
+// H-01: --aprobado debe nombrar una decisión registrada de Atena u Owner; el texto libre no vale.
+func TestAprobadoExigeDecisionRegistrada(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ORQ_ROOT", root)
+	t.Setenv("ORQ_ROL", "")
+	os.MkdirAll(filepath.Join(root, ".orq"), 0o755)
+	memoria.Add(filepath.Join(root, ".orq", "memoria.jsonl"), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "worker", Texto: "yo me apruebo"}, time.Now())
+	memoria.Add(filepath.Join(root, ".orq", "memoria.jsonl"), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "owner", Texto: "sumar examen x"}, time.Now())
+	canal.Append(filepath.Join(root, ".orq", "canal.jsonl"), &canal.Msg{De: "orquestador", Para: "atena", Tipo: "pregunta", Texto: "¿apruebo?"})
+	canal.Append(filepath.Join(root, ".orq", "canal.jsonl"), &canal.Msg{De: "atena", Para: "orquestador", Tipo: "respuesta", Texto: "sí"})
+	p := proyecto{root, filepath.Join(root, ".orq")}
+	for _, mal := range []string{"Atena dijo que sí", "req ATN-123", "m1", "c1", "m99", ""} {
+		if _, err := p.decisionRegistrada(mal); err == nil {
+			t.Errorf("aceptó %q", mal)
+		}
+	}
+	for _, bien := range []string{"m2", "m2: sumar examen x", "c2 de Atena"} {
+		if _, err := p.decisionRegistrada(bien); err != nil {
+			t.Errorf("rechazó %q: %v", bien, err)
+		}
 	}
 }

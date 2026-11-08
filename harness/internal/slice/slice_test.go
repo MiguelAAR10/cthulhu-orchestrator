@@ -853,3 +853,28 @@ func TestRehuellaNoBendiceTrampa(t *testing.T) {
 		t.Fatal("un examen cambiado no se repara")
 	}
 }
+
+// H-01: un examen cambiado con aprobación invalida los recibos previos; hay que volver a verificar.
+func TestSumarExamenInvalidaRecibos(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "tests/extra.sh", "true\n")
+	head, _ := Git(e.Worktree, "rev-parse", "HEAD")
+	e.Recibo = &Recibo{Attempt: e.Attempt(), Head: strings.TrimSpace(head)}
+	if err := r.save(e); err != nil {
+		t.Fatal(err)
+	}
+	e, err := r.SumarExamen("01", []string{"tests/extra.sh"}, "sh tests/extra.sh", "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Recibo != nil {
+		t.Fatal("el recibo viejo sobrevivió al cambio de examen")
+	}
+	if e, _ = r.Load("01"); e.Recibo != nil {
+		t.Fatal("el recibo viejo quedó guardado")
+	}
+	if _, _, _, err := r.Cerrar("", true, "", t0); err == nil {
+		t.Fatal("cerró sin volver a verificar")
+	}
+}

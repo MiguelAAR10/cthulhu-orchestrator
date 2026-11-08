@@ -26,6 +26,7 @@ Crear un worker, un panel o una copia de trabajo desde herdr, desde Orca (`orca`
 - **Lanzar con disco bajo, HALT o medición vieja:** bloqueado, con la causa y el comando para resolverla.
 - **El worker edita `tests/aceptacion/`** con Edit, Write, redirección, `tee`, `sed -i`, `cp`, `mv`, `rm` o `git checkout`/`restore`: bloqueado. Correr el test, aunque sea con `2>&1`, está permitido.
 - **El worker escribe el test por una vía que el gate no reconoce**, por ejemplo un script de Python: lo atrapa el paso Verificar, porque el `git diff` del test debe salir vacío.
+- **El worker cambia el contrato de aceptación** con `orq slice examen` o `orq slice alcance`: bloqueado en el gate y también en el propio comando (desde un worktree enlazado falla aunque falte el hook). Solo el Orquestador lo cambia, con `--aprobado` empezando por el id de una decisión registrada (`mNN` de memoria con fuente owner/atena, o `cNN` de un mensaje de atena); cambiar el examen anula el recibo previo y obliga a verificar de nuevo.
 - **`orq` no está o falla:** el hook tiene `onFailure: block` y bloquea en vez de dejar pasar.
 
 ## Comandos

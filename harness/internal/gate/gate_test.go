@@ -319,3 +319,22 @@ func TestPushDeRamasPermitido(t *testing.T) {
 		t.Error("sin push_ramas el push sigue bloqueado")
 	}
 }
+
+// H-01: el contrato de aceptación (examen y alcance) no lo cambia un worker.
+func TestWorkerNoCambiaElExamenNiElAlcance(t *testing.T) {
+	wt := fakes{wt: true}.env(t, t.TempDir())
+	main := fakes{}.env(t, t.TempDir())
+	for _, c := range []string{`orq slice examen tests/x.sh --aprobado "req ATN-1" --cmd "true"`, `orq slice --slice 01 examen tests/x.sh --aprobado m1`, `orq slice alcance src --aprobado "m1"`} {
+		if d := Evaluate(bash(c), baseLimits(), wt); d.Allow {
+			t.Errorf("un worker pudo: %q", c)
+		}
+		p := bash(c)
+		p.AgentID = "sub-1"
+		if d := Evaluate(p, baseLimits(), main); d.Allow {
+			t.Errorf("un subagente pudo: %q", c)
+		}
+		if d := Evaluate(bash(c), baseLimits(), main); !d.Allow {
+			t.Errorf("el orquestador no pudo: %q (%s)", c, d.Reason)
+		}
+	}
+}

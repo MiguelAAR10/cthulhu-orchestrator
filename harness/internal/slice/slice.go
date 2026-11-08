@@ -726,7 +726,8 @@ func (r Repo) SumarExamen(nn string, nuevos []string, cmd, aprobado string) (*Es
 	if err != nil {
 		return e, err
 	}
-	e.Bundle, e.Huella, e.SHAExamen, e.Motivo = bundle, h, strings.TrimSpace(head), "examen sumado o corregido: "+aprobado
+	// El contrato cambió: un recibo anterior ya no prueba nada; hay que volver a verificar.
+	e.Bundle, e.Huella, e.SHAExamen, e.Motivo, e.Recibo = bundle, h, strings.TrimSpace(head), "examen sumado o corregido: "+aprobado, nil
 	return e, r.save(e)
 }
 

@@ -16,6 +16,7 @@ import (
 
 	"orq/internal/canal"
 	"orq/internal/escriba"
+	"orq/internal/gate"
 	"orq/internal/herdr"
 	"orq/internal/limits"
 	"orq/internal/memoria"
@@ -634,7 +635,11 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		aprobado := fs.String("aprobado", "", "quién lo aprobó y por qué (req o mem de Atena/Owner)")
 		zona := fs.String("zona", "", "también la suma a la zona de ese worker ya lanzado")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *aprobado == "" {
-			fmt.Fprintln(stderr, "uso: orq slice alcance RUTA[,RUTA] --aprobado \"req ATN-... de Atena: motivo\" [--zona back]")
+			fmt.Fprintln(stderr, "uso: orq slice alcance RUTA[,RUTA] --aprobado \"mNN|cNN de Atena/Owner: motivo\" [--zona back]")
+			return 1
+		}
+		if err := p.cambioDeContrato(*aprobado); err != nil {
+			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
 		e, err := r.Ampliar(nn, partir(args[1]))
@@ -803,7 +808,11 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		cmd := fs.String("cmd", "", "comando nuevo del examen si debe correr también los archivos sumados")
 		aprobado := fs.String("aprobado", "", "req de Atena u Owner que aprueba el examen nuevo")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *aprobado == "" {
-			fmt.Fprintln(stderr, "uso: orq slice examen [--slice NN] ARCHIVO[,ARCHIVO] --aprobado \"req ATN-...\" [--cmd \"...\"]")
+			fmt.Fprintln(stderr, "uso: orq slice examen [--slice NN] ARCHIVO[,ARCHIVO] --aprobado \"mNN|cNN de Atena/Owner\" [--cmd \"...\"]")
+			return 1
+		}
+		if err := p.cambioDeContrato(*aprobado); err != nil {
+			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
 		e, err := r.SumarExamen(nn, partir(args[1]), *cmd, *aprobado)
@@ -962,4 +971,38 @@ func rolArgs(kind, modelo, esfuerzo, name, root string) []string {
 		args = append(args, "--add-dir", filepath.Dir(root))
 	}
 	return args
+}
+
+// cambioDeContrato: el examen y el alcance solo cambian desde el checkout principal (no desde un
+// worktree de worker, aunque falte el hook) y con una decisión registrada de Atena u Owner.
+func (p proyecto) cambioDeContrato(aprobado string) error {
+	if wd, _ := os.Getwd(); gate.IsLinkedWorktree(wd) || gate.IsLinkedWorktree(p.root) {
+		return errors.New("desde un worktree de worker no se cambia el examen ni el alcance: lo pide el Orquestador")
+	}
+	_, err := p.decisionRegistrada(aprobado)
+	return err
+}
+
+// decisionRegistrada exige que --aprobado nombre un id existente: mNN de memoria con fuente
+// owner|atena, o cNN del canal enviado por atena. El texto libre no aprueba nada.
+func (p proyecto) decisionRegistrada(aprobado string) (string, error) {
+	f := strings.Fields(strings.NewReplacer(",", " ", ":", " ", ";", " ").Replace(aprobado))
+	if len(f) > 0 {
+		id := f[0]
+		if items, _ := memoria.Load(p.memPath()); strings.HasPrefix(id, "m") {
+			for _, it := range items {
+				if it.ID == id && (it.Fuente == "owner" || it.Fuente == "atena") {
+					return id, nil
+				}
+			}
+		}
+		if ms, _ := canal.Load(p.canalPath()); strings.HasPrefix(id, "c") {
+			for _, m := range ms {
+				if m.ID == id && m.De == "atena" {
+					return id, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("--aprobado %q no nombra una decisión registrada: empieza por el id (mNN de `orq mem` con fuente owner|atena, o cNN de un mensaje de atena)", aprobado)
 }

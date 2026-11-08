@@ -329,7 +329,7 @@ func destructivo(p Payload) (Decision, bool) {
 }
 
 // soloOrqRe: transiciones que solo pide el Orquestador desde el checkout principal.
-var soloOrqRe = regexp.MustCompile(`(^|[\s;&|(])orq\s+(slice\s+(abrir|cerrar|reintentar|tomar|lanzar|juntar)|plan\s+(cargar|hecha|debatido)|sesion\s+(abrir|cerrar)|aprender\s+promover|msg\s+send\s+.*--tipo\s+cierre|halt\s+--clear)`)
+var soloOrqRe = regexp.MustCompile(`(^|[\s;&|(])orq\s+(slice\s+(abrir|cerrar|reintentar|tomar|lanzar|juntar|examen|alcance)|plan\s+(cargar|hecha|debatido)|sesion\s+(abrir|cerrar)|aprender\s+promover|msg\s+send\s+.*--tipo\s+cierre|halt\s+--clear)`)
 
 func soloOrquestador(p Payload, env Env) (Decision, bool) {
 	if p.ToolName != "Bash" {
@@ -340,7 +340,7 @@ func soloOrquestador(p Payload, env Env) (Decision, bool) {
 		return Decision{}, false
 	}
 	if p.AgentID != "" || env.IsWorktree(p.Cwd) {
-		return deny("orq: un worker no abre, toma, reintenta ni cierra slices. Pide verificación al Orquestador con tu resultado."), true
+		return deny("orq: un worker no abre, toma, reintenta ni cierra slices, ni cambia su examen o alcance. Pide verificación al Orquestador con tu resultado."), true
 	}
 	return Decision{}, false
 }
