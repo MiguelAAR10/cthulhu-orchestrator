@@ -49,10 +49,11 @@ Sources consolidated from three scouts on 2026-11-13 (A2A spec v1.0, Claude Code
 Rejected: A2A over HTTP, agent cards, shared or hard-linked clones, reflinks (ext4 has none), partial clones, self-editing skills, agent swarms.
 
 ## Checkpoint
-- Phase: A1 and A2 integrated and verified. A3: spike done (bwrap allowlist root works; agents start inside the box only through a PATH shim; read-only dependency binds work; no overlay in bwrap 0.9.0). B1+B2 (sandbox package and containment test) in progress, attempt 1 of 2.
-- Integration branch: `harness-v2` (local only), tip b950633. Integration owner: orchestrator pane `w3X:p1`.
-- Versions: working `harness-v2`; installed `~/bin/orq` 1.0.0 untouched, in use by live workers in another project; rollback = `main` 1f2d0b0.
-- Open panes: worker-sandbox `w3X:pA` (worktree `~/worktrees/cthulhu-sandbox`, branch `v2/sandbox`, based on dd90cc0: rebase or merge onto the tip at integration). Closed: planner, Astra, worker-verif, worker-gate, worker-spike, three research scouts.
+- Phase: D. A1, A2 and B1+B2 integrated and verified on the integrated revision (tip 11426f3: go test green; `orq sandbox selftest` 11/11; `validacion/aislamiento.sh --todo` 13 pass, 1 pending = the forged-state close, owned by B5).
+- Proposals P1–P8 approved by the Owner on 2026-11-13 and assigned to the builder.
+- Builder: one Fable session, pane `w3X:pE`, worktree `~/worktrees/cthulhu-build`, branch `v2/build`. Order: technical plan, C1 config, C2 terminal driver (herdr + Orca), C3 machine awareness, B5 isolation, B6 launch in the box, C6 channel, C4 metrics, C5 lean defaults, A4 CI and docs. It records progress in the orchestrator's scratch progress file and must `git merge harness-v2` before B5.
+- Integration branch: `harness-v2` (local only). Integration owner: orchestrator pane `w3X:p1`. Installed `~/bin/orq` 1.0.0 untouched; rollback = `main` 1f2d0b0.
+- Review owed: independent review of B5/B6 (high risk) before acceptance.
+- Pending Owner decision: dedicated credential for launching a real agent inside the sandbox; until then real launch is refused and tests use a simulated agent.
 - Spend: not measured.
-- Pending Owner decision: dedicated credential for sandboxed agents.
-- Next action: integrate B1+B2; then launch B5 (clones, bundles, sandboxed exam, closing re-check, legacy conversion) against the sandbox API.
+- Next action: review builder commits as they land; merge `v2/build` at activity boundaries.
