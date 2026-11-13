@@ -157,6 +157,8 @@ func realEnv() gate.Env {
 		StateDir:   state.Dir(),
 		IsWorktree: gate.IsLinkedWorktree,
 		Bundle:     bundleAbierto,
+		LimitsPath: limits.DefaultPath(),
+		MainRoot:   gate.CheckoutPrincipal,
 	}
 }
 
