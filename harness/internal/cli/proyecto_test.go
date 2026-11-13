@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -104,5 +105,117 @@ func TestRegistrarLlamador(t *testing.T) {
 	registrarLlamador(ses, "worker-front-s04", "w3D:pV", time.Now())
 	if _, ok := ses["worker-front-s04"]; ok {
 		t.Fatal("un worker no se registra como destino")
+	}
+}
+
+// repoCLI: un repo de juguete con un examen TAP en rojo y un run.sh versionado que lo lanza.
+func repoCLI(t *testing.T) string {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), "tienda")
+	os.MkdirAll(filepath.Join(root, "tests"), 0o755)
+	git := func(dir string, args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %s", args, out)
+		}
+	}
+	git(root, "init", "-q", "-b", "main")
+	git(root, "config", "user.email", "t@t")
+	git(root, "config", "user.name", "t")
+	os.WriteFile(filepath.Join(root, "total.txt"), []byte("0\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "tests", "datos.txt"), []byte("170\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "tests", "s01.sh"), []byte("if cmp -s total.txt tests/datos.txt; then echo 'ok 1 total' > out.tap; else echo 'not ok 1 total' > out.tap; exit 1; fi\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "run.sh"), []byte("sh tests/s01.sh\n"), 0o644)
+	os.WriteFile(filepath.Join(root, ".gitignore"), []byte("out.tap\n.orq/\n"), 0o644)
+	git(root, "add", "-A")
+	git(root, "commit", "-qm", "rojo")
+	t.Setenv("ORQ_ROOT", root)
+	t.Setenv("ORQ_WORKTREES", filepath.Join(filepath.Dir(root), "wt"))
+	t.Setenv("ORQ_LIMITS", filepath.Join(filepath.Dir(root), "limits.json"))
+	t.Setenv("ORQ_ROL", "")
+	return root
+}
+
+var abrirBase = []string{"slice", "abrir", "01", "--titulo", "total", "--test", "tests/s01.sh", "--cmd", "sh run.sh", "--bundle", "tests/datos.txt", "--sin-scouts", "e2e"}
+
+func TestSliceAbrirExigeConteoOMotivo(t *testing.T) {
+	repoCLI(t)
+	if _, errs, code := run(t, abrirBase...); code != 1 || !strings.Contains(errs, "--sin-conteo") {
+		t.Fatalf("code %d: %s", code, errs)
+	}
+	if _, errs, code := run(t, append(abrirBase, "--sin-conteo", "el runner no puede dejar reporte", "--aislado")...); code != 0 {
+		t.Fatalf("--sin-conteo y --aislado (no-op) deben abrir: %d %s", code, errs)
+	}
+	out, _, _ := run(t, "slice", "estado")
+	if !strings.Contains(out, "sin conteo: el runner no puede dejar reporte") || !strings.Contains(out, "ruta: slice") {
+		t.Fatalf("estado: %s", out)
+	}
+}
+
+func TestRunnerCambiadoSalePorExit3YSeAceptaConMotivo(t *testing.T) {
+	root := repoCLI(t)
+	if out, errs, code := run(t, append(abrirBase, "--reporte", "out.tap", "--formato", "tap")...); code != 0 || !strings.Contains(out, "Runner vigilado: run.sh") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	run(t, "slice", "tomar", "w1")
+	wt := filepath.Join(filepath.Dir(root), "wt", "tienda-s01")
+	os.WriteFile(filepath.Join(wt, "run.sh"), []byte("echo 'ok 1 total' > out.tap\n"), 0o644)
+	for _, c := range [][]string{{"add", "-A"}, {"commit", "-qm", "runner de mentira"}} {
+		cmd := exec.Command("git", c...)
+		cmd.Dir = wt
+		cmd.Run()
+	}
+	_, errs, code := run(t, "slice", "verificar")
+	if code != 3 || !strings.Contains(errs, "run.sh") || !strings.Contains(errs, "--acepto-runner") {
+		t.Fatalf("code %d: %s", code, errs)
+	}
+	if out, _, _ := run(t, "slice", "estado"); !strings.Contains(out, "fallos: 0/") {
+		t.Fatalf("no debía contar como fallo: %s", out)
+	}
+	out, errs, code := run(t, "slice", "verificar", "--acepto-runner", "Atena aprobó el cambio")
+	if code != 0 || !strings.Contains(out, "Atena aprobó el cambio") {
+		t.Fatalf("code %d: %s %s", code, out, errs)
+	}
+	if rec, _, _ := run(t, "slice", "recibo"); !strings.Contains(rec, "Atena aprobó el cambio") {
+		t.Fatalf("el recibo no lo dice: %s", rec)
+	}
+}
+
+func TestRutaFixRechazaPlanYEquipoYSubeConElComando(t *testing.T) {
+	repoCLI(t)
+	if _, errs, code := run(t, append(abrirBase, "--reporte", "out.tap", "--formato", "tap", "--ruta", "fix")...); code != 0 {
+		t.Fatalf("%d %s", code, errs)
+	}
+	if out, _, _ := run(t, "slice", "estado"); !strings.Contains(out, "ruta: fix") {
+		t.Fatalf("estado: %s", out)
+	}
+	_, errs, code := run(t, "plan", "cargar", "plan.json")
+	if code != 1 || !strings.Contains(errs, "orq slice ruta slice") {
+		t.Fatalf("plan cargar en fix: %d %s", code, errs)
+	}
+	if _, errs, code := run(t, "slice", "ruta", "slice"); code != 1 {
+		t.Fatalf("sin motivo debe fallar: %s", errs)
+	}
+	if out, errs, code := run(t, "slice", "ruta", "slice", "toca dos repos"); code != 0 || !strings.Contains(out, "sube a la ruta slice") {
+		t.Fatalf("%d %s %s", code, out, errs)
+	}
+	if out, _, _ := run(t, "slice", "estado"); !strings.Contains(out, "ruta: slice (subió de fix: toca dos repos)") {
+		t.Fatalf("estado: %s", out)
+	}
+	if _, errs, _ := run(t, "plan", "cargar", "plan.json"); strings.Contains(errs, "ruta fix") {
+		t.Fatalf("ya no es fix: %s", errs)
+	}
+}
+
+func TestMetricasPorRutaEnLaLineaDeComandos(t *testing.T) {
+	repoCLI(t)
+	out, _, code := run(t, "metricas")
+	if code != 0 || !strings.Contains(out, "ruta fix: 0 aceptados") || !strings.Contains(out, "ruta slice: 0 aceptados") || !strings.Contains(out, "fixes que subieron a slice: 0") {
+		t.Fatalf("%d %s", code, out)
+	}
+	if out, _, _ := run(t, "metricas", "--json"); !strings.Contains(out, "PorRuta") {
+		t.Fatalf("json: %s", out)
 	}
 }

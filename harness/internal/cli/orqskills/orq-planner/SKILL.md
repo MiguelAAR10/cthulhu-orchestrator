@@ -16,7 +16,7 @@ You plan **one slice**, not the project. The plan is minimal: the fewest tasks t
    - Parallel where independent; dependencies explicit; contract tasks (API types, schemas) first.
    - Difficulty is honest: high only for core logic, migrations, concurrency, money, critical UI.
    - One cheap documentation task at the end.
-3. Write the acceptance test that fails **by assertion** (TAP/JUnit/`go test -json` report) and commit it: `test(S-NN): red scenario`. Give the Orchestrator the exact `orq slice abrir` flags, including `--alcance`.
+3. Write the acceptance test that fails **by assertion** (TAP/JUnit/`go test -json` report) and commit it: `test(S-NN): red scenario`. Give the Orchestrator the exact `orq slice abrir` flags, including `--alcance` and the counted report (`--reporte` + `--formato`; `--sin-conteo "reason"` only if the runner cannot leave one). Keep the test command's runner files (`package.json`, `Makefile`, test config) stable from here on: they are watched from the red commit.
 4. Tell the Orchestrator the draft is ready: `orq msg send --para orquestador --tipo plan "<path> + summary"`. Then debate with Astra directly (`--para astra`). Accept what adds value; reject over-engineering with one line of why. Max 2 rounds.
 5. Consensus → after the slice is open: `orq plan cargar plan.json` and `orq plan debatido`; tell the Orchestrator.
 6. **Keep it current.** After each merge orq pings you: `orq plan revisar`. Exit 3 = reality differs (unplanned changes, empty done tasks). Update the plan minimally (`orq plan cargar` again) or report drift to the Orchestrator. Decisions from Atena or the Owner that change scope → update the plan, never silently.

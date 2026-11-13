@@ -1,9 +1,11 @@
 package slice
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +48,7 @@ func commitEn(t *testing.T, dir, file, body string) {
 
 func abrir(t *testing.T, r Repo) *Estado {
 	t.Helper()
-	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}, Sano: "test -f total.txt"}, t0)
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Sano: "test -f total.txt"}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +61,7 @@ func TestCicloCompletoAceptado(t *testing.T) {
 	if e.Fase != Implementando || e.Attempt() != "S-01/a1" || e.Base != "main" {
 		t.Fatalf("got %+v", e)
 	}
-	if _, _, err := r.Abrir("01", "otro", "tests/s01.sh", examen, Opciones{}, t0); err == nil {
+	if _, _, err := r.Abrir("01", "otro", "tests/s01.sh", examen, Opciones{SinConteo: "juguete"}, t0); err == nil {
 		t.Fatal("abrió dos veces el mismo slice")
 	}
 	if _, _, _, err := r.Cerrar("", true, "", t0); err == nil {
@@ -92,11 +94,11 @@ func TestCicloCompletoAceptado(t *testing.T) {
 
 func TestBaseSanaYRojoSonDistintos(t *testing.T) {
 	r := repoDeJuguete(t)
-	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{Sano: "false"}, t0); err == nil || !strings.Contains(err.Error(), "sana") {
+	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Sano: "false"}, t0); err == nil || !strings.Contains(err.Error(), "sana") {
 		t.Fatalf("got %v", err)
 	}
 	commitEn(t, r.Root, "total.txt", "170\n")
-	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{}, t0); err == nil || !strings.Contains(err.Error(), "rojo") {
+	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete"}, t0); err == nil || !strings.Contains(err.Error(), "rojo") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -104,7 +106,7 @@ func TestBaseSanaYRojoSonDistintos(t *testing.T) {
 func TestDescubreAntesDeCrear(t *testing.T) {
 	r := repoDeJuguete(t)
 	Git(r.Root, "branch", "slice/01")
-	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{}, t0); err == nil || !strings.Contains(err.Error(), "ya existe") {
+	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete"}, t0); err == nil || !strings.Contains(err.Error(), "ya existe") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -342,7 +344,7 @@ func TestRestaurarDentroDeLaCorridaNoEnganaEnAislado(t *testing.T) {
 	os.WriteFile(filepath.Join(r.Root, ".gitignore"), []byte("local.txt\nout.tap\n"), 0o644)
 	Git(r.Root, "add", "-A")
 	Git(r.Root, "commit", "-qm", "ignore")
-	e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{Aislado: true}, t0)
+	e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Aislado: true}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +357,7 @@ func TestRestaurarDentroDeLaCorridaNoEnganaEnAislado(t *testing.T) {
 
 func TestTimeoutCortaElExamen(t *testing.T) {
 	r := repoDeJuguete(t)
-	e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{Timeout: 1}, t0)
+	e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Timeout: 1}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -456,7 +458,7 @@ func dosSlices(t *testing.T) (Repo, *Estado, *Estado) {
 	Git(r.Root, "add", "-A")
 	Git(r.Root, "commit", "-qm", "rojo 2")
 	a := abrir(t, r)
-	b, _, err := r.Abrir("02", "iva", "tests/s02.sh", "sh tests/s02.sh", Opciones{}, t0)
+	b, _, err := r.Abrir("02", "iva", "tests/s02.sh", "sh tests/s02.sh", Opciones{SinConteo: "juguete"}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -467,7 +469,7 @@ func dosSlices(t *testing.T) (Repo, *Estado, *Estado) {
 
 func TestDosSlicesIndependientesYTope(t *testing.T) {
 	r, _, _ := dosSlices(t)
-	if _, _, err := r.Abrir("03", "x", "tests/s01.sh", examen, Opciones{}, t0); err == nil || !strings.Contains(err.Error(), "tope") {
+	if _, _, err := r.Abrir("03", "x", "tests/s01.sh", examen, Opciones{SinConteo: "juguete"}, t0); err == nil || !strings.Contains(err.Error(), "tope") {
 		t.Fatalf("got %v", err)
 	}
 	if _, err := r.Load(); !errors.Is(err, ErrVarios) {
@@ -544,7 +546,7 @@ func TestCerrarRepetidoNoDuplicaRegistroYBundleIgnoradoNoAbre(t *testing.T) {
 	os.WriteFile(filepath.Join(r.Root, "local.cfg"), []byte("x"), 0o644)
 	Git(r.Root, "add", ".gitignore")
 	Git(r.Root, "commit", "-qm", "ign")
-	if _, _, err := r.Abrir("02", "t", "tests/s01.sh", "false", Opciones{Bundle: []string{"local.cfg"}}, t0); err == nil || !strings.Contains(err.Error(), "versionado") {
+	if _, _, err := r.Abrir("02", "t", "tests/s01.sh", "false", Opciones{SinConteo: "juguete", Bundle: []string{"local.cfg"}}, t0); err == nil || !strings.Contains(err.Error(), "versionado") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -553,7 +555,7 @@ func TestCerrarRepetidoNoDuplicaRegistroYBundleIgnoradoNoAbre(t *testing.T) {
 // Un worker juntado se poda (worktree, rama y equipo); uno sin juntar no. La zona podada vuelve a nacer.
 func TestPodarWorkerJuntado(t *testing.T) {
 	r := repoDeJuguete(t)
-	if _, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
+	if _, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
 		t.Fatal(err)
 	}
 	_, front, _ := r.Sumar("01", "w-front", "claude", "front", []string{"web"})
@@ -586,7 +588,7 @@ func TestPodarWorkerJuntado(t *testing.T) {
 func TestEquipoFrontBackTestEnUnSlice(t *testing.T) {
 	r := repoDeJuguete(t)
 	commitEn(t, r.Root, "tests/s01.sh", "cmp -s web/total.txt tests/datos.txt && grep -qx ok api/api.txt\n")
-	e, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}}, t0)
+	e, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -646,7 +648,7 @@ func TestEquipoFrontBackTestEnUnSlice(t *testing.T) {
 // La zona sigue con su worker: la tarea siguiente del plan reusa su worktree y suma rutas.
 func TestZonaSigueConSuWorker(t *testing.T) {
 	r := repoDeJuguete(t)
-	if _, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
+	if _, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
 		t.Fatal(err)
 	}
 	_, back, err := r.Sumar("01", "w-back", "claude", "back", []string{"api"})
@@ -680,7 +682,7 @@ func TestZonaSigueConSuWorker(t *testing.T) {
 
 func TestAmpliarAlcance(t *testing.T) {
 	r := repoDeJuguete(t)
-	if _, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}}, t0); err != nil {
+	if _, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}}, t0); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.Ampliar("01", []string{"tests"}); err == nil {
@@ -695,7 +697,7 @@ func TestAmpliarAlcance(t *testing.T) {
 // Sin alcance el slice toca todo: ampliar no puede encogerlo a las rutas sumadas.
 func TestAmpliarSinAlcanceNoEncoge(t *testing.T) {
 	r := repoDeJuguete(t)
-	if _, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
+	if _, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
 		t.Fatal(err)
 	}
 	e, err := r.Ampliar("01", []string{"src/bff/proxy.ts"})
@@ -706,7 +708,7 @@ func TestAmpliarSinAlcanceNoEncoge(t *testing.T) {
 
 func TestAlinearDetectaDesvio(t *testing.T) {
 	r := repoDeJuguete(t)
-	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}}, t0)
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -729,7 +731,7 @@ func TestPrepararDeps(t *testing.T) {
 	os.MkdirAll(filepath.Join(r.Root, "node_modules", "vite"), 0o755)
 	os.WriteFile(filepath.Join(r.Root, "node_modules", "vite", "index.js"), []byte("x"), 0o644)
 	os.MkdirAll(filepath.Join(r.Root, ".venv", "bin"), 0o755)
-	e, _, err := r.Abrir("01", "deps", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}}, t0)
+	e, _, err := r.Abrir("01", "deps", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -751,7 +753,7 @@ func TestPrepararDeps(t *testing.T) {
 func TestPrepararDepsNoEnsucia(t *testing.T) {
 	r := repoDeJuguete(t)
 	os.MkdirAll(filepath.Join(r.Root, ".venv"), 0o755) // .venv sin ignorar
-	e, _, err := r.Abrir("01", "deps", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}}, t0)
+	e, _, err := r.Abrir("01", "deps", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -763,7 +765,7 @@ func TestPrepararDepsNoEnsucia(t *testing.T) {
 // Una reparación pedida tras verificar reabre el mismo intento con su trabajo; el recibo deja de valer.
 func TestReabrirVerificado(t *testing.T) {
 	r := repoDeJuguete(t)
-	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}}, t0)
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -790,7 +792,7 @@ func TestReabrirVerificado(t *testing.T) {
 // Una ruta aprobada después del lanzamiento entra a la zona del worker y juntar ya no la rechaza.
 func TestAmpliarZona(t *testing.T) {
 	r := repoDeJuguete(t)
-	if _, _, err := r.Abrir("01", "z", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
+	if _, _, err := r.Abrir("01", "z", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
 		t.Fatal(err)
 	}
 	_, back, _ := r.Sumar("01", "w-back", "claude", "back", []string{"api"})
@@ -817,7 +819,7 @@ func TestAmpliarZona(t *testing.T) {
 // Una huella mal tomada se repara solo si el examen es idéntico al del rojo; un examen cambiado no.
 func TestRehuella(t *testing.T) {
 	r := repoDeJuguete(t)
-	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}}, t0)
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -842,7 +844,7 @@ func TestRehuella(t *testing.T) {
 // Si el slice cambió el examen, rehuella no lo bendice.
 func TestRehuellaNoBendiceTrampa(t *testing.T) {
 	r := repoDeJuguete(t)
-	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{Bundle: []string{"tests/datos.txt"}}, t0)
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -851,5 +853,361 @@ func TestRehuellaNoBendiceTrampa(t *testing.T) {
 	r.Verificar("01", t0)
 	if _, err := r.Rehuella("01", "x"); err == nil {
 		t.Fatal("un examen cambiado no se repara")
+	}
+}
+
+// ---------- verificación honesta y rutas ----------
+
+func TestVeredictoUnico(t *testing.T) {
+	casos := []struct {
+		nombre string
+		salio  bool
+		c      *Conteo
+		omitir bool
+		ok     bool
+		nota   string
+	}{
+		{"sin reporte y exit 0", true, nil, false, true, ""},
+		{"sin reporte y exit 1", false, nil, false, false, ""},
+		{"exit 1 con reporte verde", false, &Conteo{Ejecutados: 3}, false, false, ""},
+		{"exit 0 y 3 pruebas", true, &Conteo{Ejecutados: 3}, false, true, ""},
+		{"exit 0 y 0 pruebas", true, &Conteo{}, false, false, "0 pruebas"},
+		{"omitidas sin permiso", true, &Conteo{Ejecutados: 2, Omitidos: 1}, false, false, "omitidas"},
+		{"omitidas con permiso", true, &Conteo{Ejecutados: 2, Omitidos: 1}, true, true, ""},
+		{"exit 0 pero fallidas", true, &Conteo{Ejecutados: 2, Fallidos: 1}, false, false, "fallidas"},
+	}
+	for _, c := range casos {
+		ok, nota := veredicto(c.salio, c.c, c.omitir)
+		if ok != c.ok || !strings.Contains(nota, c.nota) || (c.nota == "" && nota != "") {
+			t.Errorf("%s: got %v %q, quería %v %q", c.nombre, ok, nota, c.ok, c.nota)
+		}
+	}
+}
+
+// integrar usa el mismo veredicto que Verificar: una prueba omitida en el merge no pasa.
+func TestIntegrarRechazaOmitidosComoVerificar(t *testing.T) {
+	r := repoConReporte(t, `if cmp -s total.txt tests/datos.txt; then printf 'ok 1 total\n' > out.tap; if test -f extra.txt; then printf 'ok 2 extra # SKIP luego\n' >> out.tap; fi; else printf 'not ok 1 total\n' > out.tap; exit 1; fi
+`)
+	e, _, err := abrirConReporte(r, Opciones{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if _, _, err := r.Verificar("", t0); err != nil {
+		t.Fatal(err) // en la rama del slice no hay extra.txt: nada omitido
+	}
+	commitEn(t, r.Root, "extra.txt", "x\n") // la base avanza y trae una prueba omitida al merge
+	_, _, _, err = r.Cerrar("", true, "", t0)
+	if err == nil || !strings.Contains(err.Error(), "omitidas") {
+		t.Fatalf("integrar aceptó un merge con pruebas omitidas: %v", err)
+	}
+	if st, _ := r.Load(""); st == nil || st.Fase == Cerrando {
+		t.Fatalf("el cierre no debía avanzar: %+v", st)
+	}
+}
+
+func TestAbrirExigeConteoOMotivo(t *testing.T) {
+	r := repoConReporte(t, tapReal)
+	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{}, t0); err == nil || !strings.Contains(err.Error(), "--sin-conteo") {
+		t.Fatalf("abrió sin conteo ni motivo: %v", err)
+	}
+	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{Reporte: "out.tap", Formato: "tap", SinConteo: "x"}, t0); err == nil {
+		t.Fatal("--sin-conteo con --reporte debe rechazarse")
+	}
+	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{Reporte: "out.tap"}, t0); err == nil {
+		t.Fatal("--reporte sin --formato debe rechazarse")
+	}
+	if _, err := r.Load(""); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSinConteoQuedaEnElEstadoYEnCadaRecibo(t *testing.T) {
+	r := repoDeJuguete(t)
+	e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "el runner es un cmp"}, t0)
+	if err != nil || e.SinConteo != "el runner es un cmp" {
+		t.Fatalf("%+v %v", e, err)
+	}
+	if _, _, err := r.Verificar("", t0); err == nil { // sigue en rojo: recibo de fallo
+		t.Fatal("el rojo no debe pasar")
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	e, _, err = r.Verificar("", t0)
+	if err != nil || !strings.Contains(e.Recibo.Nota, "el runner es un cmp") || e.Recibo.Contado {
+		t.Fatalf("%+v %v", e.Recibo, err)
+	}
+	recibos := leerJSONL[Recibo](r.recibosPath())
+	if len(recibos) != 2 {
+		t.Fatalf("recibos: %d", len(recibos))
+	}
+	for _, rc := range recibos {
+		if !strings.Contains(rc.Nota, "el runner es un cmp") {
+			t.Fatalf("un recibo no repite el motivo: %+v", rc)
+		}
+	}
+}
+
+// Lo que hay en el worktree y git ignora no puede hacer pasar el examen: se corre sobre una copia de HEAD.
+func TestVerificarAisladoPorDefectoYOptOut(t *testing.T) {
+	prep := func(t *testing.T, o Opciones) (Repo, *Estado) {
+		r := repoConReporte(t, `cmp -s total.txt tests/datos.txt || test -f ruido.txt
+`)
+		os.WriteFile(filepath.Join(r.Root, ".git", "info", "exclude"), []byte(".orq/\nruido.txt\n"), 0o644)
+		o.SinConteo = "juguete"
+		e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, o, t0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		commitEn(t, e.Worktree, "otro.txt", "x\n")
+		os.WriteFile(filepath.Join(e.Worktree, "ruido.txt"), []byte("x\n"), 0o644) // ignorado: el worktree sigue limpio
+		return r, e
+	}
+	r, _ := prep(t, Opciones{})
+	if _, _, err := r.Verificar("", t0); err == nil {
+		t.Fatal("un archivo ignorado del worker hizo pasar el examen por defecto")
+	}
+	r, e := prep(t, Opciones{EnSitio: "el examen lee un artefacto ignorado"})
+	e, _, err := r.Verificar("", t0)
+	if err != nil || e.Recibo.Aislado || !strings.Contains(e.Recibo.Nota, "el examen lee un artefacto ignorado") {
+		t.Fatalf("en sitio debe pasar y decirlo en el recibo: %+v %v", e.Recibo, err)
+	}
+	r, _ = prep(t, Opciones{Aislado: true}) // --aislado sigue aceptándose y no cambia nada
+	if _, _, err := r.Verificar("", t0); err == nil {
+		t.Fatal("--aislado debe seguir siendo el modo por defecto")
+	}
+}
+
+func TestAisladoRecibeLasDependenciasIgnoradas(t *testing.T) {
+	r := repoConReporte(t, `cmp -s total.txt tests/datos.txt && test -f node_modules/p/ok && test -L .venv
+`)
+	commitEn(t, r.Root, ".gitignore", "node_modules/\n.venv\nout.tap\n")
+	os.MkdirAll(filepath.Join(r.Root, "node_modules", "p"), 0o755)
+	os.WriteFile(filepath.Join(r.Root, "node_modules", "p", "ok"), []byte("x"), 0o644)
+	os.MkdirAll(filepath.Join(r.Root, ".venv", "bin"), 0o755)
+	e, _, err := r.Abrir("01", "deps", "tests/s01.sh", examen, Opciones{SinConteo: "juguete"}, t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	e, out, err := r.Verificar("", t0)
+	if err != nil || !e.Recibo.Aislado {
+		t.Fatalf("la copia aislada no trae las dependencias: %v\n%s", err, out)
+	}
+	if ents, _ := filepath.Glob(filepath.Join(os.TempDir(), "orq-exec-*")); len(ents) > 0 {
+		for _, d := range ents {
+			if existe(filepath.Join(d, "node_modules")) {
+				t.Fatalf("la copia aislada quedó sin borrar: %s", d)
+			}
+		}
+	}
+}
+
+func TestArchivosDelRunner(t *testing.T) {
+	casos := map[string][]string{
+		"npm test":                         {"package.json"},
+		"CI=1 pnpm run test:e2e":           {"package.json"},
+		"yarn jest":                        {"package.json", "jest.config.ts", "jest.config.js", "jest.config.mjs", "jest.config.cjs", "jest.config.mts", "jest.config.cts", "jest.config.json"},
+		"bun test && echo listo":           {"package.json"},
+		"make test":                        {"Makefile", "makefile", "GNUmakefile"},
+		"make -f build/m.mk check":         {"Makefile", "makefile", "GNUmakefile", "build/m.mk"},
+		"pytest -q":                        {"pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini", "conftest.py"},
+		"python -m pytest tests":           {"pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini", "conftest.py"},
+		"sh tests/run.sh":                  {"tests/run.sh"},
+		"bash -e ci/examen.sh --rapido":    {"ci/examen.sh"},
+		"npx playwright test":              {"package.json", "playwright.config.ts", "playwright.config.js", "playwright.config.mjs", "playwright.config.cjs", "playwright.config.mts", "playwright.config.cts"},
+		"cd web && vitest run":             {"vitest.config.ts", "vitest.config.js", "vitest.config.mjs", "vitest.config.cjs", "vitest.config.mts", "vitest.config.cts", "vite.config.ts", "vite.config.js", "vite.config.mjs", "vite.config.cjs", "vite.config.mts", "vite.config.cts"},
+		"go test ./...":                    nil,
+		"cmp -s total.txt tests/datos.txt": nil,
+	}
+	for cmd, quiero := range casos {
+		if got := archivosDelRunner(cmd); !slices.Equal(got, quiero) {
+			t.Errorf("%q: got %v, quería %v", cmd, got, quiero)
+		}
+	}
+}
+
+// repoConRunner: el examen lo lanza run.sh, un archivo versionado que no es parte del paquete protegido.
+func repoConRunner(t *testing.T) (Repo, *Estado) {
+	t.Helper()
+	r := repoDeJuguete(t)
+	commitEn(t, r.Root, "run.sh", "sh tests/s01.sh\n")
+	e, _, err := r.Abrir("01", "t", "tests/s01.sh", "sh run.sh", Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r, e
+}
+
+func TestRunnerVigiladoSeGuardaAlAbrir(t *testing.T) {
+	_, e := repoConRunner(t)
+	if len(e.Vigilados) != 1 || e.Vigilados[0].Ruta != "run.sh" || len(e.Vigilados[0].Blob) < 40 {
+		t.Fatalf("vigilados: %+v", e.Vigilados)
+	}
+	r := repoDeJuguete(t) // sin archivos de runner versionados: no se inventa nada
+	e2 := abrir(t, r)
+	if len(e2.Vigilados) != 0 {
+		t.Fatalf("vigilados: %+v", e2.Vigilados)
+	}
+}
+
+func TestRunnerCambiadoNoVerificaNiCuentaComoFallo(t *testing.T) {
+	r, e := repoConRunner(t)
+	commitEn(t, e.Worktree, "run.sh", "exit 0\n") // el comando ahora no corre el examen
+	_, out, err := r.Verificar("", t0)
+	var rc *ErrRunnerCambio
+	if !errors.As(err, &rc) || len(rc.Archivos) != 1 || rc.Archivos[0] != "run.sh" || !strings.Contains(err.Error(), "--acepto-runner") {
+		t.Fatalf("got %v", err)
+	}
+	if out != "" || len(leerJSONL[Recibo](r.recibosPath())) != 0 {
+		t.Fatal("no debía correr nada ni dejar recibo")
+	}
+	ahora, _ := r.Load("")
+	if ahora.Fallos != 0 || ahora.Fase != Implementando || ahora.HeadFallo != "" {
+		t.Fatalf("contó como reparación fallida: %+v", ahora)
+	}
+	// Repetirlo tampoco bloquea por «sin progreso».
+	for range 4 {
+		if _, _, err := r.Verificar("", t0); !errors.As(err, &rc) {
+			t.Fatalf("got %v", err)
+		}
+	}
+	if ahora, _ = r.Load(""); ahora.Fase != Implementando {
+		t.Fatalf("fase %s", ahora.Fase)
+	}
+	// Aceptado con motivo: corre y el recibo lo deja escrito.
+	e, _, err = r.Verificar("", t0, VerificarOpc{AceptoRunner: "Atena aprobó cambiar el runner"})
+	if err != nil || !strings.Contains(e.Recibo.Nota, "Atena aprobó cambiar el runner") || !strings.Contains(e.Recibo.Nota, "run.sh") {
+		t.Fatalf("%+v %v", e.Recibo, err)
+	}
+}
+
+func TestRunnerBorradoTambienSeDetecta(t *testing.T) {
+	r, e := repoConRunner(t)
+	Git(e.Worktree, "rm", "-q", "run.sh")
+	Git(e.Worktree, "commit", "-qm", "borra el runner")
+	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "run.sh (borrado)") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestRunnerIntactoVerificaSinFlag(t *testing.T) {
+	r, e := repoConRunner(t)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if e, _, err := r.Verificar("", t0); err != nil || e.Fase != Verificado {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestRutaFixNoTieneEquipoYSubeAUnSlice(t *testing.T) {
+	r := repoDeJuguete(t)
+	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Ruta: "otra"}, t0); err == nil {
+		t.Fatal("ruta inválida")
+	}
+	e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Ruta: "fix"}, t0)
+	if err != nil || e.Ruta != RutaFix || e.RutaEfectiva() != RutaFix {
+		t.Fatalf("%+v %v", e, err)
+	}
+	if _, _, err := r.Sumar("01", "w-front", "claude", "front", []string{"web"}); err == nil || !strings.Contains(err.Error(), "orq slice ruta slice") {
+		t.Fatalf("Sumar en fix debe rechazarse y apuntar a la subida: %v", err)
+	}
+	if _, err := r.CambiarRuta("", "slice", "  "); err == nil {
+		t.Fatal("subir sin motivo")
+	}
+	if _, err := r.CambiarRuta("", "fix", "x"); err == nil {
+		t.Fatal("bajar a fix no existe")
+	}
+	e, err = r.CambiarRuta("", "slice", "toca schema y dos repos")
+	if err != nil || e.Ruta != RutaSlice || !e.Ascendido || e.RutaMotivo != "toca schema y dos repos" {
+		t.Fatalf("%+v %v", e, err)
+	}
+	if _, err := r.CambiarRuta("", "slice", "otra vez"); err == nil {
+		t.Fatal("ya va por slice")
+	}
+	if _, w, err := r.Sumar("01", "w-front", "claude", "front", []string{"web"}); err != nil || w == nil {
+		t.Fatalf("tras subir, el equipo debe poder sumarse: %v", err)
+	}
+}
+
+func TestRutaPorDefectoEsSliceYQuedaEnElRegistro(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	if e.Ruta != "" || e.RutaEfectiva() != RutaSlice {
+		t.Fatalf("%+v", e)
+	}
+	if _, _, err := r.Sumar("01", "w-front", "claude", "front", []string{"web"}); err != nil {
+		t.Fatalf("slice admite equipo: %v", err)
+	}
+	r.Cerrar("", false, "prueba", t0.Add(time.Hour))
+	reg := leerJSONL[Registro](r.logPath())
+	if len(reg) != 1 || reg[0].Ruta != RutaSlice || reg[0].Ascendido {
+		t.Fatalf("%+v", reg)
+	}
+}
+
+func TestMetricasPorRuta(t *testing.T) {
+	r := repoDeJuguete(t)
+	cerrar := func(nn, ruta string, ascender bool, horas int) {
+		e, _, err := r.Abrir(nn, "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Ruta: ruta}, t0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ascender {
+			r.CambiarRuta(nn, "slice", "creció")
+		}
+		commitEn(t, e.Worktree, "total.txt", "170\n")
+		if _, _, err := r.Verificar(nn, t0); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, err := r.Cerrar(nn, true, "", t0.Add(time.Duration(horas)*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		Git(r.Root, "checkout", "-q", "main")
+		os.WriteFile(filepath.Join(r.Root, "total.txt"), []byte("0\n"), 0o644) // vuelve a rojo para el siguiente
+		Git(r.Root, "commit", "-qam", "rojo otra vez")
+	}
+	cerrar("01", "fix", false, 1)
+	cerrar("02", "fix", false, 3)
+	cerrar("03", "fix", true, 5) // empezó como fix, terminó como slice
+	cerrar("04", "", false, 8)
+	m := r.Metricas(time.Time{})
+	if m.Aceptados != 4 || m.Ascendidos != 1 {
+		t.Fatalf("%+v", m)
+	}
+	f, s := m.PorRuta[RutaFix], m.PorRuta[RutaSlice]
+	if f.Aceptados != 2 || f.VerdesALaPrimera != 2 || f.HorasMedias != 2 || s.Aceptados != 2 || s.HorasMedias != 6.5 {
+		t.Fatalf("fix %+v slice %+v", f, s)
+	}
+}
+
+// Un registro de orq 1.0.0 no trae ruta: cuenta como slice.
+func TestMetricasRegistrosViejosSonSlice(t *testing.T) {
+	r := repoDeJuguete(t)
+	appendJSON(r.logPath(), map[string]any{"nn": "01", "intento": 1, "titulo": "viejo", "resultado": "aceptado",
+		"abierto": t0, "cerrado": t0.Add(2 * time.Hour)})
+	m := r.Metricas(time.Time{})
+	if m.PorRuta[RutaSlice].Aceptados != 1 || m.PorRuta[RutaFix].Aceptados != 0 || m.PorRuta[RutaSlice].HorasMedias != 2 {
+		t.Fatalf("%+v", m)
+	}
+}
+
+// Un slice abierto por orq 1.0.0 (sin ninguno de los campos nuevos) sigue verificando y cerrando.
+func TestEstadoViejoSigueVerificandoYCerrando(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	raw, _ := os.ReadFile(r.estadoPath("01"))
+	var m map[string]any
+	json.Unmarshal(raw, &m)
+	for _, k := range []string{"sin_conteo", "en_sitio", "vigilados", "ruta", "ascendido", "ruta_motivo", "aislado"} {
+		delete(m, k)
+	}
+	raw, _ = json.Marshal(m)
+	os.WriteFile(r.estadoPath("01"), raw, 0o644)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	got, _, err := r.Verificar("", t0)
+	if err != nil || got.Fase != Verificado || got.Recibo.Contado {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if reg, _, _, err := r.Cerrar("", true, "", t0.Add(time.Hour)); err != nil || reg.Result != "aceptado" || reg.Ruta != RutaSlice {
+		t.Fatalf("%+v %v", reg, err)
 	}
 }

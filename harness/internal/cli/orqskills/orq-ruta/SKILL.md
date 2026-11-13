@@ -36,9 +36,9 @@ orq msg send --para orquestador --tipo historia "[lane: fix] <story>"
 
 **Orchestrator.** Go straight from story to worker:
 1. Planner open or `orq sesion abrir planificador`; forward the story with its `[lane: fix]` tag.
-2. With the Planner's flags: `orq slice abrir NN --titulo --test --cmd --reporte --formato --alcance <paths> --sin-scouts "lane fix: <one-line reason>"`.
+2. With the Planner's flags: `orq slice abrir NN --titulo --test --cmd --reporte --formato --alcance <paths> --ruta fix --sin-scouts "lane fix: <one-line reason>"`. `--ruta fix` is stored in the slice and in its closing record; in a fix `orq plan cargar` and zone teams (`--zona`) are refused. Counting is the default: `--reporte` + `--formato`, or `--sin-conteo "reason"` when the runner cannot leave a report.
 3. One worker, writing directly in the slice worktree: `orq slice lanzar --agente claude --dificultad baja --alcance "<what it leaves done>"`. Use `media` only when the cause is unknown.
-4. On the worker's report: `orq slice verificar`, then run the demo yourself.
+4. On the worker's report: `orq slice verificar` (it runs the red test on a clean copy of the commit), then run the demo yourself. Exit 3 = a runner file (`package.json`, `Makefile`, test config…) changed since the red test: nothing ran and it is not a failed repair; rerun with `--acepto-runner "reason"` only if the change is legitimate.
 5. `orq msg send --para atena --tipo cierre --intento S-NN/aK`, then `orq slice cerrar --aceptado|--rechazado "reason"`.
 
 Done when `orq doctor` is clear.
@@ -51,6 +51,10 @@ The lane is a bet that the work is small. It is lost the moment any of these hap
 - `orq alinear` exits 3, or the worker asks for paths outside `--alcance`.
 - A flag from condition 5 shows up in the code.
 
-Then the Orchestrator stops the worker and tells Atena: `orq msg send --para atena --tipo pregunta "fix outgrew its lane: <the fact>"`. Atena confirms with the Owner in one line. The same slice continues on the **slice** lane from the Planner step: plan, Astra, `orq plan cargar`, `orq plan debatido`, team. The red test and the commits stay.
+Then the Orchestrator stops the worker and tells Atena: `orq msg send --para atena --tipo pregunta "fix outgrew its lane: <the fact>"`. Atena confirms with the Owner in one line, and the Orchestrator upgrades the open slice in place:
+```
+orq slice ruta slice "<why it outgrew the fix lane>"
+```
+The slice continues on the **slice** lane from the Planner step: plan, Astra, `orq plan cargar`, `orq plan debatido`, team. The red test and the commits stay. The upgrade is stored in the slice and the closing record, and `orq metricas` counts it (accepted, first-attempt rate and hours per lane; how many fixes were upgraded). It only goes up: a slice never goes back to fix.
 
 A slice already running stays on the slice lane until it closes.

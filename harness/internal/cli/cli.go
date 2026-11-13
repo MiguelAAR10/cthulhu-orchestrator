@@ -47,14 +47,20 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq mem compactar              Haiku resume lo no crítico; se valida antes de guardar
   orq relevo [--solo-archivo] ROL   escribe .orq/relevo-ROL.md y abre una sesión fresca
   orq slice abrir NN --titulo T --test RUTA --cmd "CMD" [--bundle a,b] [--sano "CMD"] [--alcance rutas] [--sin-scouts "motivo"]
-         [--reporte F --formato tap|junit|gotest-json] [--permite-omitir] [--aislado] [--timeout S]
-                                 descubre, exige base sana y rojo por aserción; crea el worktree
+         (--reporte F --formato tap|junit|gotest-json | --sin-conteo "motivo") [--permite-omitir]
+         [--en-sitio "motivo"] [--ruta fix|slice] [--timeout S]
+                                 descubre, exige base sana y rojo por aserción; crea el worktree.
+                                 Cuenta pruebas por defecto; el examen corre en una copia limpia del commit
+                                 (--en-sitio lo corre en el worktree); --ruta fix = un worker, sin equipo ni plan
+                                 (--aislado se acepta y no hace nada)
+  orq slice ruta slice "motivo"  sube un fix abierto a slice completo (no baja)
   orq slice tomar QUIEN [--relevo]   un solo escritor por slice
   orq slice reabrir "motivo"   un slice verificado vuelve a construirse para una reparación, con su trabajo
   orq slice rehuella "motivo"   BLOQUEADO por huella mal tomada: si el examen es idéntico al del rojo, la toma del commit
   orq slice alcance RUTA[,RUTA] --aprobado "req…"   amplía el alcance con aprobación de Atena
-  orq slice verificar            corre el examen intacto, cuenta pruebas y deja un recibo
-                                 (2 reparaciones o sin progreso → BLOQUEADO)
+  orq slice verificar [--acepto-runner "motivo"]   corre el examen intacto, cuenta pruebas y deja un recibo
+                                 (2 reparaciones o sin progreso → BLOQUEADO). Si cambió package.json, Makefile
+                                 u otro archivo del runner desde el rojo: exit 3 sin correr, salvo --acepto-runner
   orq slice lanzar [--slice NN] --agente claude|codex [--tarea ID|siguiente] [--dificultad baja|media|alta]
                                  [--zona front --rutas web,ui] [--alcance "..."]
                                  abre el worker en su panel de herdr con su contrato. Con --zona se suma
@@ -68,7 +74,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq sesion ver | abrir planificador|astra | cerrar NOMBRE
                                  paneles con nombre: "orq · P", "plan · P" (planificador | astra),
                                  "S-NN · P" (workers). Al cerrar un slice se cierran sus paneles
-  orq plan [--slice NN] cargar ARCHIVO.json | ver | hecha ID | debatido
+  orq plan [--slice NN] cargar ARCHIVO.json | ver | hecha ID | debatido   (cargar no va en un fix)
                                  grafo de tareas del slice: {id, zona, rutas, depende_de, dificultad, que}.
                                  Valida ids, dependencias, ciclos y alcance; una tarea está lista cuando
                                  sus dependencias están hechas y nadie en curso toca sus rutas
@@ -81,7 +87,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
                                  si se interrumpe, repetirlo continúa donde quedó
   orq slice estado               fase, intento, escritor, recibo y sobrantes
                                  Con varios slices abiertos (hasta 4), cada comando lleva --slice NN
-  orq metricas [--desde AAAA-MM-DD] [--json]   aceptados, intentos, sin progreso, cuarentena
+  orq metricas [--desde AAAA-MM-DD] [--json]   aceptados, intentos, sin progreso, cuarentena, por ruta (fix|slice)
   orq version
 `
 

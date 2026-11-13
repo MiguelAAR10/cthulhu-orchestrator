@@ -54,39 +54,45 @@ const MaxIntentos = 3
 var Version = "orq"
 
 type Estado struct {
-	NN          string    `json:"nn"`
-	Intento     int       `json:"intento"`
-	Fase        string    `json:"fase"`
-	Titulo      string    `json:"titulo"`
-	Test        string    `json:"test"`
-	Bundle      []string  `json:"bundle"` // examen + config del runner + fixtures
-	Cmd         string    `json:"cmd"`
-	Sano        string    `json:"sano,omitempty"`       // comando de base sana
-	Base        string    `json:"base"`                 // rama donde se integra
-	SHARojo     string    `json:"sha_rojo"`             // base_sha
-	SHAExamen   string    `json:"sha_examen,omitempty"` // commit donde se aprobó el examen vigente (si se sumó o corrigió)
-	Rama        string    `json:"rama"`
-	Worktree    string    `json:"worktree"`
-	Procedencia string    `json:"procedencia"` // quién creó el worktree: git|herdr|orca
-	Host        string    `json:"host"`
-	Escritor    string    `json:"escritor,omitempty"` // writer lease
-	Abierto     time.Time `json:"abierto"`
-	Huella      string    `json:"huella"`
-	SalidaRojo  string    `json:"salida_rojo"`
-	Fallos      int       `json:"fallos,omitempty"`
-	HeadFallo   string    `json:"head_fallo,omitempty"`
-	FirmaFallo  string    `json:"firma_fallo,omitempty"`
-	Reporte     string    `json:"reporte,omitempty"` // archivo que escribe el runner
-	Formato     string    `json:"formato,omitempty"` // tap|junit|gotest-json
-	Omitir      bool      `json:"permite_omitir,omitempty"`
-	Aislado     bool      `json:"aislado,omitempty"`
-	TimeoutSeg  int       `json:"timeout_seg,omitempty"`
-	Recibo      *Recibo   `json:"recibo,omitempty"`
-	Integrado   string    `json:"integrado,omitempty"` // SHA del merge revalidado
-	IntDir      string    `json:"int_dir,omitempty"`   // worktree de integración en uso
-	Equipo      []Worker  `json:"equipo,omitempty"`    // workers en paralelo dentro del slice
-	Motivo      string    `json:"motivo,omitempty"`    // por qué está bloqueado
-	Alcance     []string  `json:"alcance,omitempty"`   // rutas que la historia justifica tocar
+	NN          string     `json:"nn"`
+	Intento     int        `json:"intento"`
+	Fase        string     `json:"fase"`
+	Titulo      string     `json:"titulo"`
+	Test        string     `json:"test"`
+	Bundle      []string   `json:"bundle"` // examen + config del runner + fixtures
+	Cmd         string     `json:"cmd"`
+	Sano        string     `json:"sano,omitempty"`       // comando de base sana
+	Base        string     `json:"base"`                 // rama donde se integra
+	SHARojo     string     `json:"sha_rojo"`             // base_sha
+	SHAExamen   string     `json:"sha_examen,omitempty"` // commit donde se aprobó el examen vigente (si se sumó o corrigió)
+	Rama        string     `json:"rama"`
+	Worktree    string     `json:"worktree"`
+	Procedencia string     `json:"procedencia"` // quién creó el worktree: git|herdr|orca
+	Host        string     `json:"host"`
+	Escritor    string     `json:"escritor,omitempty"` // writer lease
+	Abierto     time.Time  `json:"abierto"`
+	Huella      string     `json:"huella"`
+	SalidaRojo  string     `json:"salida_rojo"`
+	Fallos      int        `json:"fallos,omitempty"`
+	HeadFallo   string     `json:"head_fallo,omitempty"`
+	FirmaFallo  string     `json:"firma_fallo,omitempty"`
+	Reporte     string     `json:"reporte,omitempty"` // archivo que escribe el runner
+	Formato     string     `json:"formato,omitempty"` // tap|junit|gotest-json
+	Omitir      bool       `json:"permite_omitir,omitempty"`
+	Aislado     bool       `json:"aislado,omitempty"`    // obsoleto: toda verificación es aislada salvo EnSitio
+	SinConteo   string     `json:"sin_conteo,omitempty"` // por qué este slice no cuenta pruebas (sin reporte del runner)
+	EnSitio     string     `json:"en_sitio,omitempty"`   // por qué el examen corre en el worktree y no en una copia aislada
+	Vigilados   []Vigilado `json:"vigilados,omitempty"`  // archivos del runner y su hash en el rojo
+	Ruta        string     `json:"ruta,omitempty"`       // fix|slice ("" = slice)
+	Ascendido   bool       `json:"ascendido,omitempty"`  // un fix que subió a slice
+	RutaMotivo  string     `json:"ruta_motivo,omitempty"`
+	TimeoutSeg  int        `json:"timeout_seg,omitempty"`
+	Recibo      *Recibo    `json:"recibo,omitempty"`
+	Integrado   string     `json:"integrado,omitempty"` // SHA del merge revalidado
+	IntDir      string     `json:"int_dir,omitempty"`   // worktree de integración en uso
+	Equipo      []Worker   `json:"equipo,omitempty"`    // workers en paralelo dentro del slice
+	Motivo      string     `json:"motivo,omitempty"`    // por qué está bloqueado
+	Alcance     []string   `json:"alcance,omitempty"`   // rutas que la historia justifica tocar
 }
 
 func (e *Estado) ID() string      { return fmt.Sprintf("S-%s", e.NN) }
@@ -115,6 +121,7 @@ type Recibo struct {
 	TS         time.Time `json:"ts"`
 	Resultado  string    `json:"resultado"` // paso|fallo
 	Contado    bool      `json:"contado"`   // hubo reporte del runner
+	Aislado    bool      `json:"aislado"`   // corrió en una copia limpia del commit
 	Ejecutados int       `json:"ejecutados"`
 	Omitidos   int       `json:"omitidos"`
 	Fallidos   int       `json:"fallidos"`
@@ -322,7 +329,10 @@ type Opciones struct {
 	// Reporte y Formato: el runner deja un reporte que orq cuenta (sin él, verde puede ser "no corrió nada").
 	Reporte, Formato string
 	PermiteOmitir    bool
-	Aislado          bool     // corre el examen en una copia del commit, sin archivos del worker
+	Aislado          bool     // obsoleto, sin efecto: la copia aislada es el modo por defecto
+	SinConteo        string   // motivo para abrir sin --reporte/--formato (el runner no puede dejar reporte)
+	EnSitio          string   // motivo para correr el examen en el worktree y no en la copia aislada
+	Ruta             string   // fix|slice; vacío = slice
 	Timeout          int      // segundos; 0 = 600
 	Alcance          []string // rutas que la historia justifica; fuera de ellas, alarma de desalineación
 }
@@ -395,17 +405,26 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 	if err != nil || base == "HEAD" {
 		return nil, "", errors.New("el checkout principal no está en una rama")
 	}
-	// Paso B: base sana separada de aceptación roja.
-	if o.Sano != "" {
-		if out, _, ok := RunCmd(r.Root, o.Sano); !ok {
-			return nil, out, errors.New("la base no está sana: el comando --sano falla antes de empezar. Arregla la base primero")
-		}
-	}
 	if (o.Reporte == "") != (o.Formato == "") {
 		return nil, "", errors.New("--reporte y --formato van juntos")
 	}
 	if o.Formato != "" && !slices.Contains(Formatos, o.Formato) {
 		return nil, "", fmt.Errorf("formato %q: usa %s", o.Formato, strings.Join(Formatos, "|"))
+	}
+	o.SinConteo, o.EnSitio = strings.TrimSpace(o.SinConteo), strings.TrimSpace(o.EnSitio)
+	switch {
+	case o.Reporte == "" && o.SinConteo == "":
+		return nil, "", errors.New("contar es lo normal: abre con --reporte ARCHIVO --formato tap|junit|gotest-json para saber cuántas pruebas corrieron (verde sin conteo puede ser «no corrió nada»). Si el runner de verdad no puede dejar un reporte, abre con --sin-conteo \"motivo\"")
+	case o.Reporte != "" && o.SinConteo != "":
+		return nil, "", errors.New("--sin-conteo va sin --reporte: o se cuenta o se explica por qué no")
+	case o.Ruta != "" && o.Ruta != RutaFix && o.Ruta != RutaSlice:
+		return nil, "", fmt.Errorf("ruta %q: usa %s|%s", o.Ruta, RutaFix, RutaSlice)
+	}
+	// Paso B: base sana separada de aceptación roja.
+	if o.Sano != "" {
+		if out, _, ok := RunCmd(r.Root, o.Sano); !ok {
+			return nil, out, errors.New("la base no está sana: el comando --sano falla antes de empezar. Arregla la base primero")
+		}
 	}
 	prov := &Estado{Cmd: cmd, Reporte: o.Reporte, Formato: o.Formato, TimeoutSeg: o.Timeout}
 	out, _, ok, cnt, err := prov.correr(r.Root)
@@ -433,7 +452,11 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 	e := &Estado{NN: nn, Intento: 1, Fase: Implementando, Titulo: titulo, Test: test, Bundle: bundle, Cmd: cmd,
 		Sano: o.Sano, Alcance: o.Alcance, Base: base, SHARojo: sha, Rama: rama, Worktree: wt, Procedencia: "git", Host: host,
 		Abierto: now.UTC().Truncate(time.Second), Huella: huella, SalidaRojo: cola(out, 20),
-		Reporte: o.Reporte, Formato: o.Formato, Omitir: o.PermiteOmitir, Aislado: o.Aislado, TimeoutSeg: o.Timeout}
+		Reporte: o.Reporte, Formato: o.Formato, Omitir: o.PermiteOmitir, TimeoutSeg: o.Timeout,
+		SinConteo: o.SinConteo, EnSitio: o.EnSitio, Vigilados: vigiladosEn(r.Root, sha, cmd, bundle)}
+	if o.Ruta == RutaFix {
+		e.Ruta = RutaFix
+	}
 	if _, err := Git(r.Root, "worktree", "add", e.Worktree, "-b", e.Rama); err == nil {
 		prepararDeps(r.Root, e.Worktree)
 	} else {
@@ -498,7 +521,7 @@ func (e *Estado) baseExamen() string {
 }
 
 // Verificar corre el examen y deja un recibo. Falla dos veces o sin progreso → BLOQUEADO.
-func (r Repo) Verificar(nn string, now time.Time) (*Estado, string, error) {
+func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado, string, error) {
 	e, err := r.Load(nn)
 	if err != nil || e == nil {
 		return nil, "", errors.Join(err, errors.New("no hay slice abierto"))
@@ -519,12 +542,27 @@ func (r Repo) Verificar(nn string, now time.Time) (*Estado, string, error) {
 	if err != nil {
 		return e, "", err
 	}
-	dir := e.Worktree
-	if e.Aislado {
+	var notas []string
+	if cambiados := e.runnerCambiado(head); len(cambiados) > 0 {
+		var acepto string
+		if len(opc) > 0 {
+			acepto = strings.TrimSpace(opc[0].AceptoRunner)
+		}
+		if acepto == "" {
+			return e, "", &ErrRunnerCambio{ID: e.Attempt(), Archivos: cambiados}
+		}
+		notas = append(notas, fmt.Sprintf("runner cambiado y aceptado (%s): %s", acepto, strings.Join(cambiados, ", ")))
+	}
+	dir, aislado := e.Worktree, e.EnSitio == ""
+	if aislado {
 		if dir, err = copiaAislada(e.Worktree, head); err != nil {
 			return e, "", err
 		}
 		defer os.RemoveAll(dir) // carpeta temporal propia de orq
+		enlazarDeps(e.Worktree, dir, false)
+		enlazarDeps(r.Root, dir, false)
+	} else {
+		notas = append(notas, "corrido en sitio, sin copia aislada: "+e.EnSitio)
 	}
 	out, code, ok, cnt, err := e.correr(dir)
 	if err != nil {
@@ -535,20 +573,20 @@ func (r Repo) Verificar(nn string, now time.Time) (*Estado, string, error) {
 		return e, out, r.bloquear(e, "el examen se modificó mientras corría: trampa")
 	}
 	rec := &Recibo{Attempt: e.Attempt(), Head: head, Bundle: e.Huella, Runner: Version, Cmd: e.Cmd,
-		Exit: code, Salida: cola(out, 20), TS: now.UTC().Truncate(time.Second), Resultado: "paso"}
+		Exit: code, Salida: cola(out, 20), TS: now.UTC().Truncate(time.Second), Resultado: "paso", Aislado: aislado}
+	var vnota string
+	ok, vnota = veredicto(ok, cnt, e.Omitir)
 	if cnt != nil {
 		rec.Contado, rec.Ejecutados, rec.Omitidos, rec.Fallidos = true, cnt.Ejecutados, cnt.Omitidos, cnt.Fallidos
-		switch {
-		case ok && cnt.Ejecutados == 0:
-			ok, rec.Nota = false, "el comando salió bien pero corrió 0 pruebas"
-		case ok && cnt.Omitidos > 0 && !e.Omitir:
-			ok, rec.Nota = false, fmt.Sprintf("%d pruebas omitidas y el slice no permite omitir", cnt.Omitidos)
-		case ok && cnt.Fallidos > 0:
-			ok, rec.Nota = false, fmt.Sprintf("salió 0 pero el reporte trae %d fallidas", cnt.Fallidos)
+		if vnota != "" {
+			notas = append(notas, vnota)
 		}
+	} else if e.SinConteo != "" {
+		notas = append(notas, "sin conteo ("+e.SinConteo+"): no se sabe cuántas pruebas corrieron")
 	} else {
-		rec.Nota = "sin contadores: declara --reporte y --formato para saber cuántas pruebas corrieron"
+		notas = append(notas, "sin contadores: este slice se abrió sin --reporte y --formato")
 	}
+	rec.Nota = strings.Join(notas, "; ")
 	salidas := filepath.Join(r.OrqDir, "salidas")
 	os.MkdirAll(salidas, 0o755)
 	rec.Artefacto = filepath.Join(salidas, fmt.Sprintf("%s-a%d-%d.txt", e.ID(), e.Intento, now.UnixNano()))
@@ -573,8 +611,8 @@ func (r Repo) Verificar(nn string, now time.Time) (*Estado, string, error) {
 		return e, out, r.save(e)
 	}
 	motivo := "el examen no pasa"
-	if rec.Nota != "" && rec.Contado {
-		motivo = rec.Nota
+	if vnota != "" {
+		motivo = vnota
 	}
 	firma := firmaDe(out)
 	sinProgreso := e.HeadFallo == head
@@ -721,6 +759,12 @@ func (r Repo) SumarExamen(nn string, nuevos []string, cmd, aprobado string) (*Es
 	}
 	if strings.TrimSpace(cmd) != "" {
 		e.Cmd = cmd
+		// El comando nuevo puede apoyarse en otros archivos del runner: se vigilan desde ahora.
+		for _, v := range vigiladosEn(e.Worktree, strings.TrimSpace(head), e.Cmd, bundle) {
+			if !slices.ContainsFunc(e.Vigilados, func(x Vigilado) bool { return x.Ruta == v.Ruta }) {
+				e.Vigilados = append(e.Vigilados, v)
+			}
+		}
 	}
 	h, err := Huella(e.Worktree, bundle, e.Cmd)
 	if err != nil {
@@ -756,14 +800,17 @@ func (r Repo) Reabrir(nn, motivo string) (*Estado, error) {
 }
 
 type Registro struct {
-	NN      string    `json:"nn"`
-	Intento int       `json:"intento"`
-	Titulo  string    `json:"titulo"`
-	Result  string    `json:"resultado"`
-	Motivo  string    `json:"motivo,omitempty"`
-	SHA     string    `json:"sha,omitempty"`
-	Abierto time.Time `json:"abierto"`
-	Cerrado time.Time `json:"cerrado"`
+	NN         string    `json:"nn"`
+	Intento    int       `json:"intento"`
+	Titulo     string    `json:"titulo"`
+	Result     string    `json:"resultado"`
+	Motivo     string    `json:"motivo,omitempty"`
+	SHA        string    `json:"sha,omitempty"`
+	Abierto    time.Time `json:"abierto"`
+	Cerrado    time.Time `json:"cerrado"`
+	Ruta       string    `json:"ruta,omitempty"`        // fix|slice con la que se cerró
+	Ascendido  bool      `json:"ascendido,omitempty"`   // empezó como fix y subió a slice
+	RutaMotivo string    `json:"ruta_motivo,omitempty"` // por qué subió
 }
 
 // Cuarentena es algo que el harness no se atreve a borrar.
@@ -825,7 +872,8 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time) (*R
 	if err != nil || e == nil {
 		return nil, nil, "", errors.Join(err, errors.New("no hay slice abierto"))
 	}
-	reg := &Registro{NN: e.NN, Intento: e.Intento, Titulo: e.Titulo, Abierto: e.Abierto, Cerrado: now.UTC().Truncate(time.Second), Motivo: motivo}
+	reg := &Registro{NN: e.NN, Intento: e.Intento, Titulo: e.Titulo, Abierto: e.Abierto, Cerrado: now.UTC().Truncate(time.Second), Motivo: motivo,
+		Ruta: e.RutaEfectiva(), Ascendido: e.Ascendido, RutaMotivo: e.RutaMotivo}
 	var out string
 	var cuarentena []string
 	if aceptado {
@@ -972,12 +1020,13 @@ func (r Repo) integrar(e *Estado) (string, error) {
 	if h, _ := Huella(ip, e.Bundle, e.Cmd); h != e.Huella {
 		return "", fmt.Errorf("tras integrar, el paquete del examen difiere del rojo (la base cambió). Nada se borró")
 	}
-	out, _, ok, cnt, _ := e.correr(ip)
-	if ok && cnt != nil && (cnt.Ejecutados == 0 || cnt.Fallidos > 0) {
-		ok = false
-	}
+	out, _, ok, cnt, errCuenta := e.correr(ip)
+	ok, nota := veredicto(ok && errCuenta == nil, cnt, e.Omitir)
 	if !ok {
-		return out, fmt.Errorf("integrado en %s, pero el examen falla ahí. Tu rama %s no se tocó; nada se borró", ip, e.Base)
+		if nota != "" {
+			nota = " (" + nota + ")"
+		}
+		return out, fmt.Errorf("integrado en %s, pero el examen falla ahí%s. Tu rama %s no se tocó; nada se borró", ip, nota, e.Base)
 	}
 	if e.Sano != "" {
 		if o2, _, ok := RunCmd(ip, e.Sano); !ok {
@@ -1079,6 +1128,8 @@ func (r Repo) Sumar(nn, nombre, agente, zona string, rutas []string) (*Estado, *
 		return nil, nil, errors.Join(err, errors.New("no hay slice abierto"))
 	}
 	switch {
+	case e.RutaEfectiva() == RutaFix:
+		return e, nil, e.errRutaFix("equipo por zonas")
 	case e.Fase != Implementando:
 		return e, nil, fmt.Errorf("%s está en %s; el equipo trabaja en %s", e.ID(), e.Fase, Implementando)
 	case !zonaRe.MatchString(zona):
@@ -1217,35 +1268,7 @@ func (r Repo) reusar(e *Estado, w *Worker, agente string, rutas []string) (*Esta
 // prepararDeps da a un worktree nuevo las dependencias ignoradas del repo: node_modules como copia con
 // enlaces duros (las herramientas de node resuelven rutas reales) y .venv como enlace simbólico.
 // Si el enlace no queda ignorado por git, se quita: un worktree sucio no se junta.
-func prepararDeps(root, wt string) {
-	for _, d := range []struct {
-		nombre string
-		duro   bool
-	}{{"node_modules", true}, {".venv", false}} {
-		src, dst := filepath.Join(root, d.nombre), filepath.Join(wt, d.nombre)
-		if fi, err := os.Stat(src); err != nil || !fi.IsDir() {
-			continue
-		}
-		if _, err := os.Lstat(dst); err == nil {
-			continue
-		}
-		if d.duro {
-			if exec.Command("cp", "-al", src, dst).Run() != nil {
-				os.RemoveAll(dst) // copia a medias: mejor un enlace que nada
-				os.Symlink(src, dst)
-			}
-		} else {
-			os.Symlink(src, dst)
-		}
-		if _, err := Git(wt, "check-ignore", "-q", d.nombre); err != nil {
-			if fi, _ := os.Lstat(dst); fi != nil && fi.Mode()&os.ModeSymlink != 0 {
-				os.Remove(dst)
-			} else {
-				os.RemoveAll(dst)
-			}
-		}
-	}
-}
+func prepararDeps(root, wt string) { enlazarDeps(root, wt, true) }
 
 // dentro dice si la ruta p está dentro de base (o es la misma).
 func dentro(base, p string) bool {
