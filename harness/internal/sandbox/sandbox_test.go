@@ -38,7 +38,7 @@ func hostFalso(t *testing.T) (host, string) {
 		Resolv:      "/mnt/wsl/resolv.conf",
 		PathHost:    "/home/u/bin:" + filepath.Join(home, ".nvm", "bin") + ":/usr/bin:/opt/x/bin",
 		Sensibles:   []string{filepath.Join(home, ".config", "herdr"), "/run", "/var/run", "/proc", "/dev"},
-		SensiblesRW: []string{filepath.Join(tmp, "state"), filepath.Join(home, ".config", "orq")},
+		SensiblesRW: []string{filepath.Join(tmp, "x", "state"), filepath.Join(home, ".config", "orq", "limits.json")},
 	}, tmp
 }
 
@@ -158,7 +158,7 @@ func TestConstruirPadresAntesQueHijos(t *testing.T) {
 
 func TestConstruirRechazaRutasPeligrosas(t *testing.T) {
 	h, tmp := hostFalso(t)
-	state := mkdir(t, filepath.Join(tmp, "state"))
+	state := mkdir(t, filepath.Join(tmp, "x", "state"))
 	ok := mkdir(t, filepath.Join(tmp, "ok"))
 	enlace := filepath.Join(tmp, "enlace-home")
 	if err := os.Symlink(h.Home, enlace); err != nil {
@@ -176,6 +176,7 @@ func TestConstruirRechazaRutasPeligrosas(t *testing.T) {
 		{"contiene el socket de herdr", Spec{RO: []string{filepath.Join(h.Home, ".config")}}},
 		{"/run", Spec{RO: []string{"/run"}}},
 		{"estado de orq escribible", Spec{RW: []string{state}}},
+		{"ancestro del estado escribible", Spec{RW: []string{filepath.Dir(state)}}},
 		{"inexistente", Spec{RO: []string{filepath.Join(tmp, "nada")}}},
 		{"RO y RW a la vez", Spec{RO: []string{ok}, RW: []string{ok}}},
 		{"cwd relativo", Spec{Cwd: "w"}},
@@ -189,6 +190,11 @@ func TestConstruirRechazaRutasPeligrosas(t *testing.T) {
 		if _, _, err := construir(c.s, hh, []string{"true"}); err == nil {
 			t.Errorf("%s: debía fallar", c.nombre)
 		}
+	}
+	// Un subdirectorio del estado (scratch) sí puede ser RW: no alcanza HALT ni state.json.
+	scratch := mkdir(t, filepath.Join(state, "scratch", "w"))
+	if _, _, err := construir(Spec{RW: []string{scratch}}, h, []string{"true"}); err != nil {
+		t.Fatalf("scratch dentro del estado debía aceptarse: %v", err)
 	}
 	// El estado sí puede verse de solo lectura.
 	if _, _, err := construir(Spec{RO: []string{state}}, h, []string{"true"}); err != nil {

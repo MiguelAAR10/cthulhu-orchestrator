@@ -100,7 +100,7 @@ type host struct {
 	PathHost    string
 	NuevaSesion bool     // TIOCSTI heredado activo en el kernel: hay que cortar la terminal
 	Sensibles   []string // nunca visibles: sockets y /run
-	SensiblesRW []string // nunca escribibles: estado y límites de orq
+	SensiblesRW []string // nunca dentro de un RW: el directorio de estado y el archivo de límites
 }
 
 // hostFn es hostReal salvo en las pruebas que simulan una caja rota.
@@ -156,7 +156,7 @@ func hostReal() (host, error) {
 	if dst, err := filepath.EvalSymlinks("/var/run/docker.sock"); err == nil {
 		h.Sensibles = append(h.Sensibles, dst)
 	}
-	h.SensiblesRW = []string{state.Dir(), filepath.Dir(limits.DefaultPath())}
+	h.SensiblesRW = []string{filepath.Clean(state.Dir()), filepath.Clean(limits.DefaultPath())}
 	return h, nil
 }
 
@@ -186,14 +186,16 @@ func validar(p string, rw bool, h host) (montaje, error) {
 	if real == "/" || bajo(h.Home, real) {
 		return montaje{}, fmt.Errorf("sandbox: %s (%s) expone $HOME entero o la raíz", p, real)
 	}
-	sens := h.Sensibles
-	if rw {
-		sens = append(slices.Clone(sens), h.SensiblesRW...)
-	}
-	for _, s := range sens {
-		for _, q := range []string{p, real} {
+	for _, q := range []string{p, real} {
+		for _, s := range h.Sensibles {
 			if bajo(q, s) || bajo(s, q) {
 				return montaje{}, fmt.Errorf("sandbox: %s toca %s, que no puede entrar en la caja", p, s)
+			}
+		}
+		// Escribible: no puede contener el estado ni los límites (un subdirectorio, como scratch, sí).
+		for _, s := range h.SensiblesRW {
+			if rw && bajo(s, q) {
+				return montaje{}, fmt.Errorf("sandbox: %s contiene %s, que el worker no puede escribir", p, s)
 			}
 		}
 	}
