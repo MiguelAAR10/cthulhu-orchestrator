@@ -10,5 +10,14 @@
     "critical_free_gb": 30
   },
   "state_max_age_hours": 24,
-  "protected": ["tests/aceptacion/", "SLICES.md"]
+  "protected": ["tests/aceptacion/", "SLICES.md"],
+  "sandbox": {
+    "ro": [
+      "~/.nvm",
+      "~/.local/bin",
+      "~/.local/lib",
+      "~/.local/share/claude",
+      "~/.local/share/codex-panel"
+    ]
+  }
 }

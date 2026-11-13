@@ -46,6 +46,9 @@ Sources consolidated from three scouts on 2026-11-13 (A2A spec v1.0, Claude Code
 | P6 | Per-role skill allowlist installed read-only in the sandbox (worker: TDD + debugging; verifier: verification; Atena: interview), without skills that own worktrees, merging or PRs | Less context, no second scheduler fighting orq | S–M |
 | P7 | Decisions file per slice read by every worker and verifier | Less context loss between sessions | S |
 | P8 | Held-out exam variants the worker never sees | Evidence of agents gaming visible tests | M |
+| P9 | Quality profile per language in three levels (rapido, normal, estricto): no new suppressions, secrets on the diff, typecheck, new-dependency check, fail-first proof for added tests, mutation testing on changed files as a report; results in the receipt, a missing tool is never a pass | Evidence that tests detect bugs when nobody reads the code | M–L |
+| P10 | `orq setup`: interactive terminal page in the AI EDGE RUNNERS look to choose driver, models per role, quality level, worker cap and RAM budget | Configuration without editing JSON | M |
+P9 and P10 approved by the Owner on 2026-11-13 (activities Q1 and U1 of the builder). Practitioner sources: mattpocock/skills, unclebob/swarm-forge and clj-mutate, Lauren Tan's pstack, Trail of Bits on mutation testing.
 Rejected: A2A over HTTP, agent cards, shared or hard-linked clones, reflinks (ext4 has none), partial clones, self-editing skills, agent swarms.
 
 ## Technical plan
@@ -103,10 +106,11 @@ What moves:
 Order notes: Q1 follows B6 because it runs inside the sandboxed verification. U1 follows Q1, not C3, because it edits the quality level and the box credential key, which exist only after Q1 and B6. Later rows for Q1, listed and not built: lint, SAST with base comparison, dependency audits (need network, so outside the box), held-out tests (P8). B5 waits for `git merge harness-v2` (sandbox package), which lands before it by order.
 
 ## Checkpoint
-- Phase: A1 and A2 integrated and verified. A3: spike done (bwrap allowlist root works; agents start inside the box only through a PATH shim; read-only dependency binds work; no overlay in bwrap 0.9.0). B1+B2 (sandbox package and containment test) in progress, attempt 1 of 2.
-- Integration branch: `harness-v2` (local only), tip b950633. Integration owner: orchestrator pane `w3X:p1`.
-- Versions: working `harness-v2`; installed `~/bin/orq` 1.0.0 untouched, in use by live workers in another project; rollback = `main` 1f2d0b0.
-- Open panes: worker-sandbox `w3X:pA` (worktree `~/worktrees/cthulhu-sandbox`, branch `v2/sandbox`, based on dd90cc0: rebase or merge onto the tip at integration). Closed: planner, Astra, worker-verif, worker-gate, worker-spike, three research scouts.
+- Phase: D. A1, A2 and B1+B2 integrated and verified on the integrated revision (tip 11426f3: go test green; `orq sandbox selftest` 11/11; `validacion/aislamiento.sh --todo` 13 pass, 1 pending = the forged-state close, owned by B5).
+- Proposals P1–P8 approved by the Owner on 2026-11-13 and assigned to the builder.
+- Builder: one Fable session, pane `w3X:pE`, worktree `~/worktrees/cthulhu-build`, branch `v2/build`. Order: technical plan, C1 config, C2 terminal driver (herdr + Orca), C3 machine awareness, B5 isolation, B6 launch in the box, C6 channel, C4 metrics, C5 lean defaults, A4 CI and docs. It records progress in the orchestrator's scratch progress file and must `git merge harness-v2` before B5.
+- Integration branch: `harness-v2` (local only). Integration owner: orchestrator pane `w3X:p1`. Installed `~/bin/orq` 1.0.0 untouched; rollback = `main` 1f2d0b0.
+- Review owed: independent review of B5/B6 (high risk) before acceptance.
+- Pending Owner decision: dedicated credential for launching a real agent inside the sandbox; until then real launch is refused and tests use a simulated agent.
 - Spend: not measured.
-- Pending Owner decision: dedicated credential for sandboxed agents.
-- Next action: integrate B1+B2; then launch B5 (clones, bundles, sandboxed exam, closing re-check, legacy conversion) against the sandbox API.
+- Next action: review builder commits as they land; merge `v2/build` at activity boundaries.

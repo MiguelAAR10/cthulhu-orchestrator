@@ -58,3 +58,26 @@ func TestCampoDesconocidoFalla(t *testing.T) {
 		t.Fatal("debía rechazar un campo mal escrito")
 	}
 }
+
+func TestSandboxOpcional(t *testing.T) {
+	l, err := Load(write(t, valid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l.Sandbox.RO) != 0 {
+		t.Fatalf("sin bloque sandbox no debía haber rutas: %v", l.Sandbox.RO)
+	}
+	body := strings.Replace(valid, `"max_workers": 1,`, `"max_workers": 1, "sandbox": {"ro": ["~/.nvm", "/opt/go"]},`, 1)
+	l, err = Load(write(t, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ := os.UserHomeDir()
+	if len(l.Sandbox.RO) != 2 || l.Sandbox.RO[0] != filepath.Join(home, ".nvm") || l.Sandbox.RO[1] != "/opt/go" {
+		t.Fatalf("sandbox.ro mal cargado: %v", l.Sandbox.RO)
+	}
+	mal := strings.Replace(valid, `"max_workers": 1,`, `"max_workers": 1, "sandbox": {"ro": [], "rw": ["/"]},`, 1)
+	if _, err := Load(write(t, mal)); err == nil {
+		t.Fatal("debía rechazar un campo desconocido dentro de sandbox")
+	}
+}

@@ -93,6 +93,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
                                  si se interrumpe, repetirlo continúa donde quedó
   orq slice estado               fase, intento, escritor, recibo y sobrantes
                                  Con varios slices abiertos (hasta 4), cada comando lleva --slice NN
+  orq sandbox selftest | exec [--rw DIR]... [--ro DIR]... [--red] [--cwd DIR] -- CMD ARGS...   caja bubblewrap
   orq metricas [--desde AAAA-MM-DD] [--json]   aceptados, intentos, sin progreso, cuarentena, por ruta (fix|slice)
   orq version
 `
@@ -153,6 +154,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runAlinear(args[1:], stdout, stderr)
 	case "metricas":
 		return runMetricas(args[1:], stdout, stderr)
+	case "sandbox":
+		return runSandbox(args[1:], stdin, stdout, stderr)
 	case "skill", "--skill":
 		return runSkill(args[1:], stdout, stderr)
 	case "version":

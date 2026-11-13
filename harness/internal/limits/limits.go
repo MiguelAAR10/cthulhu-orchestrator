@@ -17,6 +17,12 @@ type Scratch struct {
 	CriticalFreeGB *float64 `json:"critical_free_gb"`
 }
 
+// Sandbox: lo que se suma al conjunto base de solo lectura de la caja (bubblewrap).
+// RO son rutas absolutas o con ~/ (toolchains como ~/.nvm o ~/.local/bin); las ausentes se ignoran.
+type Sandbox struct {
+	RO []string `json:"ro"`
+}
+
 type Limits struct {
 	MinFreeGB         map[string]float64 `json:"min_free_gb"`
 	MaxWorkers        *int               `json:"max_workers"`
@@ -28,6 +34,8 @@ type Limits struct {
 	PushRamas []string `json:"push_ramas,omitempty"`
 	// MaxSlices: slices abiertos a la vez por repo; 0 = el tope por defecto del paquete slice.
 	MaxSlices int `json:"max_slices,omitempty"`
+	// Sandbox es opcional: sin él la caja solo ve el conjunto base.
+	Sandbox Sandbox `json:"sandbox,omitempty"`
 }
 
 // DefaultPath respeta ORQ_LIMITS para pruebas y usa ~/.config/orq/limits.json por defecto.
@@ -57,6 +65,9 @@ func Load(path string) (Limits, error) {
 	home, _ := os.UserHomeDir()
 	for i, p := range l.Scratch.Paths {
 		l.Scratch.Paths[i] = expandHome(p, home)
+	}
+	for i, p := range l.Sandbox.RO {
+		l.Sandbox.RO[i] = expandHome(p, home)
 	}
 	if len(l.WorkerProcessName) == 0 {
 		l.WorkerProcessName = []string{"codex", "claude"}
