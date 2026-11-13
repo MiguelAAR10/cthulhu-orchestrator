@@ -395,8 +395,12 @@ func objetivos(c simple) []palabra {
 	a, sl := textos(args), sueltos(args)
 	recursivo := hay(a, "--recursive") || corta(a, 'r') || corta(a, 'R')
 	switch n := nombre(c.w[0]); n {
-	case "rm", "rmdir", "shred", "unlink", "mv":
-		ts = append(ts, marcar(sl, recursivo || n == "mv" || n == "rmdir")...)
+	case "rm", "rmdir", "shred", "unlink":
+		ts = append(ts, marcar(sl, recursivo || n == "rmdir")...)
+	case "mv": // lo que se mueve se lleva su árbol; el destino recibe
+		if len(sl) > 0 {
+			ts = append(append(ts, marcar(sl[:len(sl)-1], true)...), sl[len(sl)-1])
+		}
 	case "tee", "truncate", "touch", "ln", "mkdir":
 		ts = append(ts, sl...)
 	case "chmod", "chown", "chgrp":
@@ -442,11 +446,13 @@ func codigoEnLinea(c simple) string {
 		switch {
 		case strings.HasPrefix(s, "--eval=") || strings.HasPrefix(s, "--print="):
 			code = append(code, s)
-		case s == "--eval" || s == "--print" || len(s) > 1 && s[0] == '-' && s[1] != '-' && strings.ContainsAny(s, "cepr"):
-			code = append(code, s)
+		case s == "--eval" || s == "--print" || len(s) >= 2 && len(s) <= 4 && s[0] == '-' && s[1] != '-' && strings.IndexByte("cepr", s[len(s)-1]) >= 0:
+			code = append(code, s) // -c, -e, -p, -r, o un grupo corto que termina en ellos (perl -pie)
 			if i+1 < len(args) {
 				code = append(code, args[i+1].s)
 			}
+		case strings.HasPrefix(s, "-e") || strings.HasPrefix(s, "-c"):
+			code = append(code, s) // código pegado: -e'...'
 		}
 	}
 	return strings.Join(code, "\n")
