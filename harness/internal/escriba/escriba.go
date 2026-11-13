@@ -1,34 +1,44 @@
-// Package escriba llama a Haiku para compactar la memoria y escribir relevos.
+// Package escriba llama a un modelo barato para compactar la memoria y escribir relevos.
 // Toda salida se valida en código antes de usarse.
 package escriba
 
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"orq/internal/memoria"
 )
 
-// Modelo se puede cambiar con ORQ_ESCRIBA_MODELO.
-func Modelo() string {
-	if m := os.Getenv("ORQ_ESCRIBA_MODELO"); m != "" {
-		return m
-	}
-	return "haiku"
+// Escriba resume con el modelo que diga la configuración (rol «escriba»).
+type Escriba struct {
+	Modelo string
+	// Ask hace una pregunta sin sesión y devuelve el texto; se reemplaza en pruebas.
+	Ask func(modelo, prompt string) (string, error)
 }
 
-// Ask se reemplaza en pruebas.
-var Ask = func(prompt string) (string, error) {
-	cmd := exec.Command("claude", "-p", "--model", Modelo(), "--output-format", "text", "--no-session-persistence")
+// LimitePregunta corta una llamada colgada al modelo.
+const LimitePregunta = 3 * time.Minute
+
+// Nuevo devuelve el escriba que llama a `claude -p` con tiempo máximo.
+func Nuevo(modelo string) Escriba { return Escriba{Modelo: modelo, Ask: preguntar} }
+
+func preguntar(modelo, prompt string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), LimitePregunta)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "claude", "-p", "--model", modelo, "--output-format", "text", "--no-session-persistence")
 	cmd.Stdin = strings.NewReader(prompt)
 	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("escriba (%s): sin respuesta en %s", modelo, LimitePregunta)
+	}
 	if err != nil {
-		return "", fmt.Errorf("escriba (%s): %v", Modelo(), err)
+		return "", fmt.Errorf("escriba (%s): %v", modelo, err)
 	}
 	return string(out), nil
 }
@@ -40,7 +50,7 @@ Campos por línea: imp (alta|media|baja; nunca critica), cat (requisito|decision
 Hechos:
 %s`
 
-func Compactar(rest []memoria.Item, max int) ([]memoria.Item, error) {
+func (e Escriba) Compactar(rest []memoria.Item, max int) ([]memoria.Item, error) {
 	var in bytes.Buffer
 	for _, it := range rest {
 		line, _ := json.Marshal(struct {
@@ -51,7 +61,7 @@ func Compactar(rest []memoria.Item, max int) ([]memoria.Item, error) {
 		}{it.Imp, it.Cat, it.Texto, it.Slice})
 		in.Write(append(line, '\n'))
 	}
-	out, err := Ask(fmt.Sprintf(promptCompactar, max, in.String()))
+	out, err := e.Ask(e.Modelo, fmt.Sprintf(promptCompactar, max, in.String()))
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +98,8 @@ Estado del slice:
 %s`
 
 // Relevo devuelve solo viñetas, recortadas al máximo pedido.
-func Relevo(rol, memo, slice, msgs string, max int) (string, error) {
-	out, err := Ask(fmt.Sprintf(promptRelevo, rol, max, memo, slice, msgs))
+func (e Escriba) Relevo(rol, memo, slice, msgs string, max int) (string, error) {
+	out, err := e.Ask(e.Modelo, fmt.Sprintf(promptRelevo, rol, max, memo, slice, msgs))
 	if err != nil {
 		return "", err
 	}
@@ -118,8 +128,8 @@ Slices cerrados:
 %s`
 
 // Doc escribe la ficha del proyecto; rechaza salidas sin las secciones o demasiado largas.
-func Doc(perfil, archivos, memo, slices string, max int) (string, error) {
-	out, err := Ask(fmt.Sprintf(promptDoc, max, perfil, archivos, memo, slices))
+func (e Escriba) Doc(perfil, archivos, memo, slices string, max int) (string, error) {
+	out, err := e.Ask(e.Modelo, fmt.Sprintf(promptDoc, max, perfil, archivos, memo, slices))
 	if err != nil {
 		return "", err
 	}

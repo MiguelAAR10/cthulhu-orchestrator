@@ -237,7 +237,7 @@ func Render(items []Item, filtroCat string) string {
 	return b.String()
 }
 
-// Summarizer recibe lo no crítico y devuelve una versión más corta. Lo implementa Haiku.
+// Summarizer recibe lo no crítico y devuelve una versión más corta. Lo implementa el escriba.
 type Summarizer func(rest []Item, max int) ([]Item, error)
 
 // Compact deja intacto lo crítico y pide al resumidor que el resto quepa en el tope.

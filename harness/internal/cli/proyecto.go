@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"orq/internal/canal"
+	"orq/internal/config"
 	"orq/internal/escriba"
 	"orq/internal/herdr"
 	"orq/internal/limits"
@@ -26,6 +27,7 @@ import (
 
 type proyecto struct {
 	root, dir string
+	cfg       config.Config
 }
 
 func abrirProyecto() (proyecto, error) {
@@ -34,7 +36,15 @@ func abrirProyecto() (proyecto, error) {
 		return proyecto{}, errors.New("orq: no estás dentro de un repositorio git")
 	}
 	dir, err := orqdir.Dir()
-	return proyecto{root, dir}, err
+	if err != nil {
+		return proyecto{}, err
+	}
+	// Una configuración mal escrita detiene el comando: no se adivina qué quiso decir.
+	cfg, err := config.Cargar(root)
+	if err != nil {
+		return proyecto{}, fmt.Errorf("orq: %w. Revísala con `orq config ver`", err)
+	}
+	return proyecto{root: root, dir: dir, cfg: cfg}, nil
 }
 
 func (p proyecto) memPath() string        { return filepath.Join(p.dir, "memoria.jsonl") }
@@ -146,7 +156,7 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		res, err := memoria.Compact(items, memoria.Tope*2/3, escriba.Compactar, time.Now())
+		res, err := memoria.Compact(items, memoria.Tope*2/3, p.escriba().Compactar, time.Now())
 		if err != nil {
 			fmt.Fprintln(stderr, "orq mem:", err)
 			return 1
@@ -331,30 +341,14 @@ func flagsArranque(fs *flag.FlagSet) *arranque {
 	return a
 }
 
-// Cada rol tiene su agente por defecto. El Orquestador solo reparte: no necesita el modelo más caro.
-// El Planificador piensa el plan: Opus. Astra mejora el plan desde otro proveedor: gpt-6-astra.
-var porRol = map[string]arranque{
-	"orquestador":  {"claude", "sonnet", "medium"},
-	"planificador": {"claude", "opus", "high"},
-	"astra":        {"codex", "gpt-6-astra", "high"},
-	"atena":        {"claude", "opus", "medium"},
+// completar toma de la configuración lo que las banderas no fijaron (`orq config ver`).
+func (a *arranque) completar(c config.Config, rol string) {
+	x := c.ParaRol(rol, config.Agente{Kind: a.kind, Modelo: a.modelo, Esfuerzo: a.esfuerzo})
+	a.kind, a.modelo, a.esfuerzo = x.Kind, x.Modelo, x.Esfuerzo
 }
 
-func (a *arranque) completar(rol string) {
-	d := porRol[rol]
-	if a.kind == "" {
-		a.kind = d.kind
-	}
-	if a.kind != d.kind && a.modelo == "" { // otro proveedor: su modelo por defecto
-		a.modelo = map[string]string{"claude": "opus", "codex": "gpt-6.1-sol"}[a.kind]
-	}
-	if a.modelo == "" {
-		a.modelo = d.modelo
-	}
-	if a.esfuerzo == "" {
-		a.esfuerzo = d.esfuerzo
-	}
-}
+// escriba es el modelo barato configurado para resumir memoria, relevos y la ficha.
+func (p proyecto) escriba() escriba.Escriba { return escriba.Nuevo(p.cfg.Rol("escriba").Modelo) }
 
 // agentArgs traduce modelo y esfuerzo a cada CLI.
 func agentArgs(kind, modelo, esfuerzo, name string) []string {
@@ -390,7 +384,7 @@ func lanzar(p proyecto, ses map[string]canal.Sesion, rol string, a *arranque) (c
 	if gen > 1 {
 		name = fmt.Sprintf("%s-%d", name, gen)
 	}
-	a.completar(rol)
+	a.completar(p.cfg, rol)
 	env := map[string]string{"ORQ_ROL": rol}
 	// Distribución fija: orq en su pestaña, plan en la suya; Astra al lado del Planificador.
 	var tab, pane string
@@ -509,7 +503,7 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	est, _ := json.Marshal(rv)
-	ahora, err := escriba.Relevo(rol, memoria.Render(p.memVigente(), ""), string(est), msgs.String(), lineasRelevo)
+	ahora, err := p.escriba().Relevo(rol, memoria.Render(p.memVigente(), ""), string(est), msgs.String(), lineasRelevo)
 	if err != nil {
 		ahora = ""
 		fmt.Fprintf(stderr, "aviso: sin resumen del escriba (%v); el relevo lleva solo datos comprobados\n", err)
@@ -827,13 +821,13 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	case "lanzar":
 		fs := flag.NewFlagSet("slice lanzar", flag.ContinueOnError)
 		fs.SetOutput(stderr)
-		agente := fs.String("agente", "claude", "claude (Sonnet) | codex")
+		agente := fs.String("agente", "claude", "claude | codex")
 		zona := fs.String("zona", "", "front, back, test…: suma el worker al equipo del slice")
 		rutas := fs.String("rutas", "", "carpetas de esa zona, separadas por coma")
 		alcance := fs.String("alcance", "solo lo necesario para que el examen pase", "qué sí y qué no")
 		suite := fs.String("suite", "", "comando de la suite rápida")
 		pres := fs.String("presupuesto", "45 min", "tiempo o tokens")
-		dif := fs.String("dificultad", "", "baja|media|alta: elige modelo y esfuerzo (haiku/sonnet/opus; luna/sol)")
+		dif := fs.String("dificultad", "", "baja|media|alta: elige modelo y esfuerzo según `orq config ver`")
 		tarea := fs.String("tarea", "", "ID del plan o 'siguiente': zona, rutas y dificultad salen de la tarea")
 		if fs.Parse(args[1:]) != nil {
 			return 1
@@ -900,13 +894,13 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 				herdr.Prompt(ses["planificador"].Agente, fmt.Sprintf("[orq] S-%s merged. Run `orq plan revisar --slice %s` and keep the plan minimal and current.", e.NN, e.NN))
 			}
 		}
-		// Documentación barata en paralelo: Haiku actualiza la ficha sin frenar al equipo.
+		// Documentación barata en paralelo: el escriba actualiza la ficha sin frenar al equipo.
 		if self, err := os.Executable(); err == nil && os.Getenv("ORQ_SIN_DOC") == "" {
 			c := exec.Command(self, "doc")
 			c.Dir = p.root
 			if c.Start() == nil {
 				go c.Wait()
-				fmt.Fprintln(stdout, "la ficha del proyecto se actualiza en segundo plano (Haiku): .orq/PROYECTO.md")
+				fmt.Fprintln(stdout, "la ficha del proyecto se actualiza en segundo plano (escriba): .orq/PROYECTO.md")
 			}
 		}
 		return 0

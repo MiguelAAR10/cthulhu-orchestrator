@@ -17,7 +17,7 @@ BASE=$(mktemp -d "${TMPDIR:-/tmp}/orq-validar.XXXXXX")
 cleanup() { [[ "$BASE" == */orq-validar.* ]] && rm -rf -- "$BASE"; }
 trap cleanup EXIT
 
-export ORQ_STATE="$BASE/state" ORQ_LIMITS="$BASE/limits.json"
+export ORQ_STATE="$BASE/state" ORQ_LIMITS="$BASE/limits.json" ORQ_CONFIG="$BASE/config.json"
 mkdir -p "$ORQ_STATE" "$BASE/scratch" "$BASE/bin"
 R="$BASE/repo"; W="$BASE/wt"
 PASS=0; FAIL=0

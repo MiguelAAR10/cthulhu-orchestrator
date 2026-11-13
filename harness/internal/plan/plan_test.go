@@ -90,14 +90,6 @@ func TestGuardarLeerYModelo(t *testing.T) {
 	if err != nil || q.Tareas[0].Estado != "pendiente" || q.Tareas[0].Dificultad != "media" || filepath.Base(path) != "01.json" {
 		t.Fatalf("%+v %v", q, err)
 	}
-	for _, c := range []struct{ ag, dif, mod, esf string }{
-		{"claude", "baja", "haiku", "medium"}, {"claude", "", "sonnet", "medium"}, {"claude", "alta", "opus", "high"},
-		{"codex", "baja", "gpt-6-luna", "medium"}, {"codex", "alta", "gpt-6.1-sol", "high"},
-	} {
-		if m, e := Modelo(c.ag, c.dif); m != c.mod || e != c.esf {
-			t.Errorf("%s/%s: %s %s", c.ag, c.dif, m, e)
-		}
-	}
 }
 
 func TestRevisar(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"orq/internal/config"
 	"orq/internal/perfil"
 )
 
@@ -50,8 +51,17 @@ func runSkill(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	g, _ := guias.ReadFile("guias/" + rol + ".md")
-	fmt.Fprint(stdout, string(g))
-	if p, err := abrirProyecto(); err == nil {
+	p, err := abrirProyecto()
+	cfg := p.cfg
+	if err != nil { // fuera de un repo, o con el proyecto ilegible: la guía sale con la capa del usuario
+		if cfg, err = config.Cargar(""); err != nil {
+			fmt.Fprintln(stderr, "orq:", err)
+			return 1
+		}
+	}
+	// Los modelos de la guía salen de la configuración, no del texto.
+	fmt.Fprint(stdout, cfg.Expandir(string(g)))
+	if p.root != "" {
 		ls := perfil.ParaRol(perfil.Lista(p.perfil()), rol)
 		if len(ls) > 0 {
 			fmt.Fprintf(stdout, "\n## Skills de tu rol en este proyecto\n")

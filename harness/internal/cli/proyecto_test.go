@@ -219,3 +219,33 @@ func TestMetricasPorRutaEnLaLineaDeComandos(t *testing.T) {
 		t.Fatalf("json: %s", out)
 	}
 }
+
+func TestConfigVerMuestraValorYOrigen(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ORQ_ROOT", root)
+	out, errs, code := run(t, "config", "ver")
+	if code != 0 || !strings.Contains(out, "roles.astra.agente") || !strings.Contains(out, "(defecto)") {
+		t.Fatalf("code %d: %s %s", code, out, errs)
+	}
+	os.MkdirAll(filepath.Join(root, ".orq"), 0o755)
+	ruta := filepath.Join(root, ".orq", "config.json")
+	os.WriteFile(ruta, []byte(`{"terminal":"orca","roles":{"planificador":{"modelo":"m-plan"}}}`), 0o644)
+	out, errs, code = run(t, "config", "ver")
+	if code != 0 || !strings.Contains(out, "m-plan") || !strings.Contains(out, "("+ruta+")") || !strings.Contains(out, "orca") {
+		t.Fatalf("code %d: %s %s", code, out, errs)
+	}
+	// La guía del Orquestador imprime el modelo configurado, no uno escrito en el texto.
+	out, _, code = run(t, "skill", "orquestador")
+	if code != 0 || !strings.Contains(out, "(m-plan)") || strings.Contains(out, "{{") {
+		t.Fatalf("guía sin el modelo de la configuración (code %d): %s", code, out)
+	}
+	// Un campo desconocido es un error, y lo dice.
+	os.WriteFile(ruta, []byte(`{"terminal":"orca","modelos":{}}`), 0o644)
+	_, errs, code = run(t, "config", "ver")
+	if code == 0 || !strings.Contains(errs, "modelos") {
+		t.Fatalf("aceptó un campo desconocido (code %d): %s", code, errs)
+	}
+	if _, errs, code = run(t, "mem", "ver"); code == 0 || !strings.Contains(errs, "orq config ver") {
+		t.Fatalf("un comando siguió con la configuración rota (code %d): %s", code, errs)
+	}
+}

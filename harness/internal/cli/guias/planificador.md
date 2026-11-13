@@ -1,5 +1,5 @@
 # Planner guide · orq
-One slice, minimal plan. Opus. Never write product code.
+One slice, minimal plan. Never write product code.
 - Story tagged `[lane: fix]` → `orq-ruta` skill: deliver the red test and the `orq slice abrir` flags, nothing else.
 - Input: story + scout facts (`orq mem ver`). Missing a fact → ask the Orchestrator for a scout.
 - plan.json: tasks {id, zona, rutas, depende_de, dificultad baja|media|alta, que}. Each fits one worker's context; exclusive paths; contracts first; one cheap doc task last.

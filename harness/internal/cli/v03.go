@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"orq/internal/canal"
-	"orq/internal/escriba"
 	"orq/internal/herdr"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
@@ -341,7 +340,7 @@ func (p proyecto) escribirFicha() error {
 	}
 	slices, _ := os.ReadFile(filepath.Join(p.dir, "slices.jsonl"))
 	pf, _ := json.Marshal(p.perfil())
-	md, err := escriba.Doc(string(pf), strings.Join(fl, ", "), memoria.Render(keep, ""), string(slices), lineasFicha)
+	md, err := p.escriba().Doc(string(pf), strings.Join(fl, ", "), memoria.Render(keep, ""), string(slices), lineasFicha)
 	if err != nil {
 		return err
 	}

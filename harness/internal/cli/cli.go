@@ -29,6 +29,8 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq halt --clear    quita HALT (solo tras liberar espacio)
   orq halt --set MSG  pone HALT a mano
 
+  orq config ver      configuración efectiva (terminal, modelo por rol y por dificultad, recursos) y de
+                      dónde salió cada valor: defecto, ~/.config/orq/config.json o <raíz>/.orq/config.json
   orq init [--modo=mejora|nuevo] detecta modo y stack, instala hooks y lista skills
   orq skills [instalar [NOMBRE...]|fijar|verificar]   skills del proyecto por rol, solo en su .claude/skills;
                                  fijar guarda su huella; verificar avisa FALTA/DEP/CAMBIO/NUNCA
@@ -44,7 +46,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq msg leer [-n 10]
   orq mem add --imp I --cat C [--fuente F] [--slice S-NN] "texto ≤200"
   orq mem ver [--cat C]          la memoria etiquetada, lo crítico primero
-  orq mem compactar              Haiku resume lo no crítico; se valida antes de guardar
+  orq mem compactar              el escriba resume lo no crítico; se valida antes de guardar
   orq relevo [--solo-archivo] ROL   escribe .orq/relevo-ROL.md y abre una sesión fresca
   orq slice abrir NN --titulo T --test RUTA --cmd "CMD" [--bundle a,b] [--sano "CMD"] [--alcance rutas] [--sin-scouts "motivo"]
          (--reporte F --formato tap|junit|gotest-json | --sin-conteo "motivo") [--permite-omitir]
@@ -113,6 +115,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runStatus(stdout, stderr)
 	case "halt":
 		return runHalt(args[1:], stdout, stderr)
+	case "config":
+		return runConfig(args[1:], stdout, stderr)
 	case "init":
 		return runInit(args[1:], stdout, stderr)
 	case "skills":

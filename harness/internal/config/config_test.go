@@ -1,0 +1,170 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func escribir(t *testing.T, ruta, contenido string) string {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(ruta), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ruta, []byte(contenido), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return ruta
+}
+
+// Las tablas que vivían en cli/proyecto.go (porRol) y plan/plan.go (Modelo) antes de C1.
+func TestDefaultsIgualesAHoy(t *testing.T) {
+	t.Setenv("ORQ_ESCRIBA_MODELO", "")
+	c, err := CargarDe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Terminal != "herdr" {
+		t.Fatalf("terminal = %q", c.Terminal)
+	}
+	roles := map[string]Agente{
+		"orquestador":  {"claude", "sonnet", "medium"},
+		"planificador": {"claude", "opus", "high"},
+		"astra":        {"codex", "gpt-6-astra", "high"},
+		"atena":        {"claude", "opus", "medium"},
+	}
+	for rol, want := range roles {
+		if got := c.ParaRol(rol, Agente{}); got != want {
+			t.Errorf("%s = %+v, antes %+v", rol, got, want)
+		}
+	}
+	workers := []struct{ kind, dif, modelo, esfuerzo string }{
+		{"claude", "", "sonnet", "medium"}, {"claude", "baja", "haiku", "medium"}, {"claude", "media", "sonnet", "medium"}, {"claude", "alta", "opus", "high"},
+		{"codex", "", "gpt-6.1-sol", "medium"}, {"codex", "baja", "gpt-6-luna", "medium"}, {"codex", "media", "gpt-6.1-sol", "medium"}, {"codex", "alta", "gpt-6.1-sol", "high"},
+	}
+	for _, w := range workers {
+		if m, e := c.Worker(w.kind, w.dif); m != w.modelo || e != w.esfuerzo {
+			t.Errorf("worker %s/%s = %s %s, antes %s %s", w.kind, w.dif, m, e, w.modelo, w.esfuerzo)
+		}
+	}
+	// Otro proveedor que el del rol, sin modelo: el de ese proveedor (antes: claude→opus, codex→gpt-6.1-sol).
+	if a := c.ParaRol("astra", Agente{Kind: "claude"}); a.Modelo != "opus" || a.Esfuerzo != "high" {
+		t.Errorf("astra con claude = %+v", a)
+	}
+	if a := c.ParaRol("orquestador", Agente{Kind: "codex"}); a.Modelo != "gpt-6.1-sol" {
+		t.Errorf("orquestador con codex = %+v", a)
+	}
+	if c.Rol("escriba").Modelo != "haiku" {
+		t.Errorf("escriba = %+v", c.Rol("escriba"))
+	}
+}
+
+func TestProyectoGanaAlUsuarioCampoPorCampoYGuardaElOrigen(t *testing.T) {
+	t.Setenv("ORQ_ESCRIBA_MODELO", "")
+	dir := t.TempDir()
+	usuario := escribir(t, filepath.Join(dir, "u.json"), `{"terminal":"orca","roles":{"astra":{"modelo":"m-usuario","esfuerzo":"low"}},"recursos":{"reserva_ram_gb":4}}`)
+	proyecto := escribir(t, filepath.Join(dir, "p", ".orq", "config.json"), `{"roles":{"astra":{"modelo":"m-proyecto"}},"workers":{"baja":{"claude":{"modelo":"mini"}}}}`)
+	c, err := CargarDe(usuario, proyecto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	astra := c.Rol("astra")
+	if astra != (Agente{"codex", "m-proyecto", "low"}) {
+		t.Fatalf("astra = %+v", astra)
+	}
+	for clave, want := range map[string]string{
+		"terminal":                     usuario,
+		"roles.astra.agente":           OrigenDefecto,
+		"roles.astra.modelo":           proyecto,
+		"roles.astra.esfuerzo":         usuario,
+		"recursos.reserva_ram_gb":      usuario,
+		"recursos.ram_por_agente_gb":   OrigenDefecto,
+		"workers.baja.claude.modelo":   proyecto,
+		"workers.baja.claude.esfuerzo": OrigenDefecto,
+	} {
+		if got := c.Origen(clave); got != want {
+			t.Errorf("origen de %s = %s, quiero %s", clave, got, want)
+		}
+	}
+	if m, e := c.Worker("claude", "baja"); m != "mini" || e != "medium" {
+		t.Errorf("worker baja = %s %s", m, e)
+	}
+	if c.Terminal != "orca" || c.Recursos.ReservaRAMGB != 4 || c.Recursos.RAMPorAgenteGB != 1.5 {
+		t.Errorf("c = %+v", c)
+	}
+	var visto bool
+	for _, l := range c.Lineas() {
+		if l.Clave == "roles.astra.modelo" {
+			visto = l.Valor == "m-proyecto" && l.Origen == proyecto
+		}
+	}
+	if !visto {
+		t.Errorf("Lineas no trae roles.astra.modelo con su origen: %+v", c.Lineas())
+	}
+}
+
+func TestCampoDesconocidoEsError(t *testing.T) {
+	dir := t.TempDir()
+	for nombre, cuerpo := range map[string]string{
+		"raiz":       `{"terminales":"herdr"}`,
+		"en rol":     `{"roles":{"astra":{"model":"x"}}}`,
+		"rol":        `{"roles":{"jefe":{"agente":"claude","modelo":"x"}}}`,
+		"dificultad": `{"workers":{"extrema":{"claude":{"modelo":"x","esfuerzo":"high"}}}}`,
+		"agente":     `{"workers":{"baja":{"gemini":{"modelo":"x","esfuerzo":"high"}}}}`,
+		"terminal":   `{"terminal":"tmux"}`,
+		"recursos":   `{"recursos":{"ram_por_agente_gb":0}}`,
+		"basura":     `{"terminal":"herdr"} {"otro":1}`,
+		"no json":    `terminal: herdr`,
+	} {
+		ruta := escribir(t, filepath.Join(dir, strings.ReplaceAll(nombre, " ", "_")+".json"), cuerpo)
+		if _, err := CargarDe(ruta); err == nil {
+			t.Errorf("%s: se aceptó %s", nombre, cuerpo)
+		} else if !strings.Contains(err.Error(), "config:") {
+			t.Errorf("%s: el error no dice que es de config: %v", nombre, err)
+		}
+	}
+}
+
+func TestSinArchivosValeElDefectoYListaLasCapas(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ORQ_CONFIG", filepath.Join(dir, "no-existe.json"))
+	c, err := Cargar(filepath.Join(dir, "repo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	as := c.Archivos()
+	if len(as) != 2 || as[0].Existe || as[1].Existe || as[1].Ruta != filepath.Join(dir, "repo", ".orq", "config.json") {
+		t.Fatalf("archivos = %+v", as)
+	}
+	for _, l := range c.Lineas() {
+		if l.Origen != OrigenDefecto {
+			t.Errorf("%s viene de %s sin archivos", l.Clave, l.Origen)
+		}
+	}
+}
+
+func TestVariableDelEscribaMandaYSeVe(t *testing.T) {
+	t.Setenv("ORQ_ESCRIBA_MODELO", "otro")
+	c, err := CargarDe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Rol("escriba").Modelo != "otro" || c.Origen("roles.escriba.modelo") != "ORQ_ESCRIBA_MODELO" {
+		t.Fatalf("escriba = %+v de %s", c.Rol("escriba"), c.Origen("roles.escriba.modelo"))
+	}
+}
+
+func TestExpandirGuias(t *testing.T) {
+	t.Setenv("ORQ_ESCRIBA_MODELO", "")
+	c, _ := CargarDe()
+	got := c.Expandir("plan con {{rol:planificador}}; astra {{rol:astra}}; {{workers}}")
+	for _, want := range []string{"plan con opus", "astra gpt-6-astra", "claude baja=haiku/medium", "codex baja=gpt-6-luna/medium"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("falta %q en %q", want, got)
+		}
+	}
+	if strings.Contains(got, "{{") {
+		t.Errorf("quedaron marcas: %q", got)
+	}
+}

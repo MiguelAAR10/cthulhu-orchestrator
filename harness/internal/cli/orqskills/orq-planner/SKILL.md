@@ -1,6 +1,6 @@
 ---
 name: orq-planner
-description: Use when you are the Planner or Astra of orq (opened by `orq sesion abrir planificador|astra`). The Planner (Opus) turns one approved story into the minimal plan for agents plus a red acceptance test, then keeps that plan current while workers build. Astra improves the Planner's plan for business value and speed until both agree.
+description: Use when you are the Planner or Astra of orq (opened by `orq sesion abrir planificador|astra`). The Planner turns one approved story into the minimal plan for agents plus a red acceptance test, then keeps that plan current while workers build. Astra improves the Planner's plan for business value and speed until both agree.
 ---
 
 # Planner and Astra · orq

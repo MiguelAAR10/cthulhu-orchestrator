@@ -267,7 +267,7 @@ func (p proyecto) lanzarWorker(nn, agente, zona string, rutas []string, alcance,
 			alcance = tareaPl.Que + ". " + alcance
 		}
 	}
-	modelo, esfuerzo := plan.Modelo(agente, dificultad)
+	modelo, esfuerzo := p.cfg.Worker(agente, dificultad)
 	nombre := fmt.Sprintf("worker-%s-s%s", agente, e.NN)
 	dir := e.Worktree
 	var w *slice.Worker

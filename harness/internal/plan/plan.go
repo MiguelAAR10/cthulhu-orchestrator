@@ -29,7 +29,7 @@ type Tarea struct {
 	Zona       string   `json:"zona"`
 	Rutas      []string `json:"rutas"`
 	DependeDe  []string `json:"depende_de,omitempty"`
-	Dificultad string   `json:"dificultad,omitempty"` // baja | media | alta → modelo y esfuerzo
+	Dificultad string   `json:"dificultad,omitempty"` // baja | media | alta → modelo y esfuerzo (config)
 	Que        string   `json:"que,omitempty"`        // una línea: qué deja hecho
 	Estado     string   `json:"estado,omitempty"`     // pendiente | en_curso | hecha
 	Worker     string   `json:"worker,omitempty"`
@@ -297,30 +297,6 @@ func (p *Plan) Pendientes() int {
 		}
 	}
 	return n
-}
-
-// Modelo traduce dificultad a modelo y esfuerzo por agente. Lo barato donde la tarea es fácil;
-// lo potente donde es core. Tabla heredada del protocolo de OdontoFlow (2026-10).
-func Modelo(agente, dificultad string) (modelo, esfuerzo string) {
-	if dificultad == "" {
-		dificultad = "media"
-	}
-	if agente == "codex" {
-		switch dificultad {
-		case "baja":
-			return "gpt-6-luna", "medium"
-		case "alta":
-			return "gpt-6.1-sol", "high"
-		}
-		return "gpt-6.1-sol", "medium"
-	}
-	switch dificultad {
-	case "baja":
-		return "haiku", "medium"
-	case "alta":
-		return "opus", "high"
-	}
-	return "sonnet", "medium"
 }
 
 // Desvio compara el plan con lo que de verdad cambió en el slice. Es lo que el Planificador
