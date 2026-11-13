@@ -1197,7 +1197,7 @@ func TestEstadoViejoSigueVerificandoYCerrando(t *testing.T) {
 	raw, _ := os.ReadFile(r.estadoPath("01"))
 	var m map[string]any
 	json.Unmarshal(raw, &m)
-	for _, k := range []string{"sin_conteo", "en_sitio", "vigilados", "ruta", "ascendido", "ruta_motivo", "aislado"} {
+	for _, k := range []string{"sin_conteo", "en_sitio", "vigilados", "ruta", "ascendido", "ruta_motivo", "aislado", "esquema"} {
 		delete(m, k)
 	}
 	raw, _ = json.Marshal(m)
@@ -1209,5 +1209,43 @@ func TestEstadoViejoSigueVerificandoYCerrando(t *testing.T) {
 	}
 	if reg, _, _, err := r.Cerrar("", true, "", t0.Add(time.Hour)); err != nil || reg.Result != "aceptado" || reg.Ruta != RutaSlice {
 		t.Fatalf("%+v %v", reg, err)
+	}
+}
+
+// Un estado con forma de orq 1.0.0 (sin «esquema») se verifica como entonces: en el worktree, sin
+// vigilar el runner, y en copia aislada solo si traía aislado=true.
+func TestEstadoViejoVerificaEnElWorktree(t *testing.T) {
+	r := repoConReporte(t, `cmp -s total.txt tests/datos.txt || test -f ruido.txt
+`)
+	os.WriteFile(filepath.Join(r.Root, ".git", "info", "exclude"), []byte(".orq/\nruido.txt\n"), 0o644)
+	viejo := func(aislado bool) {
+		e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete"}, t0)
+		if err != nil || e.Esquema != EsquemaActual {
+			t.Fatalf("%+v %v", e, err)
+		}
+		raw, _ := os.ReadFile(r.estadoPath("01"))
+		var m map[string]any
+		json.Unmarshal(raw, &m)
+		for _, k := range []string{"sin_conteo", "en_sitio", "vigilados", "ruta", "ascendido", "ruta_motivo", "esquema"} {
+			delete(m, k)
+		}
+		if aislado {
+			m["aislado"] = true
+		}
+		raw, _ = json.Marshal(m)
+		os.WriteFile(r.estadoPath("01"), raw, 0o644)
+		commitEn(t, e.Worktree, "otro.txt", "x\n")
+		os.WriteFile(filepath.Join(e.Worktree, "ruido.txt"), []byte("x\n"), 0o644) // ignorado: solo existe en el worktree
+	}
+	viejo(false)
+	e, _, err := r.Verificar("", t0)
+	if err != nil || e.Fase != Verificado || e.Recibo.Aislado {
+		t.Fatalf("un estado de 1.0.0 debe verificar en el worktree: %+v %v", e, err)
+	}
+	r.Cerrar("", false, "fin", t0)
+	Git(r.Root, "branch", "-D", "slice/01")
+	viejo(true)
+	if _, _, err := r.Verificar("", t0); err == nil {
+		t.Fatal("aislado=true de 1.0.0 debe seguir corriendo en copia aislada")
 	}
 }

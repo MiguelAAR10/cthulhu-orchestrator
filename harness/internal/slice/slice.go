@@ -22,6 +22,10 @@ import (
 	"orq/internal/sysinfo"
 )
 
+// EsquemaActual marca los estados que abre esta versión: copia aislada por defecto y runner vigilado.
+// Un estado sin marca (orq 1.0.0) se verifica como antes: en el worktree salvo que traiga aislado=true.
+const EsquemaActual = 1
+
 // Fases del slice. ACORDADO vive en el canal (historia aprobada); aquí empieza en IMPLEMENTANDO,
 // porque Abrir ya comprobó base sana y aceptación roja y dejó el worktree provisionado.
 const (
@@ -79,7 +83,8 @@ type Estado struct {
 	Reporte     string     `json:"reporte,omitempty"` // archivo que escribe el runner
 	Formato     string     `json:"formato,omitempty"` // tap|junit|gotest-json
 	Omitir      bool       `json:"permite_omitir,omitempty"`
-	Aislado     bool       `json:"aislado,omitempty"`    // obsoleto: toda verificación es aislada salvo EnSitio
+	Esquema     int        `json:"esquema,omitempty"`    // 0 = abierto por orq 1.0.0; EsquemaActual = abierto por esta versión
+	Aislado     bool       `json:"aislado,omitempty"`    // solo cuenta en Esquema 0; desde Esquema 1 toda verificación es aislada salvo EnSitio
 	SinConteo   string     `json:"sin_conteo,omitempty"` // por qué este slice no cuenta pruebas (sin reporte del runner)
 	EnSitio     string     `json:"en_sitio,omitempty"`   // por qué el examen corre en el worktree y no en una copia aislada
 	Vigilados   []Vigilado `json:"vigilados,omitempty"`  // archivos del runner y su hash en el rojo
@@ -449,7 +454,7 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 		return nil, out, err
 	}
 	host, _ := os.Hostname()
-	e := &Estado{NN: nn, Intento: 1, Fase: Implementando, Titulo: titulo, Test: test, Bundle: bundle, Cmd: cmd,
+	e := &Estado{Esquema: EsquemaActual, NN: nn, Intento: 1, Fase: Implementando, Titulo: titulo, Test: test, Bundle: bundle, Cmd: cmd,
 		Sano: o.Sano, Alcance: o.Alcance, Base: base, SHARojo: sha, Rama: rama, Worktree: wt, Procedencia: "git", Host: host,
 		Abierto: now.UTC().Truncate(time.Second), Huella: huella, SalidaRojo: cola(out, 20),
 		Reporte: o.Reporte, Formato: o.Formato, Omitir: o.PermiteOmitir, TimeoutSeg: o.Timeout,
@@ -543,7 +548,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 		return e, "", err
 	}
 	var notas []string
-	if cambiados := e.runnerCambiado(head); len(cambiados) > 0 {
+	if cambiados := e.runnerCambiado(head); e.Esquema >= 1 && len(cambiados) > 0 {
 		var acepto string
 		if len(opc) > 0 {
 			acepto = strings.TrimSpace(opc[0].AceptoRunner)
@@ -553,7 +558,10 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 		}
 		notas = append(notas, fmt.Sprintf("runner cambiado y aceptado (%s): %s", acepto, strings.Join(cambiados, ", ")))
 	}
-	dir, aislado := e.Worktree, e.EnSitio == ""
+	dir, aislado := e.Worktree, e.Aislado // estado de orq 1.0.0: como lo abrió
+	if e.Esquema >= 1 {
+		aislado = e.EnSitio == ""
+	}
 	if aislado {
 		if dir, err = copiaAislada(e.Worktree, head); err != nil {
 			return e, "", err
@@ -561,7 +569,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 		defer os.RemoveAll(dir) // carpeta temporal propia de orq
 		enlazarDeps(e.Worktree, dir, false)
 		enlazarDeps(r.Root, dir, false)
-	} else {
+	} else if e.EnSitio != "" {
 		notas = append(notas, "corrido en sitio, sin copia aislada: "+e.EnSitio)
 	}
 	out, code, ok, cnt, err := e.correr(dir)
