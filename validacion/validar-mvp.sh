@@ -19,6 +19,10 @@ trap cleanup EXIT
 
 export ORQ_STATE="$BASE/state" ORQ_LIMITS="$BASE/limits.json" ORQ_CONFIG="$BASE/config.json"
 mkdir -p "$ORQ_STATE" "$BASE/scratch" "$BASE/bin"
+recursos() { # $1 GB que presupuesta cada agente. Con 0.01 la máquina nunca limita: la prueba no depende de ella.
+  printf '{"recursos":{"ram_por_agente_gb":%s,"reserva_ram_gb":0,"cpu_por_agente":0.01,"reserva_cpus":0,"carga_max":100000}}\n' "$1" > "$ORQ_CONFIG"
+}
+recursos 0.01
 R="$BASE/repo"; W="$BASE/wt"
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  ✔ %s\n' "$1"; }
@@ -98,6 +102,13 @@ gate 2 "lanzar con HALT activo → bloquea"                 "$(payload "$R" Bash
 "$ORQ" halt --clear >/dev/null
 limits 99 999999
 gate 2 "lanzar con disco bajo el mínimo → bloquea"        "$(payload "$R" Bash '{"command":"claude -p hola"}')"
+# La máquina también decide: si cada agente presupuesta más RAM de la que hay, el lanzamiento se niega y dice RAM.
+limits 99 1; recursos 100000
+out=$(payload "$R" Agent '{"prompt":"hola"}' | "$ORQ" gate 2>&1); code=$?
+if [[ $code -eq 2 && "$out" == *"por RAM"* ]]; then ok "lanzar sin RAM para un agente más → bloquea y dice RAM"
+else fail "lanzar sin RAM para un agente más (exit $code: ${out:0:160})"; fi
+if "$ORQ" status | grep -q "limita RAM"; then ok "orq status muestra RAM, CPU y que limita la RAM"; else fail "orq status no muestra la capacidad"; fi
+recursos 0.01
 # Tope de workers: un proceso llamado "claude" dentro del worktree cuenta como worker.
 N=$(workers_now); limits $((N+1)) 1
 gate 0 "con $N worker(s) ajenos y tope $((N+1)) → permite" "$(payload "$R" Agent '{"prompt":"hola"}')"

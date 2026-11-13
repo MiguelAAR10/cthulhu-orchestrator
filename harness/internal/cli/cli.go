@@ -11,8 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"orq/internal/app"
+	"orq/internal/config"
 	"orq/internal/gate"
 	"orq/internal/limits"
+	"orq/internal/orqdir"
 	"orq/internal/state"
 	"orq/internal/sysinfo"
 	"orq/internal/watch"
@@ -24,7 +27,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
 
   orq gate            hook PreToolUse: lee el JSON por stdin; exit 2 = bloquea
   orq watch           mide scratch y disco; escribe HALT si corresponde
-  orq status          muestra límites, medición, HALT y workers
+  orq status          muestra límites, disco, medición, HALT, RAM, CPU, la capacidad que sale de ellos y los workers
   orq halt            muestra HALT
   orq halt --clear    quita HALT (solo tras liberar espacio)
   orq halt --set MSG  pone HALT a mano
@@ -211,9 +214,14 @@ func runGate(stdin io.Reader, stderr io.Writer) int {
 		return 0
 	}
 	env := realEnv()
+	medir := app.MedirReal()
 	env.Workers = func() (int, error) {
-		procs, err := sysinfo.ListProcs()
-		return len(sysinfo.Workers(procs, l.WorkerProcessName, gate.IsLinkedWorktree)), err
+		ws, err := medir.Vivos(l)
+		return len(ws), err
+	}
+	// La máquina también decide: sin RAM o CPU para un agente más, el lanzamiento se niega y dice por qué.
+	env.Capacidad = func(cwd string, vivos int) (string, error) {
+		return app.CapacidadPara(gate.CheckoutPrincipal(cwd), l, vivos, medir)
 	}
 	d := gate.Evaluate(p, l, env)
 	if d.Allow {
@@ -270,15 +278,29 @@ func runStatus(stdout, stderr io.Writer) int {
 	} else {
 		fmt.Fprintln(stdout, "HALT: no")
 	}
-	procs, err := sysinfo.ListProcs()
+	// Máquina y capacidad: cuántos agentes caben ahora y qué número lo decide.
+	root, _ := orqdir.Root()
+	cfg, err := config.Cargar(root)
 	if err != nil {
-		fmt.Fprintf(stdout, "workers: no se pudo leer /proc (%v)\n", err)
+		fmt.Fprintf(stdout, "configuración: %v\n", err)
+		return 1
+	}
+	c, ws, err := app.Capacidad(cfg, l, app.MedirReal())
+	if err != nil {
+		fmt.Fprintf(stdout, "máquina: sin medición (%v); sin dato no se lanza\n", err)
 		return 0
 	}
-	ws := sysinfo.Workers(procs, l.WorkerProcessName, gate.IsLinkedWorktree)
-	fmt.Fprintf(stdout, "workers (agentes en worktrees): %d de %d\n", len(ws), *l.MaxWorkers)
+	m := c.Maquina
+	fmt.Fprintf(stdout, "máquina: RAM %.1f GB disponibles de %.1f · CPU %d núcleos, carga %.1f\n", m.MemDisponibleGB, m.MemTotalGB, m.CPUs, m.Carga1)
+	fmt.Fprintf(stdout, "  presupuesto por agente: %.1f GB y %.1f núcleos · reserva: %.1f GB y %.1f núcleos · carga máxima %.1f por núcleo\n",
+		cfg.Recursos.RAMPorAgenteGB, cfg.Recursos.CPUPorAgente, cfg.Recursos.ReservaRAMGB, cfg.Recursos.ReservaCPUs, cfg.Recursos.CargaMax)
+	fmt.Fprintf(stdout, "capacidad: %s\n", c.Resumen())
+	fmt.Fprintf(stdout, "workers (agentes en worktrees): %d de %d\n", len(ws), c.Tope)
 	for _, w := range ws {
 		fmt.Fprintf(stdout, "  %-7d %-7s %s\n", w.PID, w.Comm, w.Cwd)
+	}
+	if !c.Cabe() {
+		fmt.Fprintf(stdout, "  %s\n", c.Motivo())
 	}
 	return 0
 }

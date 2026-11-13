@@ -34,6 +34,14 @@ type Proyecto struct {
 	Cfg       config.Config
 	Term      terminal.Driver
 	Ahora     func() time.Time
+	Medir     Medir // lecturas de la máquina; vacío = /proc
+}
+
+func (p Proyecto) medir() Medir {
+	if p.Medir.Maquina != nil && p.Medir.Vivos != nil {
+		return p.Medir
+	}
+	return MedirReal()
 }
 
 // NuevoDriver elige el adaptador del terminal configurado. Se reemplaza en pruebas.

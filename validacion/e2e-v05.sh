@@ -11,6 +11,8 @@ export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID=""
 # Estado, límites y configuración propios: nunca los reales del usuario.
 export ORQ_STATE="${ORQ_STATE:-$BASE/state}" ORQ_LIMITS="${ORQ_LIMITS:-$BASE/limits.json}" ORQ_CONFIG="$BASE/config.json"
 mkdir -p "$ORQ_STATE" "$BASE/scratch"
+# La máquina nunca limita aquí: la prueba no depende de la RAM ni de la carga de quien la corre.
+echo '{"recursos":{"ram_por_agente_gb":0.01,"reserva_ram_gb":0,"cpu_por_agente":0.01,"reserva_cpus":0,"carga_max":100000}}' > "$ORQ_CONFIG"
 [ -f "$ORQ_LIMITS" ] || cat > "$ORQ_LIMITS" <<EOF
 {"min_free_gb":{"/":1},"max_workers":99,"scratch":{"paths":["$BASE/scratch"],"quota_gb":1,"critical_free_gb":1},"state_max_age_hours":24,"protected":["tests/aceptacion/","SLICES.md"]}
 EOF

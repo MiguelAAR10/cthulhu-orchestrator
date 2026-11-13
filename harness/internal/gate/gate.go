@@ -39,6 +39,9 @@ type Env struct {
 	LimitsPath string
 	// MainRoot devuelve el checkout principal del repo de cwd, cuyo .orq/ es del orquestador.
 	MainRoot func(cwd string) string
+	// Capacidad dice si la máquina (RAM, CPU, carga) admite un agente más con vivos corriendo.
+	// Devuelve "" si cabe, o el motivo. nil = no se mira la máquina (pruebas del resto de reglas).
+	Capacidad func(cwd string, vivos int) (motivo string, err error)
 }
 
 type Decision struct {
@@ -129,6 +132,15 @@ func evaluateLaunch(p Payload, l limits.Limits, env Env) Decision {
 	}
 	if n >= *l.MaxWorkers {
 		return deny("orq: hay %d worker(s) vivos y el tope es %d. Cierra paneles antes de lanzar otro.", n, *l.MaxWorkers)
+	}
+	if env.Capacidad != nil {
+		motivo, err := env.Capacidad(p.Cwd, n)
+		if err != nil {
+			return deny("orq: no pude medir la máquina (%v). Sin dato no hay lanzamiento.", err)
+		}
+		if motivo != "" {
+			return deny("orq: %s.", motivo)
+		}
 	}
 	return allow()
 }

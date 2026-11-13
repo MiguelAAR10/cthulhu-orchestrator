@@ -14,8 +14,10 @@ import (
 	"orq/internal/canal"
 	"orq/internal/config"
 	"orq/internal/diario"
+	"orq/internal/limits"
 	"orq/internal/plan"
 	"orq/internal/slice"
+	"orq/internal/sysinfo"
 	"orq/internal/terminal"
 	"orq/internal/terminal/fake"
 )
@@ -72,12 +74,20 @@ func proyectoDePrueba(t *testing.T, cfgJSON string) (Proyecto, *fake.Driver, *sl
 		t.Fatal(err)
 	}
 	term := fake.Nuevo()
-	p := Proyecto{Root: root, Dir: dir, Cfg: cfg, Term: term, Ahora: time.Now}
+	p := Proyecto{Root: root, Dir: dir, Cfg: cfg, Term: term, Ahora: time.Now, Medir: maquinaDe(sysinfo.Maquina{MemTotalGB: 64, MemDisponibleGB: 48, CPUs: 16, Carga1: 1}, 0)}
 	e, out, err := p.Slices().Abrir("01", "uno", "tests/s01.sh", "sh tests/s01.sh", slice.Opciones{SinConteo: "prueba"}, time.Now())
 	if err != nil {
 		t.Fatalf("abrir: %v\n%s", err, out)
 	}
 	return p, term, e
+}
+
+// maquinaDe fija la medición: las pruebas no dependen de la RAM ni de la carga de quien las corre.
+func maquinaDe(m sysinfo.Maquina, vivos int) Medir {
+	return Medir{
+		Maquina: func() (sysinfo.Maquina, error) { return m, nil },
+		Vivos:   func(limits.Limits) ([]sysinfo.Proc, error) { return make([]sysinfo.Proc, vivos), nil },
+	}
 }
 
 func pasos(t *testing.T, p Proyecto, actor string) []string {
@@ -288,5 +298,44 @@ func TestRegistrarLlamador(t *testing.T) {
 	RegistrarLlamador(ses, "worker-front-s04", "w3D:pV", time.Now())
 	if _, ok := ses["worker-front-s04"]; ok {
 		t.Fatal("un worker no se registra como destino")
+	}
+}
+
+// slice lanzar mira la máquina: sin RAM, sin CPU o con la carga alta no lanza, y dice qué número lo decide.
+func TestLanzarWorkerRespetaLaCapacidadDeLaMaquina(t *testing.T) {
+	p, term, _ := proyectoDePrueba(t, `{"recursos":{"ram_por_agente_gb":2,"reserva_ram_gb":2,"cpu_por_agente":1,"reserva_cpus":1,"carga_max":1.5}}`)
+	ctx := context.Background()
+	for nombre, c := range map[string]struct {
+		m     sysinfo.Maquina
+		vivos int
+		dice  string
+	}{
+		"RAM":   {sysinfo.Maquina{MemTotalGB: 8, MemDisponibleGB: 3.5, CPUs: 8}, 0, "por RAM"},
+		"CPU":   {sysinfo.Maquina{MemTotalGB: 64, MemDisponibleGB: 40, CPUs: 1}, 0, "por CPU"},
+		"carga": {sysinfo.Maquina{MemTotalGB: 64, MemDisponibleGB: 40, CPUs: 4, Carga1: 10}, 1, "máquina cargada"},
+	} {
+		p.Medir = maquinaDe(c.m, c.vivos)
+		_, _, err := p.LanzarWorker(ctx, PedidoWorker{Agente: "claude"})
+		if err == nil || !strings.Contains(err.Error(), c.dice) {
+			t.Errorf("%s: err = %v", nombre, err)
+		}
+	}
+	if len(term.Ops("crear")) != 0 {
+		t.Fatalf("lanzó sin capacidad: %+v", term.Llamadas)
+	}
+	// Sin poder medir, tampoco se lanza.
+	p.Medir = Medir{Maquina: func() (sysinfo.Maquina, error) { return sysinfo.Maquina{}, errors.New("sin /proc") },
+		Vivos: func(limits.Limits) ([]sysinfo.Proc, error) { return nil, nil }}
+	if _, _, err := p.LanzarWorker(ctx, PedidoWorker{Agente: "claude"}); err == nil || !strings.Contains(err.Error(), "sin medir") {
+		t.Fatalf("err = %v", err)
+	}
+	// Con sitio, lanza. Y un worker que ya vive se puede «relanzar» (no ocupa un cupo nuevo) aunque no quepa otro.
+	p.Medir = maquinaDe(sysinfo.Maquina{MemTotalGB: 8, MemDisponibleGB: 4.5, CPUs: 8}, 0)
+	if _, _, err := p.LanzarWorker(ctx, PedidoWorker{Agente: "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	p.Medir = maquinaDe(sysinfo.Maquina{MemTotalGB: 8, MemDisponibleGB: 1, CPUs: 8}, 1)
+	if _, ya, err := p.LanzarWorker(ctx, PedidoWorker{Agente: "claude"}); err != nil || !ya {
+		t.Fatalf("repetir con la máquina llena no debe fallar: %v %v", ya, err)
 	}
 }

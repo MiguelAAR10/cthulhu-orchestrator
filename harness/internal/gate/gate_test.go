@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -317,5 +318,34 @@ func TestPushDeRamasPermitido(t *testing.T) {
 	}
 	if d := Evaluate(en(repo, "git push origin dev"), baseLimits(), env); d.Allow {
 		t.Error("sin push_ramas el push sigue bloqueado")
+	}
+}
+
+// La máquina también decide un lanzamiento: sin RAM o CPU para uno más se niega y dice por qué.
+func TestLanzamientoSinCapacidadDeMaquinaSeNiegaConElMotivo(t *testing.T) {
+	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	f := fakes{free: map[string]float64{"/": 400, "/mnt/c": 100}, now: now}
+	lanzar := bash("herdr agent start w --kind claude --pane p1")
+
+	env := f.env(t, freshState(t, now, 1))
+	var visto int
+	env.Capacidad = func(_ string, vivos int) (string, error) { visto = vivos; return "", nil }
+	if d := Evaluate(lanzar, baseLimits(), env); !d.Allow || visto != 0 {
+		t.Fatalf("con capacidad debe pasar: %+v (vivos vistos %d)", d, visto)
+	}
+	env.Capacidad = func(string, int) (string, error) {
+		return "no cabe otro agente por RAM: hay 1.0 GB disponibles", nil
+	}
+	if d := Evaluate(lanzar, baseLimits(), env); d.Allow || !strings.Contains(d.Reason, "RAM") {
+		t.Fatalf("sin RAM debe negar y decirlo: %+v", d)
+	}
+	env.Capacidad = func(string, int) (string, error) { return "", errors.New("meminfo ilegible") }
+	if d := Evaluate(lanzar, baseLimits(), env); d.Allow || !strings.Contains(d.Reason, "Sin dato no hay lanzamiento") {
+		t.Fatalf("sin medición debe negar: %+v", d)
+	}
+	// Lo que no es un lanzamiento no consulta la máquina.
+	env.Capacidad = func(string, int) (string, error) { t.Fatal("consultó la máquina sin lanzar"); return "", nil }
+	if d := Evaluate(bash("ls -la"), baseLimits(), env); !d.Allow {
+		t.Fatalf("%+v", d)
 	}
 }

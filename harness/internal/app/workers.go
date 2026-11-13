@@ -10,13 +10,11 @@ import (
 
 	"orq/internal/agente"
 	"orq/internal/canal"
-	"orq/internal/gate"
 	"orq/internal/gitx"
 	"orq/internal/limits"
 	"orq/internal/orqdir"
 	"orq/internal/plan"
 	"orq/internal/slice"
-	"orq/internal/sysinfo"
 	"orq/internal/terminal"
 )
 
@@ -105,9 +103,13 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	}
 	existe := vida == terminal.Vivo
 	if !existe {
-		procs, _ := sysinfo.ListProcs()
-		if n := len(sysinfo.Workers(procs, l.WorkerProcessName, gate.IsLinkedWorktree)); n >= *l.MaxWorkers {
-			return "", false, fmt.Errorf("hay %d worker(s) vivos y el tope es %d; espera a que uno termine", n, *l.MaxWorkers)
+		// La máquina decide cuántos caben: el tope configurado, la RAM disponible y la CPU.
+		c, _, err := Capacidad(p.Cfg, l, p.medir())
+		if err != nil {
+			return "", false, fmt.Errorf("sin medir la máquina no se lanza: %w", err)
+		}
+		if !c.Cabe() {
+			return "", false, errors.New(c.Motivo())
 		}
 	}
 	modelo, esfuerzo := p.Cfg.Worker(w.Agente, dificultad)

@@ -18,7 +18,7 @@ var capa = map[string]int{
 	"app": 2,
 	// dominio: máquinas de estado y reglas
 	"slice": 1, "plan": 1, "canal": 1, "memoria": 1, "instinto": 1, "perfil": 1, "gate": 1,
-	"config": 1, "diario": 1, "watch": 1, "escriba": 1, "calidad": 1, "tui": 1,
+	"config": 1, "diario": 1, "recursos": 1, "watch": 1, "escriba": 1, "calidad": 1, "tui": 1,
 	// adaptadores y base: todo lo que ejecuta un proceso o lee el sistema
 	"terminal": 0, "terminal/herdr": 0, "terminal/orca": 0, "terminal/fake": 0, "agente": 0,
 	"sandbox": 0, "gitx": 0, "sysinfo": 0, "orqdir": 0, "limits": 0, "state": 0,

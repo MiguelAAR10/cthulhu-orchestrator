@@ -245,3 +245,25 @@ func TestConfigVerMuestraValorYOrigen(t *testing.T) {
 		t.Fatalf("un comando siguió con la configuración rota (code %d): %s", code, errs)
 	}
 }
+
+func TestStatusMuestraMaquinaYCapacidad(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ORQ_ROOT", dir)
+	t.Setenv("ORQ_STATE", filepath.Join(dir, "state"))
+	lim := filepath.Join(dir, "limits.json")
+	os.WriteFile(lim, []byte(`{"min_free_gb":{"/":1},"max_workers":99,"scratch":{"paths":["`+dir+`/s"],"quota_gb":1,"critical_free_gb":1},"state_max_age_hours":24}`), 0o644)
+	t.Setenv("ORQ_LIMITS", lim)
+	out, errs, code := run(t, "status")
+	for _, want := range []string{"máquina: RAM ", "núcleos, carga", "presupuesto por agente: 1.5 GB", "capacidad: ", "max_workers 99", "disco /"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("falta %q en status (code %d):\n%s%s", want, code, out, errs)
+		}
+	}
+	// Con un presupuesto imposible, status dice que no cabe nadie y por qué.
+	os.MkdirAll(filepath.Join(dir, ".orq"), 0o755)
+	os.WriteFile(filepath.Join(dir, ".orq", "config.json"), []byte(`{"recursos":{"ram_por_agente_gb":100000}}`), 0o644)
+	out, _, _ = run(t, "status")
+	if !strings.Contains(out, "limita RAM") || !strings.Contains(out, "no cabe otro agente por RAM") {
+		t.Fatalf("status no explica la falta de RAM:\n%s", out)
+	}
+}

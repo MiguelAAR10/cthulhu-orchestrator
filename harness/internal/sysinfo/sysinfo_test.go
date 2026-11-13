@@ -1,6 +1,8 @@
 package sysinfo
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -29,5 +31,27 @@ func TestUsanDetectaProcesoConCwdDentro(t *testing.T) {
 	u := Usan(ps, "/w/s01")
 	if len(u) != 2 || u[0].PID != 10 || u[1].PID != 12 {
 		t.Fatalf("%+v", u)
+	}
+}
+
+func TestLeerMaquinaDeProc(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "meminfo"), []byte("MemTotal:       16000000 kB\nMemFree:          100000 kB\nMemAvailable:    4500000 kB\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "loadavg"), []byte("2.25 7.94 8.93 3/1444 1543887\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "cpuinfo"), []byte("processor\t: 0\nmodel name\t: x\n\nprocessor\t: 1\n\nprocessor\t: 2\n"), 0o644)
+	m, err := LeerMaquinaDe(dir)
+	if err != nil || m.MemTotalGB != 16 || m.MemDisponibleGB != 4.5 || m.CPUs != 3 || m.Carga1 != 2.25 {
+		t.Fatalf("%+v %v", m, err)
+	}
+	// Sin MemAvailable no se inventa un número.
+	os.WriteFile(filepath.Join(dir, "meminfo"), []byte("MemTotal: 16000000 kB\n"), 0o644)
+	if _, err := LeerMaquinaDe(dir); err == nil {
+		t.Fatal("aceptó un meminfo sin MemAvailable")
+	}
+	if _, err := LeerMaquinaDe(filepath.Join(dir, "no")); err == nil {
+		t.Fatal("aceptó un /proc que no existe")
+	}
+	if m, err := LeerMaquina(); err != nil || m.CPUs < 1 || m.MemDisponibleGB <= 0 {
+		t.Fatalf("máquina real: %+v %v", m, err)
 	}
 }
