@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Prueba de punta a punta de orq con un repo de juguete:
 # rojo con conteo → trampa bloqueada → reintento → verde con recibo → cierre viejo rechazado →
-# relevo sin duplicar → cierre interrumpido de verdad en cada etapa y retomado.
+# relevo sin duplicar → cierre interrumpido de verdad en cada etapa y retomado →
+# conteo obligatorio, rutas fix/slice, runner vigilado y examen en copia aislada.
 # Uso: validacion/e2e-v05.sh [carpeta-temporal]. No toca nada fuera de esa carpeta.
 set -u
 BASE="${1:-$(mktemp -d)}"
@@ -81,6 +82,64 @@ rm -f /tmp/orq-e2e.a.$$ /tmp/orq-e2e.b.$$
 ok "$(git log --oneline main | grep -c 'slice S-1[01]/')" 2 "los dos cierres simultáneos integran una vez cada uno"
 ok "$(cat v10.txt v11.txt | tr -d '\n')" okok "main tiene los dos cambios"
 orq metricas > met.txt; grep -q "slices aceptados e integrados: 7" met.txt; ok $? 0 "métricas: 7 aceptados"
+echo "== verificación honesta: conteo, rutas, runner vigilado, copia aislada"
+examen 20
+ok "$(q slice abrir 20 --titulo veinte --test tests/s20.sh --cmd 'sh tests/s20.sh' --sin-scouts e2e)" 1 "abrir sin --reporte ni --sin-conteo se rechaza"
+ok "$(q slice abrir 20 --titulo veinte --test tests/s20.sh --cmd 'sh tests/s20.sh' --sin-conteo 'el runner no deja reporte' --ruta fix --aislado --sin-scouts e2e)" 0 "abre un fix con --sin-conteo (y --aislado sigue aceptado)"
+orq slice estado | grep -q "ruta: fix"; ok $? 0 "estado muestra la ruta fix"
+orq slice estado | grep -q "sin conteo: el runner no deja reporte"; ok $? 0 "estado repite el motivo de no contar"
+echo '{"slice":"20","tareas":[]}' > plan20.json
+ok "$(q plan cargar plan20.json)" 1 "orq plan cargar se rechaza en un fix"
+grep -q "orq slice ruta slice" /tmp/orq-e2e.$$; ok $? 0 "el rechazo apunta a la subida de ruta"
+ok "$(q slice ruta slice)" 1 "subir de ruta sin motivo se rechaza"
+(cd "$ORQ_WORKTREES/tienda-s20" && echo ok > v20.txt && git add -A && git commit -qm impl20)
+ok "$(q slice verificar)" 0 "el fix verifica"
+orq slice recibo | grep -q "el runner no deja reporte"; ok $? 0 "el recibo repite el motivo de no contar"
+ok "$(q slice cerrar --aceptado)" 0 "cierra el fix"
+
+examen 21
+q slice abrir 21 --titulo veintiuno --test tests/s21.sh --cmd 'sh tests/s21.sh' --reporte out.tap --formato tap --ruta fix --sin-scouts e2e >/dev/null
+ok "$(q slice ruta slice 'toca dos repos')" 0 "un fix sube a slice con motivo"
+orq slice estado | grep -q "ruta: slice (subió de fix: toca dos repos)"; ok $? 0 "estado recuerda que subió"
+ok "$(q slice ruta slice 'otra vez')" 1 "una ruta slice no vuelve a subir"
+(cd "$ORQ_WORKTREES/tienda-s21" && echo ok > v21.txt && git add -A && git commit -qm impl21)
+orq slice verificar >/dev/null 2>&1; ok "$(q slice cerrar --aceptado)" 0 "cierra el fix ascendido"
+
+examen 22; echo 'sh tests/s22.sh' > run22.sh; git add -A; git commit -qm "runner s22"
+q slice abrir 22 --titulo runner --test tests/s22.sh --cmd 'sh run22.sh' --reporte out.tap --formato tap --sin-scouts e2e >/dev/null
+(cd "$ORQ_WORKTREES/tienda-s22" && echo ok > v22.txt && echo '# ajuste' >> run22.sh && git add -A && git commit -qm impl22)
+ok "$(q slice verificar)" 3 "un runner cambiado sale con 3 sin correr"
+grep -q "run22.sh" /tmp/orq-e2e.$$; ok $? 0 "el mensaje lista el archivo cambiado"
+orq slice estado | grep -q "fallos: 0/"; ok $? 0 "no cuenta como reparación fallida"
+ok "$(q slice verificar --acepto-runner 'Atena aprobó el ajuste')" 0 "con --acepto-runner verifica"
+orq slice recibo | grep -q "Atena aprobó el ajuste"; ok $? 0 "el recibo deja escrito el motivo"
+ok "$(q slice cerrar --aceptado)" 0 "cierra con runner aceptado"
+
+ruido() { # ruido NN: pasa con vNN.txt = ok o con un archivo ignorado ruidoNN.txt
+  mkdir -p tests && cat > "tests/s$1.sh" <<EOT
+if grep -qx ok v$1.txt 2>/dev/null || [ -f ruido$1.txt ]; then echo 'ok 1 v$1' > out.tap; else echo 'not ok 1 v$1' > out.tap; exit 1; fi
+EOT
+  echo "ruido$1.txt" >> .git/info/exclude; git add -A && git commit -qm "test(S-$1): rojo"
+}
+ruido 23
+q slice abrir 23 --titulo aislado --test tests/s23.sh --cmd 'sh tests/s23.sh' --reporte out.tap --formato tap --sin-scouts e2e >/dev/null
+W23="$ORQ_WORKTREES/tienda-s23"; echo x > "$W23/ruido23.txt"   # archivo ignorado: el worktree sigue limpio
+ok "$(q slice verificar)" 1 "un archivo ignorado del worker no hace pasar el examen (copia aislada)"
+(cd "$W23" && echo ok > v23.txt && git add -A && git commit -qm impl23)
+ok "$(q slice verificar)" 0 "el trabajo real sí verifica"
+ok "$(q slice cerrar --aceptado)" 0 "cierra el slice aislado"
+ruido 24
+q slice abrir 24 --titulo ensitio --test tests/s24.sh --cmd 'sh tests/s24.sh' --reporte out.tap --formato tap --en-sitio 'el examen lee un artefacto ignorado' --sin-scouts e2e >/dev/null
+W24="$ORQ_WORKTREES/tienda-s24"; echo x > "$W24/ruido24.txt"   # ignorado: solo el modo en sitio lo ve
+(cd "$W24" && echo ok > v24.txt && git add -A && git commit -qm impl24)   # el cierre revalida en el merge, sin archivos ignorados
+ok "$(q slice verificar)" 0 "con --en-sitio el examen corre en el worktree"
+orq slice recibo | grep -q "corrido en sitio"; ok $? 0 "el recibo dice que corrió en sitio"
+ok "$(q slice cerrar --aceptado)" 0 "cierra el slice en sitio"
+orq metricas > met2.txt
+grep -q "slices aceptados e integrados: 12" met2.txt; ok $? 0 "métricas: 12 aceptados"
+grep -q "ruta fix: 1 aceptados" met2.txt; ok $? 0 "métricas: 1 fix aceptado"
+grep -q "ruta slice: 11 aceptados" met2.txt; ok $? 0 "métricas: 11 en la ruta slice"
+grep -q "fixes que subieron a slice: 1" met2.txt; ok $? 0 "métricas: 1 fix subió a slice"
 echo "== higiene"
 orq doctor >/tmp/orq-e2e.$$ 2>&1; d=$?
 if [ $d -ne 0 ]; then cat /tmp/orq-e2e.$$; fi

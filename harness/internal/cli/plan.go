@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"orq/internal/plan"
+	"orq/internal/slice"
 )
 
 func (p proyecto) planPath(nn string) string { return plan.Path(p.dir, nn) }
@@ -51,6 +52,10 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		e, err := p.slices().Load(nn)
 		if err != nil || e == nil {
 			fmt.Fprintln(stderr, "orq plan: no hay slice abierto; el plan pertenece a un slice")
+			return 1
+		}
+		if e.RutaEfectiva() == slice.RutaFix {
+			fmt.Fprintf(stderr, "orq plan: %s va por la ruta fix: un solo worker, sin plan de tareas. Si el trabajo creció, súbelo: `orq slice ruta slice \"motivo\"`\n", e.ID())
 			return 1
 		}
 		pl, err := plan.Leer(args[1])

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"orq/internal/slice"
 )
 
 func runMetricas(args []string, stdout, stderr io.Writer) int {
@@ -41,6 +43,15 @@ func runMetricas(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "intentos: %d · verificaciones: %d · fallos sin progreso: %d\n", m.Intentos, m.Verificaciones, m.FallosSinProgreso)
 	fmt.Fprintf(stdout, "horas de punta a punta (media, aceptados): %.1f\n", m.HorasMedias)
+	for _, ruta := range []string{slice.RutaFix, slice.RutaSlice} {
+		mr := m.PorRuta[ruta]
+		primero := fmt.Sprintf("%d al primer intento", mr.VerdesALaPrimera)
+		if mr.Aceptados >= 5 {
+			primero = fmt.Sprintf("%.0f %% al primer intento", 100*float64(mr.VerdesALaPrimera)/float64(mr.Aceptados))
+		}
+		fmt.Fprintf(stdout, "ruta %s: %d aceptados · %s · %.1f h de media\n", ruta, mr.Aceptados, primero, mr.HorasMedias)
+	}
+	fmt.Fprintf(stdout, "fixes que subieron a slice: %d (cuentan en slice, donde terminaron)\n", m.Ascendidos)
 	fmt.Fprintf(stdout, "en cuarentena: %d · recursos sobrantes: `orq doctor`\n", m.Cuarentena)
 	fmt.Fprintln(stdout, "costo por slice y tiempo humano: n/d (orq no los registra todavía)")
 	return 0
