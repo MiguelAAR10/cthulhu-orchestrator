@@ -58,14 +58,14 @@ Owner of this section: the builder (branch `v2/build`). Order C1 → C2 → C3 �
 |---|---|---|
 | cli | `internal/cli` | Argument parsing and output. No git, no multiplexer, no model table. |
 | app | `internal/app` (new) | `Proyecto`, launch of roles and workers, messaging, handoff and contract text, capacity, metrics. Receives its ports in a struct; tests pass fakes. |
-| domain | `slice`, `plan`, `canal`, `memoria`, `instinto`, `perfil`, `gate`, `config` (new), `limits`, `state`, `diario` (new) | State machines and rules. Pure on injected clock, git and sandbox where they decide acceptance. |
-| adapters | `terminal` (+`herdr`, `orca`, `fake`), `agente`, `sandbox`, `gitx`, `sysinfo`, `escriba`, `orqdir` | Everything that execs a process or reads the OS. |
+| domain | `slice`, `plan`, `canal`, `memoria`, `instinto`, `perfil`, `gate`, `config` (new), `diario` (new), `watch`, `escriba` | State machines and rules. Pure on injected clock, git and sandbox where they decide acceptance. |
+| adapters and base | `terminal` (+`herdr`, `orca`, `fake`), `agente`, `sandbox`, `gitx`, `sysinfo`, `orqdir`, `limits`, `state` | Everything that execs a process or reads the OS, and the two file readers the sandbox itself needs. |
 
 What moves:
-- `cli/proyecto.go` → `proyecto`, `abrirProyecto`, paths, `excluir` to `app/proyecto.go`; `porRol`, `arranque.completar` to `config`; `agentArgs`, `rolArgs` to `agente`; `lanzar`, the body of `runUp`/`runRelevo` to `app/roles.go`; the body of `runMsg` to `app/mensajes.go` (C6). `runSlice`, `runMem` keep only flags and printing.
+- `cli/proyecto.go` → `proyecto`, `abrirProyecto`, paths, `excluir` to `app/proyecto.go`; `porRol`, `arranque.completar` to `config`; `agentArgs`, `rolArgs` to `agente`; `lanzar`, the body of `runUp` to `app/roles.go` (idempotent open in `app/sesiones.go`); the body of `runMsg` to `app/mensajes.go` (C6). `runSlice`, `runMem` keep only flags and printing.
 - `cli/v05.go` → `datosRelevo`, `Relevo.Markdown`, `contrato` to `app/relevo.go`; `lanzarWorker`, `registrarLlamador`, `workerArgs` to `app/workers.go` and `agente`; `memVigente` to `app/proyecto.go`.
 - `cli/v03.go` → `fase`, `escribirFicha`, the checks of `runDoctor` to `app/estado.go`; `runInit`, `runSkills` stay in cli (they only install files and print).
-- `cli/sesion.go` → `cerrarSesiones`, `panelDelSlice` to `app/roles.go`. `plan.Modelo` is deleted (C1). `internal/herdr` becomes `internal/terminal/herdr` (C2).
+- `cli/sesion.go` → `cerrarSesiones`, `panelDelSlice` to `app/sesiones.go`. `plan.Modelo` is deleted (C1). `internal/herdr` becomes `internal/terminal/herdr` (C2).
 
 ### Ports
 | Port | Interface | Adapters |
@@ -87,7 +87,7 @@ What moves:
 ### Activities
 | ID | What lands | Exit test | Files |
 |---|---|---|---|
-| C1 | `config`: defaults = today; user file (`ORQ_CONFIG` or `~/.config/orq/config.json`) then `<root>/.orq/config.json`, merged per field, origin kept; unknown field is an error; `orq config ver`; `porRol` and `plan.Modelo` deleted; guides print models from config | `go test ./internal/config`; `TestDefaultsIgualesAHoy` pins the old tables; `grep` test: no model name outside `config` | `internal/config/*`, `cli/config.go`, `cli/proyecto.go`, `cli/v05.go`, `cli/skill.go`, `guias/*.md`, `plan/plan.go`, `escriba` |
+| C1 | `config`: defaults = today; per role and per worker difficulty an optional `entorno` (account variables such as `CLAUDE_CONFIG_DIR`, `CODEX_HOME`; paths only, a secret-looking name is an error) passed to the pane and to the headless escriba call; user file (`ORQ_CONFIG` or `~/.config/orq/config.json`) then `<root>/.orq/config.json`, merged per field, origin kept; unknown field is an error; `orq config ver`; `porRol` and `plan.Modelo` deleted; guides print models from config | `go test ./internal/config`; `TestDefaultsIgualesAHoy` pins the old tables; `grep` test: no model name outside `config` | `internal/config/*`, `cli/config.go`, `cli/proyecto.go`, `cli/v05.go`, `cli/skill.go`, `guias/*.md`, `plan/plan.go`, `escriba` |
 | C2 | `terminal.Driver`, herdr behind it, Orca adapter, fake; `app` package with role and worker launch; timed-out start = unknown, checked with `Estado` before retry | `go test ./internal/terminal/... ./internal/app`: fake driver proves no second launch after a timeout; Orca adapter tested against a stub `orca` binary; arch test | `internal/terminal/**`, `internal/app/*`, `internal/agente/*`, `cli/*` |
 | C3 | `sysinfo.Memoria/CPUs/Carga`; `app.Capacidad` = min(max_workers, RAM, CPU) with per-agent budget and reserve from config; gate and `slice lanzar` deny with the limiting factor; `orq status` shows RAM, CPU, disk, capacity | unit tests with fake `/proc` files; gate test denies on low RAM and says why | `sysinfo`, `config`, `gate`, `app/capacidad.go`, `cli/cli.go` |
 | B5 | Independent clones (`--no-hardlinks`), bundle in, `refs/orq/sNN/*`; merge by `merge-tree` + `commit-tree`; exam, `--sano`, integration re-run inside the sandbox on `git archive`; protected paths checked on the ingested diff; contract kept in `refs/orq/contrato/NN`, compared on verify and close; CERRANDO and `integrado` re-checked; `orq slice convertir` for 1.0.0 slices | `validacion/aislamiento.sh` green without `--todo`, part 2 asserting the refusal reason; `e2e-v05.sh`; slice tests | `slice/*`, `gitx`, `gate` (worker detection, contract read), `cli`, `validacion/*` |

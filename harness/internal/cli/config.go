@@ -36,5 +36,16 @@ func runConfig(args []string, stdout, stderr io.Writer) int {
 	for _, l := range c.Lineas() {
 		fmt.Fprintf(stdout, "%-34s = %-16s (%s)\n", l.Clave, l.Valor, l.Origen)
 	}
+	// Con qué cuenta arranca cada uno: las variables de `entorno` que el lanzador pone en su panel.
+	fmt.Fprintln(stdout, "\ncuentas:")
+	for _, rol := range config.Roles {
+		a := c.Rol(rol)
+		fmt.Fprintf(stdout, "  %-13s %-7s %s\n", rol, a.Kind, config.Cuenta(a.Entorno))
+	}
+	for _, dif := range config.Dificultades {
+		for _, kind := range config.Kinds {
+			fmt.Fprintf(stdout, "  worker %-6s %-7s %s\n", dif, kind, config.Cuenta(c.WorkerEntorno(kind, dif)))
+		}
+	}
 	return 0
 }

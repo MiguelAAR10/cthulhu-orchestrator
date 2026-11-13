@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,32 +13,11 @@ import (
 	"time"
 
 	"orq/internal/canal"
-	"orq/internal/herdr"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
 	"orq/internal/perfil"
 	"orq/internal/slice"
 )
-
-func (p proyecto) perfilPath() string { return filepath.Join(p.dir, "proyecto.json") }
-func (p proyecto) fichaPath() string  { return filepath.Join(p.dir, "PROYECTO.md") }
-
-func (p proyecto) perfil() perfil.Perfil {
-	var pf perfil.Perfil
-	if raw, err := os.ReadFile(p.perfilPath()); err == nil && json.Unmarshal(raw, &pf) == nil && pf.Modo != "" {
-		return pf
-	}
-	return perfil.Detect(p.root)
-}
-
-// rolActual sale de ORQ_ROL (paneles creados por orq) o del panel registrado del Atena.
-func (p proyecto) rolActual() string {
-	if r := os.Getenv("ORQ_ROL"); r != "" {
-		return r
-	}
-	ses, _ := canal.LoadSesiones(p.sesPath())
-	return canal.RolDePane(ses, herdr.CurrentPane())
-}
 
 // ---------- init ----------
 
@@ -63,23 +43,23 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err := p.excluir(); err != nil {
+	if err := p.Excluir(); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	pf := perfil.Detect(p.root)
+	pf := perfil.Detect(p.Root)
 	for _, a := range args {
 		if a == "--modo=mejora" || a == "--modo=nuevo" {
 			pf.Modo = strings.TrimPrefix(a, "--modo=")
 		}
 	}
 	raw, _ := json.MarshalIndent(pf, "", "  ")
-	if err := orqdir.WriteAtomic(p.perfilPath(), raw); err != nil {
+	if err := orqdir.WriteAtomic(p.PerfilPath(), raw); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "modo: %s (%d archivos de código) · stack: %s\n", pf.Modo, pf.Fuentes, strings.Join(append([]string{"-"}, pf.Senales...)[min(1, len(pf.Senales)):], ", "))
-	if nuevas, distintas := instalarSkillsOrq(p.root); len(nuevas)+len(distintas) > 0 {
+	if nuevas, distintas := instalarSkillsOrq(p.Root); len(nuevas)+len(distintas) > 0 {
 		if len(nuevas) > 0 {
 			fmt.Fprintf(stdout, "skills de orq en el repo: %s\n", strings.Join(nuevas, ", "))
 		}
@@ -87,7 +67,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "aviso: %s difiere de la de orq %s; no se pisó\n", strings.Join(distintas, ", "), Version)
 		}
 	}
-	set := filepath.Join(p.root, ".claude", "settings.json")
+	set := filepath.Join(p.Root, ".claude", "settings.json")
 	if _, err := os.Stat(set); os.IsNotExist(err) {
 		os.MkdirAll(filepath.Dir(set), 0o755)
 		os.WriteFile(set, []byte(hookSettings), 0o644)
@@ -112,7 +92,7 @@ func runSkills(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	ls := perfil.Lista(p.perfil())
+	ls := perfil.Lista(p.Perfil())
 	sub := ""
 	if len(args) > 0 {
 		sub = args[0]
@@ -121,19 +101,19 @@ func runSkills(args []string, stdout, stderr io.Writer) int {
 	case "fijar":
 		m := map[string]perfil.Fijada{}
 		for _, s := range ls {
-			if h, err := perfil.HuellaSkill(p.root, s.Nombre); err == nil && perfil.Instalada(p.root, s.Nombre) {
+			if h, err := perfil.HuellaSkill(p.Root, s.Nombre); err == nil && perfil.Instalada(p.Root, s.Nombre) {
 				m[s.Nombre] = perfil.Fijada{Repo: s.Repo, Huella: h, Roles: s.Roles, Adapta: s.Adapta}
 			}
 		}
 		raw, _ := json.MarshalIndent(m, "", "  ")
-		if err := orqdir.WriteAtomic(p.lockPath(), raw); err != nil {
+		if err := orqdir.WriteAtomic(p.LockPath(), raw); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "%d skills fijadas en %s (versión revisada; un cambio se avisará)\n", len(m), p.lockPath())
+		fmt.Fprintf(stdout, "%d skills fijadas en %s (versión revisada; un cambio se avisará)\n", len(m), p.LockPath())
 		return 0
 	case "verificar":
-		ps := perfil.Verificar(p.root, ls, p.fijadas())
+		ps := perfil.Verificar(p.Root, ls, p.Fijadas())
 		for _, x := range ps {
 			fmt.Fprintf(stdout, "%-6s %-32s %s\n", x.Tipo, x.Skill, x.Detalle)
 		}
@@ -183,7 +163,7 @@ func runSkills(args []string, stdout, stderr io.Writer) int {
 	var repos []string
 	for _, s := range ls {
 		mark := "✓"
-		if !perfil.Instalada(p.root, s.Nombre) {
+		if !perfil.Instalada(p.Root, s.Nombre) {
 			mark = "·"
 			if _, ok := porRepo[s.Repo]; !ok {
 				repos = append(repos, s.Repo)
@@ -201,7 +181,7 @@ func runSkills(args []string, stdout, stderr io.Writer) int {
 		}
 		cmd := perfil.ComandoInstalar(repo, miss)
 		c := exec.Command(cmd[0], cmd[1:]...)
-		c.Dir = p.root
+		c.Dir = p.Root
 		if out, err := c.CombinedOutput(); err != nil {
 			fmt.Fprintf(stderr, "falló %s: %v\n%s\n", strings.Join(cmd, " "), err, tail(string(out), 5))
 			return 1
@@ -228,53 +208,13 @@ func tail(s string, n int) string {
 
 // ---------- fase ----------
 
-// fase deduce dónde está el trabajo, sin estado extra: canal, memoria y slice.
-func (p proyecto) fase() (string, string) {
-	ab, _ := p.slices().Abiertos()
-	if len(ab) > 1 {
-		var xs []string
-		for _, e := range ab {
-			xs = append(xs, e.Attempt()+" "+e.Fase)
-		}
-		return "D·Desarrollo", strings.Join(xs, " · ") + " (usa --slice NN)"
-	}
-	if len(ab) == 1 {
-		e := ab[0]
-		switch e.Fase {
-		case slice.Verificado:
-			return "D2·Documentación", e.Attempt() + " verificado: demo con el Owner y cierre"
-		case slice.Integrando, slice.Cerrando:
-			return "D2·Documentación", e.Attempt() + " cierre a medias: repite `orq slice cerrar --aceptado`"
-		case slice.Bloqueado:
-			return "D1·Desarrollo", e.Attempt() + " BLOQUEADO (" + e.Motivo + "): decide reintentar o rechazar"
-		}
-		return "D1·Desarrollo", e.Attempt() + " en rojo: un escritor con TDD, scouts si falta contexto"
-	}
-	ms, _ := canal.Load(p.canalPath())
-	historia := false
-	for _, m := range ms {
-		historia = historia || m.Tipo == "historia"
-	}
-	if !historia {
-		return "T·Traducción", "el Atena entiende con el Owner qué y para qué"
-	}
-	nn := "S-" + p.slices().Siguiente()
-	items, _ := memoria.Load(p.memPath())
-	for _, it := range items {
-		if it.Slice == nn && it.Fuente == "scout" {
-			return "A·Análisis", nn + ": plan corto y examen en rojo"
-		}
-	}
-	return "C·Contexto", nn + ": scouts mapean el proyecto antes de decidir"
-}
-
 func runFase(stdout io.Writer, stderr io.Writer) int {
 	p, err := abrirProyecto()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	f, d := p.fase()
+	f, d := p.Fase()
 	fmt.Fprintf(stdout, "%s · %s\n", f, d)
 	return 0
 }
@@ -286,20 +226,20 @@ func runContexto(stdout, stderr io.Writer) int {
 	if err != nil {
 		return 0 // fuera de un repo el hook no aporta nada y no debe estorbar
 	}
-	if _, err := os.Stat(p.perfilPath()); err != nil {
+	if _, err := os.Stat(p.PerfilPath()); err != nil {
 		return 0 // proyecto sin orq init
 	}
-	rol := p.rolActual()
-	pf := p.perfil()
-	f, d := p.fase()
-	fmt.Fprintf(stdout, "# orq · %s\nRol: %s · modo: %s · fase: %s (%s)\n", filepath.Base(p.root), def(rol, "sin rol"), pf.Modo, f, d)
+	rol := p.RolActual()
+	pf := p.Perfil()
+	f, d := p.Fase()
+	fmt.Fprintf(stdout, "# orq · %s\nRol: %s · modo: %s · fase: %s (%s)\n", filepath.Base(p.Root), def(rol, "sin rol"), pf.Modo, f, d)
 	if rol != "" {
 		fmt.Fprintf(stdout, "Tu guía y tus skills: `orq skill %s`\n", rol)
-		if raw, err := os.ReadFile(p.relevo(rol)); err == nil {
+		if raw, err := os.ReadFile(p.RelevoPath(rol)); err == nil {
 			fmt.Fprintf(stdout, "\n%s\n", strings.TrimSpace(string(raw)))
 		}
 	}
-	items := p.memVigente()
+	items := p.MemVigente()
 	if len(items) > 0 {
 		lines := strings.Split(strings.TrimSpace(memoria.Render(items, "")), "\n")
 		if len(lines) > 25 {
@@ -307,9 +247,9 @@ func runContexto(stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "\n## Memoria\n%s\n", strings.Join(lines, "\n"))
 	}
-	fmt.Fprint(stdout, p.lecciones())
-	if _, err := os.Stat(p.fichaPath()); err == nil {
-		fmt.Fprintf(stdout, "\nFicha del proyecto: %s\n", p.fichaPath())
+	fmt.Fprint(stdout, p.Lecciones())
+	if _, err := os.Stat(p.FichaPath()); err == nil {
+		fmt.Fprintf(stdout, "\nFicha del proyecto: %s\n", p.FichaPath())
 	}
 	return 0
 }
@@ -323,42 +263,17 @@ func def(s, d string) string {
 
 // ---------- doc (fase D2, modelo barato) ----------
 
-const lineasFicha = 60
-
-func (p proyecto) escribirFicha() error {
-	items, _ := memoria.Load(p.memPath())
-	var keep []memoria.Item
-	for _, it := range memoria.Vigentes(items) {
-		if it.Cat != "riesgo" || it.Imp != "baja" {
-			keep = append(keep, it)
-		}
-	}
-	files, _ := exec.Command("git", "-C", p.root, "ls-files").Output()
-	fl := strings.Split(strings.TrimSpace(string(files)), "\n")
-	if len(fl) > 80 {
-		fl = fl[:80]
-	}
-	slices, _ := os.ReadFile(filepath.Join(p.dir, "slices.jsonl"))
-	pf, _ := json.Marshal(p.perfil())
-	md, err := p.escriba().Doc(string(pf), strings.Join(fl, ", "), memoria.Render(keep, ""), string(slices), lineasFicha)
-	if err != nil {
-		return err
-	}
-	head := fmt.Sprintf("# %s · ficha viva\n_Generada por orq el %s con un modelo barato. No editar a mano: corrige la memoria._\n\n", filepath.Base(p.root), time.Now().Format("2006-01-02 15:04"))
-	return orqdir.WriteAtomic(p.fichaPath(), []byte(head+md))
-}
-
 func runDoc(stdout, stderr io.Writer) int {
 	p, err := abrirProyecto()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if err := p.escribirFicha(); err != nil {
+	if err := p.EscribirFicha(); err != nil {
 		fmt.Fprintln(stderr, "orq doc:", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "ficha actualizada: %s\n", p.fichaPath())
+	fmt.Fprintf(stdout, "ficha actualizada: %s\n", p.FichaPath())
 	return 0
 }
 
@@ -371,7 +286,7 @@ func runDoctor(stdout, stderr io.Writer) int {
 		return 1
 	}
 	problemas := 0
-	r := p.slices()
+	r := p.Slices()
 	if h, err := r.Huerfanos(); err == nil {
 		for _, w := range h {
 			problemas++
@@ -383,7 +298,7 @@ func runDoctor(stdout, stderr io.Writer) int {
 		problemas++
 		fmt.Fprintf(stdout, "estado de slices ilegible: %v\n", err)
 	}
-	out, _ := exec.Command("git", "-C", p.root, "branch", "--list", "slice/*", "--merged").Output()
+	out, _ := exec.Command("git", "-C", p.Root, "branch", "--list", "slice/*", "--merged").Output()
 	for _, b := range strings.Fields(strings.ReplaceAll(string(out), "*", "")) {
 		if slices.ContainsFunc(abiertos, func(e *slice.Estado) bool { return e.Rama == b }) {
 			continue
@@ -420,16 +335,16 @@ func runDoctor(stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "%s BLOQUEADO: %s\n", e.Attempt(), e.Motivo)
 		}
 	}
-	ses, _ := canal.LoadSesiones(p.sesPath())
-	if herdr.Inside() {
+	ses, _ := canal.LoadSesiones(p.SesPath())
+	if p.Term.Dentro() {
 		for rol, s := range ses {
-			if _, err := herdr.Run("agent", "get", s.Agente); err != nil {
+			if !p.SesionViva(context.Background(), s) {
 				problemas++
 				fmt.Fprintf(stdout, "la sesión de %s (%s) ya no existe: orq relevo %s\n", rol, s.Agente, rol)
 			}
 		}
 	}
-	items, _ := memoria.Load(p.memPath())
+	items, _ := memoria.Load(p.MemPath())
 	if v := len(memoria.Vigentes(items)); v > memoria.Tope {
 		problemas++
 		fmt.Fprintf(stdout, "memoria con %d líneas (tope %d): orq mem compactar\n", v, memoria.Tope)

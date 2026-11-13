@@ -9,15 +9,13 @@ import (
 	"orq/internal/slice"
 )
 
-func (p proyecto) planPath(nn string) string { return plan.Path(p.dir, nn) }
-
 // planDe carga el plan del slice; nn vacío = el único abierto.
-func (p proyecto) planDe(nn string) (*plan.Plan, string, error) {
-	e, err := p.slices().Load(nn)
+func planDe(p proyecto, nn string) (*plan.Plan, string, error) {
+	e, err := p.Slices().Load(nn)
 	if err != nil || e == nil {
 		return nil, "", fmt.Errorf("no hay slice abierto")
 	}
-	path := p.planPath(e.NN)
+	path := p.PlanPath(e.NN)
 	pl, err := plan.Leer(path)
 	if err != nil {
 		return nil, path, fmt.Errorf("S-%s no tiene plan: orq plan cargar archivo.json", e.NN)
@@ -49,7 +47,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		e, err := p.slices().Load(nn)
+		e, err := p.Slices().Load(nn)
 		if err != nil || e == nil {
 			fmt.Fprintln(stderr, "orq plan: no hay slice abierto; el plan pertenece a un slice")
 			return 1
@@ -65,14 +63,14 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		}
 		pl.Slice = e.NN
 		var kept []string
-		if viejo, err := plan.Leer(p.planPath(e.NN)); err == nil {
+		if viejo, err := plan.Leer(p.PlanPath(e.NN)); err == nil {
 			kept = plan.Conservar(pl, viejo)
 		}
 		if err := plan.Validar(pl, e.Alcance); err != nil {
 			fmt.Fprintf(stderr, "orq plan: el plan no sirve así:\n%s\n", err)
 			return 1
 		}
-		if err := plan.Guardar(p.planPath(e.NN), pl); err != nil {
+		if err := plan.Guardar(p.PlanPath(e.NN), pl); err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
@@ -86,13 +84,13 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			if t.Estado == "pendiente" {
 				continue
 			}
-			if _, err := p.slices().AmpliarZona(e.NN, t.Zona, t.Rutas); err != nil && !strings.Contains(err.Error(), "no tiene worker") {
+			if _, err := p.Slices().AmpliarZona(e.NN, t.Zona, t.Rutas); err != nil && !strings.Contains(err.Error(), "no tiene worker") {
 				fmt.Fprintf(stderr, "aviso: zona %s de %s: %v\n", t.Zona, t.ID, err)
 			}
 		}
 		return 0
 	case "ver":
-		pl, _, err := p.planDe(nn)
+		pl, _, err := planDe(p, nn)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
@@ -104,7 +102,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		pl, path, err := p.planDe(nn)
+		pl, path, err := planDe(p, nn)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
@@ -123,7 +121,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		pl, path, err := p.planDe(nn)
+		pl, path, err := planDe(p, nn)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
@@ -137,12 +135,12 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s vuelve a pendiente; relánzala con orq slice lanzar --tarea %s\n", t.ID, t.ID)
 		return 0
 	case "revisar":
-		pl, _, err := p.planDe(nn)
+		pl, _, err := planDe(p, nn)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		_, a, err := p.slices().Alinear(nn)
+		_, a, err := p.Slices().Alinear(nn)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
@@ -162,7 +160,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "update the plan minimally (orq plan cargar), or tell the Orchestrator it's drift (orq msg send --para orquestador --tipo plan)")
 		return 3
 	case "debatido":
-		pl, path, err := p.planDe(nn)
+		pl, path, err := planDe(p, nn)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1

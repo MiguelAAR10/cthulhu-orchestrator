@@ -17,6 +17,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -27,6 +28,9 @@ type Agente struct {
 	Kind     string `json:"agente,omitempty"` // claude | codex
 	Modelo   string `json:"modelo,omitempty"`
 	Esfuerzo string `json:"esfuerzo,omitempty"`
+	// Entorno son variables de cuenta que el lanzador pone en el panel y que también usa la llamada
+	// sin sesión del escriba: CLAUDE_CONFIG_DIR, CODEX_HOME. Sus valores son rutas, nunca secretos.
+	Entorno map[string]string `json:"entorno,omitempty"`
 }
 
 // Recursos son las reglas con que orq decide cuántos agentes caben en la máquina.
@@ -74,13 +78,13 @@ func Defecto() Config {
 	return Config{
 		Terminal: "herdr",
 		Roles: map[string]Agente{
-			"atena":        {"claude", "opus", "medium"},
-			"orquestador":  {"claude", "sonnet", "medium"},
-			"planificador": {"claude", "opus", "high"},
-			"astra":        {"codex", "gpt-6-astra", "high"},
-			"verificador":  {"claude", "sonnet", "medium"},
-			"scout":        {"claude", "haiku", "medium"},
-			"escriba":      {"claude", "haiku", ""},
+			"atena":        {Kind: "claude", Modelo: "opus", Esfuerzo: "medium"},
+			"orquestador":  {Kind: "claude", Modelo: "sonnet", Esfuerzo: "medium"},
+			"planificador": {Kind: "claude", Modelo: "opus", Esfuerzo: "high"},
+			"astra":        {Kind: "codex", Modelo: "gpt-6-astra", Esfuerzo: "high"},
+			"verificador":  {Kind: "claude", Modelo: "sonnet", Esfuerzo: "medium"},
+			"scout":        {Kind: "claude", Modelo: "haiku", Esfuerzo: "medium"},
+			"escriba":      {Kind: "claude", Modelo: "haiku"},
 		},
 		Workers: map[string]map[string]Agente{
 			"baja":  {"claude": {Modelo: "haiku", Esfuerzo: "medium"}, "codex": {Modelo: "gpt-6-luna", Esfuerzo: "medium"}},
@@ -165,7 +169,50 @@ func CargarDe(rutas ...string) (Config, error) {
 	if err := c.validar(); err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
 	}
+	c.expandirEntornos()
 	return c, nil
+}
+
+var (
+	nombreVar   = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+	pareceClave = regexp.MustCompile(`TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|(^|_)KEY($|_)`)
+)
+
+// validarEntorno: solo variables que apuntan a un directorio de cuenta. Un secreto no vive en este archivo.
+func validarEntorno(donde string, env map[string]string) error {
+	for k, v := range env {
+		switch {
+		case !nombreVar.MatchString(k):
+			return fmt.Errorf("%s.entorno.%s: nombre de variable inválido", donde, k)
+		case pareceClave.MatchString(k):
+			return fmt.Errorf("%s.entorno.%s: parece un secreto; aquí solo van rutas (CLAUDE_CONFIG_DIR, CODEX_HOME). Un secreto no se escribe en la configuración", donde, k)
+		case k == "PATH" || k == "HOME" || strings.HasPrefix(k, "ORQ_") || strings.HasPrefix(k, "LD_"):
+			return fmt.Errorf("%s.entorno.%s: esa variable la pone orq o el sistema", donde, k)
+		case !strings.HasPrefix(v, "/") && !strings.HasPrefix(v, "~/"):
+			return fmt.Errorf("%s.entorno.%s: el valor debe ser una ruta absoluta o ~/…, no %q", donde, k, v)
+		}
+	}
+	return nil
+}
+
+// expandirEntornos resuelve ~/ en las rutas de cuenta.
+func (c *Config) expandirEntornos() {
+	home, _ := os.UserHomeDir()
+	exp := func(env map[string]string) {
+		for k, v := range env {
+			if strings.HasPrefix(v, "~/") && home != "" {
+				env[k] = filepath.Join(home, v[2:])
+			}
+		}
+	}
+	for _, a := range c.Roles {
+		exp(a.Entorno)
+	}
+	for _, porKind := range c.Workers {
+		for _, a := range porKind {
+			exp(a.Entorno)
+		}
+	}
 }
 
 func generico(v any) (map[string]any, error) {
@@ -229,6 +276,9 @@ func (c Config) validar() error {
 		if strings.TrimSpace(a.Modelo) == "" {
 			return fmt.Errorf("roles.%s.modelo vacío", rol)
 		}
+		if err := validarEntorno("roles."+rol, a.Entorno); err != nil {
+			return err
+		}
 	}
 	for _, rol := range Roles {
 		if _, ok := c.Roles[rol]; !ok {
@@ -248,6 +298,9 @@ func (c Config) validar() error {
 			}
 			if strings.TrimSpace(a.Modelo) == "" || strings.TrimSpace(a.Esfuerzo) == "" {
 				return fmt.Errorf("workers.%s.%s: faltan modelo o esfuerzo", dif, kind)
+			}
+			if err := validarEntorno("workers."+dif+"."+kind, a.Entorno); err != nil {
+				return err
 			}
 		}
 	}
@@ -283,8 +336,15 @@ func (c Config) ParaRol(rol string, pedido Agente) Agente {
 	if a.Kind == "" {
 		a.Kind = d.Kind
 	}
-	if a.Kind != d.Kind && a.Modelo == "" {
-		a.Modelo = c.Workers["alta"][a.Kind].Modelo
+	if a.Kind != d.Kind { // otro agente que el del rol: su modelo y su cuenta, no los del rol
+		if a.Modelo == "" {
+			a.Modelo = c.Workers["alta"][a.Kind].Modelo
+		}
+		if a.Entorno == nil {
+			a.Entorno = c.Workers["alta"][a.Kind].Entorno
+		}
+	} else if a.Entorno == nil {
+		a.Entorno = d.Entorno
 	}
 	if a.Modelo == "" {
 		a.Modelo = d.Modelo
@@ -302,6 +362,31 @@ func (c Config) Worker(kind, dificultad string) (modelo, esfuerzo string) {
 	}
 	a := c.Workers[dificultad][kind]
 	return a.Modelo, a.Esfuerzo
+}
+
+// WorkerEntorno son las variables de cuenta de un worker de ese agente y dificultad.
+func (c Config) WorkerEntorno(kind, dificultad string) map[string]string {
+	if dificultad == "" {
+		dificultad = "media"
+	}
+	return c.Workers[dificultad][kind].Entorno
+}
+
+// Cuenta describe en una línea con qué cuenta corre un agente: sus variables, o la del entorno de quien lanza.
+func Cuenta(env map[string]string) string {
+	if len(env) == 0 {
+		return "la del entorno de quien lanza"
+	}
+	ks := make([]string, 0, len(env))
+	for k := range env {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	var xs []string
+	for _, k := range ks {
+		xs = append(xs, k+"="+env[k])
+	}
+	return strings.Join(xs, " ")
 }
 
 // Linea es un valor efectivo y su origen, para `orq config ver`.

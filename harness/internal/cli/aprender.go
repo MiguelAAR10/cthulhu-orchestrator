@@ -4,33 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"orq/internal/instinto"
 )
-
-func (p proyecto) instPath() string { return filepath.Join(p.dir, "instintos.json") }
-
-// aprenderSolo registra una lección sin frenar el comando que la produjo.
-func (p proyecto) aprenderSolo(texto, fuente, evidencia string) {
-	instinto.Aprender(p.instPath(), recortar(texto, instinto.MaxTexto), fuente, evidencia, time.Now())
-}
-
-// lecciones es lo que entra al arrancar: pocas, confiables, del proyecto y globales.
-func (p proyecto) lecciones() string {
-	top := instinto.Top(instinto.Inyectar, p.instPath(), instinto.Global())
-	if len(top) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("\n## Lecciones aprendidas (aplícalas; si una falla: orq aprender refutar ID)\n")
-	for _, x := range top {
-		fmt.Fprintf(&b, "- [%s %.2f] %s\n", x.ID, x.Conf, x.Texto)
-	}
-	return b.String()
-}
 
 func runAprender(args []string, stdout, stderr io.Writer) int {
 	p, err := abrirProyecto()
@@ -38,7 +16,7 @@ func runAprender(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	path := p.instPath()
+	path := p.InstPath()
 	if len(args) > 0 && args[0] == "--global" {
 		path, args = instinto.Global(), args[1:]
 	}
@@ -106,7 +84,7 @@ func runAprender(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		g, err := instinto.Promover(p.instPath(), instinto.Global(), args[1], time.Now())
+		g, err := instinto.Promover(p.InstPath(), instinto.Global(), args[1], time.Now())
 		if err != nil {
 			fmt.Fprintln(stderr, "orq aprender:", err)
 			return 1
@@ -148,12 +126,12 @@ func runAlinear(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 2 && args[0] == "--slice" {
 		nn = strings.TrimPrefix(args[1], "S-")
 	}
-	return p.alinear(nn, stdout, stderr)
+	return alinear(p, nn, stdout, stderr)
 }
 
 // alinear devuelve 3 si hay desvío: el Orquestador debe preguntar al Atena antes de seguir.
-func (p proyecto) alinear(nn string, stdout, stderr io.Writer) int {
-	e, a, err := p.slices().Alinear(nn)
+func alinear(p proyecto, nn string, stdout, stderr io.Writer) int {
+	e, a, err := p.Slices().Alinear(nn)
 	if err != nil {
 		fmt.Fprintln(stderr, "orq alinear:", err)
 		return 1
@@ -168,7 +146,7 @@ func (p proyecto) alinear(nn string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "Antes de seguir, pregunta al Atena:\n  orq msg send --para atena --tipo pregunta \"%s toca %s. ¿Esto sirve al objetivo o nos desviamos?\"\n",
 		e.Attempt(), strings.Join(cabeza(a.Fuera, 3), ", "))
-	p.aprenderSolo("Antes de tocar fuera del alcance de la historia, preguntar al Atena", "alineacion", e.Attempt())
+	p.AprenderSolo("Antes de tocar fuera del alcance de la historia, preguntar al Atena", "alineacion", e.Attempt())
 	return 3
 }
 

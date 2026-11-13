@@ -28,7 +28,7 @@ func runMetricas(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 	}
-	m := p.slices().Metricas(desde)
+	m := p.Slices().Metricas(desde)
 	if jsonOut {
 		raw, _ := json.MarshalIndent(m, "", "  ")
 		fmt.Fprintln(stdout, string(raw))

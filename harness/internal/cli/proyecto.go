@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -9,78 +10,23 @@ import (
 	"orq/internal/plan"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"orq/internal/app"
 	"orq/internal/canal"
 	"orq/internal/config"
-	"orq/internal/escriba"
-	"orq/internal/herdr"
-	"orq/internal/limits"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
 	"orq/internal/slice"
 	"orq/internal/state"
+	"orq/internal/terminal"
 )
 
-type proyecto struct {
-	root, dir string
-	cfg       config.Config
-}
+type proyecto = app.Proyecto
 
-func abrirProyecto() (proyecto, error) {
-	root, err := orqdir.Root()
-	if err != nil {
-		return proyecto{}, errors.New("orq: no estás dentro de un repositorio git")
-	}
-	dir, err := orqdir.Dir()
-	if err != nil {
-		return proyecto{}, err
-	}
-	// Una configuración mal escrita detiene el comando: no se adivina qué quiso decir.
-	cfg, err := config.Cargar(root)
-	if err != nil {
-		return proyecto{}, fmt.Errorf("orq: %w. Revísala con `orq config ver`", err)
-	}
-	return proyecto{root: root, dir: dir, cfg: cfg}, nil
-}
-
-func (p proyecto) memPath() string        { return filepath.Join(p.dir, "memoria.jsonl") }
-func (p proyecto) canalPath() string      { return filepath.Join(p.dir, "canal.jsonl") }
-func (p proyecto) sesPath() string        { return filepath.Join(p.dir, "sesiones.json") }
-func (p proyecto) relevo(r string) string { return filepath.Join(p.dir, "relevo-"+r+".md") }
-
-func (p proyecto) slices() slice.Repo {
-	home, _ := os.UserHomeDir()
-	base := os.Getenv("ORQ_WORKTREES")
-	if base == "" {
-		base = filepath.Join(home, "worktrees")
-	}
-	r := slice.Repo{Root: p.root, OrqDir: p.dir, Worktree: base}
-	if l, err := limits.Load(limits.DefaultPath()); err == nil {
-		r.MaxSlices = l.MaxSlices
-	}
-	return r
-}
-
-// excluir deja .orq fuera de git sin tocar archivos versionados del proyecto.
-func (p proyecto) excluir() error {
-	path := filepath.Join(p.root, ".git", "info", "exclude")
-	raw, _ := os.ReadFile(path)
-	if strings.Contains(string(raw), "/.orq/") {
-		return nil
-	}
-	os.MkdirAll(filepath.Dir(path), 0o755)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = f.WriteString("/.orq/\n")
-	return err
-}
+func abrirProyecto() (proyecto, error) { return app.Abrir() }
 
 func texto(args []string, stdin io.Reader) string {
 	if len(args) == 1 && args[0] == "-" {
@@ -116,7 +62,7 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if fs.Parse(args[1:]) != nil {
 			return 1
 		}
-		it, n, err := memoria.Add(p.memPath(), memoria.Item{Imp: *imp, Cat: *cat, Fuente: *fuente, Slice: *sl, Tipo: *tipo, Evidencia: *ev, Vence: *vence, Reemplaza: *reemplaza, Texto: texto(fs.Args(), stdin)}, time.Now())
+		it, n, err := memoria.Add(p.MemPath(), memoria.Item{Imp: *imp, Cat: *cat, Fuente: *fuente, Slice: *sl, Tipo: *tipo, Evidencia: *ev, Vence: *vence, Reemplaza: *reemplaza, Texto: texto(fs.Args(), stdin)}, time.Now())
 		if err != nil {
 			fmt.Fprintln(stderr, "orq mem:", err)
 			return 1
@@ -132,7 +78,7 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if fs.Parse(args[1:]) != nil {
 			return 1
 		}
-		items, err := memoria.Load(p.memPath())
+		items, err := memoria.Load(p.MemPath())
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -145,18 +91,18 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	case "compactar":
 		// Con el candado tomado, nadie agrega líneas que el resumen borraría.
-		soltar, err := orqdir.Candado(p.memPath())
+		soltar, err := orqdir.Candado(p.MemPath())
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
 		defer soltar()
-		items, err := memoria.Load(p.memPath())
+		items, err := memoria.Load(p.MemPath())
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		res, err := memoria.Compact(items, memoria.Tope*2/3, p.escriba().Compactar, time.Now())
+		res, err := memoria.Compact(items, memoria.Tope*2/3, p.Escriba().Compactar, time.Now())
 		if err != nil {
 			fmt.Fprintln(stderr, "orq mem:", err)
 			return 1
@@ -165,10 +111,10 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "%d líneas: no hace falta compactar\n", len(items))
 			return 0
 		}
-		bak := p.memPath() + ".antes"
-		raw, _ := os.ReadFile(p.memPath())
+		bak := p.MemPath() + ".antes"
+		raw, _ := os.ReadFile(p.MemPath())
 		os.WriteFile(bak, raw, 0o644)
-		if err := memoria.Save(p.memPath(), res); err != nil {
+		if err := memoria.Save(p.MemPath(), res); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
@@ -190,7 +136,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		args = []string{"leer"}
 	}
-	ses, err := canal.LoadSesiones(p.sesPath())
+	ses, err := canal.LoadSesiones(p.SesPath())
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -212,15 +158,15 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			*de = os.Getenv("ORQ_ROL")
 		}
 		if *de == "" {
-			*de = canal.RolDePane(ses, herdr.CurrentPane())
+			*de = canal.RolDePane(ses, p.Term.PanelActual())
 		}
 		m := canal.Msg{TS: time.Now().UTC().Truncate(time.Second), De: *de, Para: *para, Tipo: *tipo, Texto: texto(fs.Args(), stdin), Ref: *ref, Clave: *clave}
 		var e *slice.Estado
 		var errSlice error
 		if strings.HasPrefix(*intento, "S-") {
-			e, errSlice = p.slices().Load(strings.SplitN(*intento, "/", 2)[0])
+			e, errSlice = p.Slices().Load(strings.SplitN(*intento, "/", 2)[0])
 		} else {
-			e, errSlice = p.slices().Load()
+			e, errSlice = p.Slices().Load()
 		}
 		if errSlice != nil && m.Tipo == "cierre" {
 			fmt.Fprintf(stderr, "orq msg: %v. Un cierre debe decir su intento completo: --intento S-NN/aK\n", errSlice)
@@ -244,7 +190,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				}
 			}
 		}
-		if err := canal.Append(p.canalPath(), &m); errors.Is(err, canal.ErrDuplicado) {
+		if err := canal.Append(p.CanalPath(), &m); errors.Is(err, canal.ErrDuplicado) {
 			fmt.Fprintf(stdout, "ya estaba guardado como %s (%s); no se repite\n", m.ID, m.Estado)
 			return 0
 		} else if err != nil {
@@ -256,19 +202,19 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "guardado como %s, pendiente; %s aún no tiene sesión (orq up)\n", m.ID, *para)
 			return 0
 		}
-		if err := herdr.Prompt(dest.Agente, m.Format()); err != nil {
-			if errors.Is(err, herdr.ErrTimeout) {
-				fmt.Fprintf(stderr, "%s guardado; herdr no respondió: puede haber llegado o no. Revisa y usa `orq msg reconciliar`, no lo reenvíes a ciegas\n", m.ID)
+		if err := p.Term.Avisar(context.Background(), dest.Agente, m.Format()); err != nil {
+			if errors.Is(err, terminal.ErrDesconocido) {
+				fmt.Fprintf(stderr, "%s guardado; el terminal no respondió: puede haber llegado o no. Revisa y usa `orq msg reconciliar`, no lo reenvíes a ciegas\n", m.ID)
 			} else {
 				fmt.Fprintf(stderr, "%s guardado, pero no se pudo entregar a %s: %v\n", m.ID, dest.Agente, err)
 			}
 			return 4
 		}
-		canal.MarcarEntregado(p.canalPath(), m.ID, time.Now())
+		canal.MarcarEntregado(p.CanalPath(), m.ID, time.Now())
 		fmt.Fprintf(stdout, "entregado a %s\n", dest.Agente)
 		return 0
 	case "reconciliar":
-		ms, err := canal.Load(p.canalPath())
+		ms, err := canal.Load(p.CanalPath())
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -284,11 +230,11 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 					fmt.Fprintf(stderr, "%s no tiene sesión\n", m.Para)
 					return 1
 				}
-				if err := herdr.Prompt(dest.Agente, m.Format()); err != nil {
+				if err := p.Term.Avisar(context.Background(), dest.Agente, m.Format()); err != nil {
 					fmt.Fprintln(stderr, err)
 					return 4
 				}
-				canal.MarcarEntregado(p.canalPath(), m.ID, time.Now())
+				canal.MarcarEntregado(p.CanalPath(), m.ID, time.Now())
 				fmt.Fprintf(stdout, "%s reenviado y entregado\n", m.ID)
 				return 0
 			}
@@ -300,7 +246,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 0
 		}
 		for _, m := range pend {
-			fmt.Fprintf(stdout, "%s %s→%s %s %s: %s\n", m.ID, m.De, m.Para, m.Tipo, m.Attempt, recortar(m.Texto, 80))
+			fmt.Fprintf(stdout, "%s %s→%s %s %s: %s\n", m.ID, m.De, m.Para, m.Tipo, m.Attempt, app.Recortar(m.Texto, 80))
 		}
 		fmt.Fprintln(stdout, "si el destino no lo recibió: orq msg reconciliar --reenviar ID")
 		return 3
@@ -310,7 +256,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if fs.Parse(args[1:]) != nil {
 			return 1
 		}
-		ms, err := canal.Load(p.canalPath())
+		ms, err := canal.Load(p.CanalPath())
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -329,84 +275,13 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 // ---------- up y relevo ----------
 
-type arranque struct {
-	kind, modelo, esfuerzo string
-}
-
-func flagsArranque(fs *flag.FlagSet) *arranque {
-	a := &arranque{}
-	fs.StringVar(&a.kind, "kind", "", "agente de herdr: claude|codex (por defecto, el del rol)")
-	fs.StringVar(&a.modelo, "modelo", "", "modelo (por defecto, el del rol)")
-	fs.StringVar(&a.esfuerzo, "esfuerzo", "", "esfuerzo (por defecto, el del rol)")
+// flagsArranque: lo que estas banderas no fijan sale de la configuración (`orq config ver`).
+func flagsArranque(fs *flag.FlagSet) *config.Agente {
+	a := &config.Agente{}
+	fs.StringVar(&a.Kind, "kind", "", "agente: claude|codex (por defecto, el del rol)")
+	fs.StringVar(&a.Modelo, "modelo", "", "modelo (por defecto, el del rol)")
+	fs.StringVar(&a.Esfuerzo, "esfuerzo", "", "esfuerzo (por defecto, el del rol)")
 	return a
-}
-
-// completar toma de la configuración lo que las banderas no fijaron (`orq config ver`).
-func (a *arranque) completar(c config.Config, rol string) {
-	x := c.ParaRol(rol, config.Agente{Kind: a.kind, Modelo: a.modelo, Esfuerzo: a.esfuerzo})
-	a.kind, a.modelo, a.esfuerzo = x.Kind, x.Modelo, x.Esfuerzo
-}
-
-// escriba es el modelo barato configurado para resumir memoria, relevos y la ficha.
-func (p proyecto) escriba() escriba.Escriba { return escriba.Nuevo(p.cfg.Rol("escriba").Modelo) }
-
-// agentArgs traduce modelo y esfuerzo a cada CLI.
-func agentArgs(kind, modelo, esfuerzo, name string) []string {
-	if kind == "codex" {
-		return []string{"-m", modelo, "-c", "model_reasoning_effort=" + esfuerzo}
-	}
-	return []string{"--model", modelo, "--effort", esfuerzo, "-n", name}
-}
-
-// etiqueta es el nombre tipado de la pestaña de cada rol: «<rol> · <proyecto>».
-func etiqueta(rol string, p proyecto) string {
-	return map[string]string{"orquestador": "orq", "planificador": "plan", "astra": "plan"}[rol] + " · " + orqdir.Slug(p.root)
-}
-
-const arranqueRol = `You are the %[1]s of orq in this repository. Load skill %[2]s and run "orq skill %[1]s".
-Read first: .orq/relevo-%[1]s.md if it exists, then "orq mem ver".
-Talk to other roles only via "orq msg send". Then wait for instructions.`
-
-func skillDe(rol string) string {
-	switch rol {
-	case "atena":
-		return "orq-atena"
-	case "planificador", "astra":
-		return "orq-planner"
-	}
-	return "orq-orchestrator"
-}
-
-// lanzar abre un panel con el rol, lo nombra y le da el arranque.
-func lanzar(p proyecto, ses map[string]canal.Sesion, rol string, a *arranque) (canal.Sesion, error) {
-	gen := ses[rol].Gen + 1
-	name := rol + "-" + orqdir.Slug(p.root)
-	if gen > 1 {
-		name = fmt.Sprintf("%s-%d", name, gen)
-	}
-	a.completar(p.cfg, rol)
-	env := map[string]string{"ORQ_ROL": rol}
-	// Distribución fija: orq en su pestaña, plan en la suya; Astra al lado del Planificador.
-	var tab, pane string
-	var err error
-	if pl, ok := ses["planificador"]; rol == "astra" && ok && pl.Pane != "" {
-		tab = pl.Tab
-		pane, err = herdr.SplitDe(pl.Pane, p.root, env)
-	} else {
-		tab, pane, err = herdr.Tab(etiqueta(rol, p), p.root, env)
-	}
-	if err != nil {
-		return canal.Sesion{}, err
-	}
-	if err := herdr.Start(name, a.kind, pane, rolArgs(a.kind, a.modelo, a.esfuerzo, name, p.root)); err != nil {
-		return canal.Sesion{}, fmt.Errorf("%v (el panel %s quedó abierto)", err, pane)
-	}
-	s := canal.Sesion{Agente: name, Pane: pane, Tab: tab, Desde: time.Now().UTC().Truncate(time.Second), Gen: gen}
-	ses[rol] = s
-	if err := canal.SaveSesiones(p.sesPath(), ses); err != nil {
-		return s, err
-	}
-	return s, herdr.Prompt(name, fmt.Sprintf(arranqueRol, rol, skillDe(rol)))
 }
 
 func runUp(args []string, stdout, stderr io.Writer) int {
@@ -416,43 +291,28 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 	if fs.Parse(args) != nil {
 		return 1
 	}
-	if !herdr.Inside() {
-		fmt.Fprintln(stderr, "orq up: corre esto desde un panel de herdr (falta HERDR_ENV). Orca llegará después.")
+	p, err := abrirProyecto()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err := p.Dentro(); err != nil {
+		fmt.Fprintln(stderr, "orq up:", err)
 		return 1
 	}
 	if reason, halted := state.ReadHalt(state.Dir()); halted {
 		fmt.Fprintf(stderr, "orq up: HALT activo (%s). Libera espacio y `orq halt --clear`.\n", reason)
 		return 2
 	}
-	p, err := abrirProyecto()
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
+	atena, o, aviso, err := p.Subir(context.Background(), *a)
+	if aviso != nil {
+		fmt.Fprintln(stderr, "aviso:", aviso)
 	}
-	if err := p.excluir(); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	ses, err := canal.LoadSesiones(p.sesPath())
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	if o, ok := ses["orquestador"]; ok {
-		fmt.Fprintf(stderr, "ya hay orquestador (%s, panel %s). Para una sesión fresca: orq relevo orquestador\n", o.Agente, o.Pane)
-		return 1
-	}
-	fname := "atena-" + orqdir.Slug(p.root)
-	if err := herdr.Rename(herdr.CurrentPane(), fname); err != nil {
-		fmt.Fprintf(stderr, "aviso: no se pudo nombrar este panel como %s (%v)\n", fname, err)
-	}
-	ses["atena"] = canal.Sesion{Agente: fname, Pane: herdr.CurrentPane(), Desde: time.Now().UTC().Truncate(time.Second), Gen: 1}
-	o, err := lanzar(p, ses, "orquestador", a)
 	if err != nil {
 		fmt.Fprintln(stderr, "orq up:", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "atena: %s (this pane)\norquestador: %s (tab %q, pane %s)\nlayout: %s\nTalk: orq msg send --para <rol> --tipo <tipo> \"...\"\n", fname, o.Agente, etiqueta("orquestador", p), o.Pane, layout)
+	fmt.Fprintf(stdout, "atena: %s (this pane)\norquestador: %s (tab %q, pane %s)\nlayout: %s\nTalk: orq msg send --para <rol> --tipo <tipo> \"...\"\n", atena, o.Agente, p.Etiqueta("orquestador"), o.Pane, app.Layout)
 	return 0
 }
 
@@ -470,7 +330,7 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 	}
 	p, err := abrirProyecto()
 	if *auto {
-		if err != nil || p.rolActual() == "" {
+		if err != nil || p.RolActual() == "" {
 			return 0
 		}
 		*soloArchivo = true
@@ -480,57 +340,57 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 	}
 	rol := fs.Arg(0)
 	if *auto {
-		rol = p.rolActual()
+		rol = p.RolActual()
 	}
 	if !slices.Contains(canal.Roles, rol) {
 		fmt.Fprintln(stderr, "uso: orq relevo [--solo-archivo] atena|orquestador")
 		return 1
 	}
-	ses, _ := canal.LoadSesiones(p.sesPath())
+	ses, _ := canal.LoadSesiones(p.SesPath())
 	// Una sola sesión por rol: si la anterior relevo ya abrió una sesión que sigue viva, no se abre otra.
-	if prev, ok := ses[rol]; ok && !*soloArchivo && !*forzar && prev.Gen > 1 && time.Since(prev.Desde) < 15*time.Minute && herdr.Inside() {
-		if _, err := herdr.Run("agent", "get", prev.Agente); err == nil {
+	if prev, ok := ses[rol]; ok && !*soloArchivo && !*forzar && prev.Gen > 1 && time.Since(prev.Desde) < 15*time.Minute && p.Term.Dentro() {
+		if p.SesionViva(context.Background(), prev) {
 			fmt.Fprintf(stderr, "orq relevo: %s ya tiene una sesión nueva viva (%s, hace %s). No se abre otra; usa --forzar si de verdad hace falta\n", rol, prev.Agente, time.Since(prev.Desde).Round(time.Second))
 			return 1
 		}
 	}
-	rv := p.datosRelevo(rol)
+	rv := p.DatosRelevo(rol)
 	var msgs strings.Builder
-	ms, _ := canal.Load(p.canalPath())
+	ms, _ := canal.Load(p.CanalPath())
 	for _, m := range ms[max(0, len(ms)-15):] {
 		if m.De == rol || m.Para == rol {
 			fmt.Fprintf(&msgs, "%s %s→%s [%s] %s\n", m.ID, m.De, m.Para, m.Tipo, m.Texto)
 		}
 	}
 	est, _ := json.Marshal(rv)
-	ahora, err := p.escriba().Relevo(rol, memoria.Render(p.memVigente(), ""), string(est), msgs.String(), lineasRelevo)
+	ahora, err := p.Escriba().Relevo(rol, memoria.Render(p.MemVigente(), ""), string(est), msgs.String(), lineasRelevo)
 	if err != nil {
 		ahora = ""
 		fmt.Fprintf(stderr, "aviso: sin resumen del escriba (%v); el relevo lleva solo datos comprobados\n", err)
 	}
 	md := rv.Markdown(time.Now().Format("2006-01-02 15:04"), ahora)
-	if err := orqdir.WriteAtomic(p.relevo(rol), []byte(md)); err != nil {
+	if err := orqdir.WriteAtomic(p.RelevoPath(rol), []byte(md)); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	orqdir.WriteAtomic(strings.TrimSuffix(p.relevo(rol), ".md")+".json", est)
-	fmt.Fprintf(stdout, "relevo escrito: %s (%d líneas)\n", p.relevo(rol), strings.Count(md, "\n"))
+	orqdir.WriteAtomic(strings.TrimSuffix(p.RelevoPath(rol), ".md")+".json", est)
+	fmt.Fprintf(stdout, "relevo escrito: %s (%d líneas)\n", p.RelevoPath(rol), strings.Count(md, "\n"))
 	if *soloArchivo {
 		return 0
 	}
-	if !herdr.Inside() {
-		fmt.Fprintln(stdout, "fuera de herdr: abre una sesión nueva y pídele que lea ese archivo.")
+	if !p.Term.Dentro() {
+		fmt.Fprintf(stdout, "fuera de %s: abre una sesión nueva y pídele que lea ese archivo.\n", p.Term.Nombre())
 		return 0
 	}
 	viejo := ses[rol]
-	nuevo, err := lanzar(p, ses, rol, a)
+	nuevo, _, err := p.LanzarRol(context.Background(), ses, rol, *a)
 	if err != nil {
 		fmt.Fprintln(stderr, "orq relevo:", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "sesión nueva: %s (panel %s). Los mensajes ya van a ella.\n", nuevo.Agente, nuevo.Pane)
 	if viejo.Pane != "" {
-		fmt.Fprintf(stdout, "La sesión anterior (%s) ya puede cerrarse: herdr pane close %s\n", viejo.Agente, viejo.Pane)
+		fmt.Fprintf(stdout, "La sesión anterior (%s, panel %s) ya puede cerrarse.\n", viejo.Agente, viejo.Pane)
 	}
 	return 0
 }
@@ -543,7 +403,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	r := p.slices()
+	r := p.Slices()
 	nn := ""
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--slice" && i+1 < len(args) {
@@ -592,7 +452,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "uso: orq slice abrir NN --titulo \"...\" --test ruta --cmd \"...\" (--reporte f --formato tap|junit|gotest-json | --sin-conteo \"motivo\") [--bundle a,b] [--sano \"cmd\"] [--permite-omitir] [--en-sitio \"motivo\"] [--ruta fix|slice] [--timeout s] [--sin-scouts \"motivo\"]")
 			return 1
 		}
-		if *sinScouts == "" && !hayContexto(p, "S-"+args[1]) {
+		if *sinScouts == "" && !p.HayContexto("S-"+args[1]) {
 			fmt.Fprintf(stderr, "orq slice: C·Contexto antes de A·Análisis. Guarda los criterios de los scouts con `orq mem add --fuente scout --cat tecnico --slice S-%s ...`, o abre con --sin-scouts \"motivo\".\n", args[1])
 			return 1
 		}
@@ -656,8 +516,8 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
-			Texto: recortar(fmt.Sprintf("%s alcance + %s (%s)", e.ID(), args[1], *aprobado), memoria.MaxTexto)}, time.Now())
+		memoria.Add(p.MemPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+			Texto: app.Recortar(fmt.Sprintf("%s alcance + %s (%s)", e.ID(), args[1], *aprobado), memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s: alcance %s\n", e.ID(), strings.Join(e.Alcance, ", "))
 		return 0
 	case "verificar":
@@ -687,7 +547,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "  nota: %s\n", e.Recibo.Nota)
 		}
 		fmt.Fprintln(stdout, "  recibo: orq slice recibo · falta la demo del Owner")
-		if p.alinear(e.NN, stdout, stderr) == 3 {
+		if alinear(p, e.NN, stdout, stderr) == 3 {
 			fmt.Fprintln(stdout, "  verde, pero desalineado: resuelve la pregunta con el Atena antes del cierre")
 		}
 		return 0
@@ -711,8 +571,8 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
-			Texto: recortar(e.Attempt()+" sube de fix a slice: "+motivo, memoria.MaxTexto)}, time.Now())
+		memoria.Add(p.MemPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+			Texto: app.Recortar(e.Attempt()+" sube de fix a slice: "+motivo, memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s sube a la ruta slice (%s). Sigue el flujo completo desde el Planificador: plan, Astra, orq plan cargar, equipo. El rojo y los commits se quedan\n", e.Attempt(), motivo)
 		return 0
 	case "rehuella":
@@ -726,8 +586,8 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
-			Texto: recortar(e.Attempt()+" huella reparada: "+motivo, memoria.MaxTexto)}, time.Now())
+		memoria.Add(p.MemPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+			Texto: app.Recortar(e.Attempt()+" huella reparada: "+motivo, memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s: huella tomada del rojo (%s), el examen es idéntico. Vuelve a verificar\n", e.Attempt(), e.SHARojo[:7])
 		return 0
 	case "reabrir":
@@ -741,8 +601,8 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
-			Texto: recortar(e.Attempt()+" reabierto: "+motivo, memoria.MaxTexto)}, time.Now())
+		memoria.Add(p.MemPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+			Texto: app.Recortar(e.Attempt()+" reabierto: "+motivo, memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s reabierto en el mismo worktree, con su trabajo. El recibo ya no vale: lanza la reparación y vuelve a verificar\n", e.Attempt())
 		return 0
 	case "reintentar":
@@ -765,9 +625,9 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		memoria.Add(p.memPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
-			Texto: recortar(e.Attempt()+": "+strings.Join(args[1:], " "), memoria.MaxTexto)}, time.Now())
-		p.aprenderSolo(strings.Join(resto, " "), "reintento", e.Attempt())
+		memoria.Add(p.MemPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
+			Texto: app.Recortar(e.Attempt()+": "+strings.Join(args[1:], " "), memoria.MaxTexto)}, time.Now())
+		p.AprenderSolo(strings.Join(resto, " "), "reintento", e.Attempt())
 		fmt.Fprintf(stdout, "%s abierto en el mismo worktree. Recibos anteriores ya no valen. Asigna escritor: orq slice tomar <quien>\n", e.Attempt())
 		return 0
 	case "cerrar":
@@ -793,25 +653,25 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "en cuarentena (no se borró, revísalo): %s\n", strings.Join(cuarentena, ", "))
 		}
 		mem := memoria.Item{Imp: "media", Cat: "aprendizaje", Fuente: "orquestador", Slice: "S-" + reg.NN,
-			Texto: recortar(fmt.Sprintf("S-%s %s: %s", reg.NN, reg.Result, reg.Titulo), memoria.MaxTexto)}
+			Texto: app.Recortar(fmt.Sprintf("S-%s %s: %s", reg.NN, reg.Result, reg.Titulo), memoria.MaxTexto)}
 		if !*ok {
 			mem.Imp, mem.Cat, mem.Fuente = "critica", "requisito", "owner"
-			mem.Texto = recortar(fmt.Sprintf("Rechazo de S-%s: %s", reg.NN, *motivo), memoria.MaxTexto)
-			p.aprenderSolo("El Owner rechazó: "+*motivo, "rechazo", "S-"+reg.NN)
+			mem.Texto = app.Recortar(fmt.Sprintf("Rechazo de S-%s: %s", reg.NN, *motivo), memoria.MaxTexto)
+			p.AprenderSolo("El Owner rechazó: "+*motivo, "rechazo", "S-"+reg.NN)
 		}
-		memoria.Add(p.memPath(), mem, time.Now())
-		os.Remove(p.canalPath())
-		os.Remove(p.planPath(reg.NN))
+		memoria.Add(p.MemPath(), mem, time.Now())
+		os.Remove(p.CanalPath())
+		os.Remove(p.PlanPath(reg.NN))
 		// Higiene: los paneles de los workers de este slice ya no tienen trabajo.
-		if ses, err := canal.LoadSesiones(p.sesPath()); err == nil {
-			if c, _ := p.cerrarSesiones(ses, func(k string) bool { return strings.HasPrefix(k, "worker-") && strings.HasSuffix(k, "-s"+reg.NN) }); len(c) > 0 {
+		if ses, err := canal.LoadSesiones(p.SesPath()); err == nil {
+			if c, _ := p.CerrarSesiones(context.Background(), ses, func(k string) bool { return strings.HasPrefix(k, "worker-") && strings.HasSuffix(k, "-s"+reg.NN) }); len(c) > 0 {
 				fmt.Fprintf(stdout, "paneles cerrados: %s\n", strings.Join(c, ", "))
 			}
 		}
-		if err := p.escribirFicha(); err != nil {
+		if err := p.EscribirFicha(); err != nil {
 			fmt.Fprintf(stdout, "aviso: la ficha del proyecto no se actualizó (%v)\n", err)
 		} else {
-			fmt.Fprintf(stdout, "ficha del proyecto actualizada: %s\n", p.fichaPath())
+			fmt.Fprintf(stdout, "ficha del proyecto actualizada: %s\n", p.FichaPath())
 		}
 		fmt.Fprintf(stdout, "S-%s cerrado como %s. Canal limpio; memoria actualizada.\n", reg.NN, reg.Result)
 		if !*ok {
@@ -838,10 +698,18 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 				rs = append(rs, x)
 			}
 		}
-		nombre, err := p.lanzarWorker(nn, *agente, *zona, rs, *alcance, *suite, *pres, *dif, *tarea)
+		nombre, ya, err := p.LanzarWorker(context.Background(), app.PedidoWorker{Slice: nn, Agente: *agente, Zona: *zona, Rutas: rs,
+			Alcance: *alcance, Suite: *suite, Presupuesto: *pres, Dificultad: *dif, Tarea: *tarea})
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
+			if errors.Is(err, terminal.ErrDesconocido) {
+				return 4 // desconocido: mirar el panel y repetir el mismo comando; no lanza dos veces
+			}
 			return 1
+		}
+		if ya {
+			fmt.Fprintf(stdout, "%s ya estaba trabajando con su contrato; no se lanzó otro.\n", nombre)
+			return 0
 		}
 		fmt.Fprintf(stdout, "%s trabajando en su worktree con el contrato. Mira el avance con `orq slice estado`.\n", nombre)
 		return 0
@@ -885,19 +753,19 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		fmt.Fprintf(stdout, "%s: equipo juntado en %s. Siguiente: orq slice verificar --slice %s\n", e.Attempt(), e.Worktree, e.NN)
-		p.alinear(e.NN, stdout, stderr)
-		if pl, err := plan.Leer(p.planPath(e.NN)); err == nil {
+		alinear(p, e.NN, stdout, stderr)
+		if pl, err := plan.Leer(p.PlanPath(e.NN)); err == nil {
 			listas, _ := plan.Listas(pl)
 			fmt.Fprintf(stdout, "plan: %d pendientes; marca lo terminado con `orq plan hecha ID`; listas: %s\n", pl.Pendientes(), ids(listas))
 			// El Planificador vigila su plan: cada junta le pide revisarlo.
-			if ses, _ := canal.LoadSesiones(p.sesPath()); ses["planificador"].Agente != "" && herdr.Inside() {
-				herdr.Prompt(ses["planificador"].Agente, fmt.Sprintf("[orq] S-%s merged. Run `orq plan revisar --slice %s` and keep the plan minimal and current.", e.NN, e.NN))
+			if ses, _ := canal.LoadSesiones(p.SesPath()); ses["planificador"].Agente != "" && p.Term.Dentro() {
+				p.Term.Avisar(context.Background(), ses["planificador"].Agente, fmt.Sprintf("[orq] S-%s merged. Run `orq plan revisar --slice %s` and keep the plan minimal and current.", e.NN, e.NN))
 			}
 		}
 		// Documentación barata en paralelo: el escriba actualiza la ficha sin frenar al equipo.
 		if self, err := os.Executable(); err == nil && os.Getenv("ORQ_SIN_DOC") == "" {
 			c := exec.Command(self, "doc")
-			c.Dir = p.root
+			c.Dir = p.Root
 			if c.Start() == nil {
 				go c.Wait()
 				fmt.Fprintln(stdout, "la ficha del proyecto se actualiza en segundo plano (escriba): .orq/PROYECTO.md")
@@ -914,7 +782,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		if fs.Parse(args[1:]) != nil {
 			return 1
 		}
-		c, err := p.contrato(nn, *worker, *alcance, *suite, *pres)
+		c, err := p.Contrato(nn, *worker, *alcance, *suite, *pres)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
@@ -943,7 +811,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			if nn != "" && e.NN != nn {
 				continue
 			}
-			fmt.Fprintf(stdout, "%s «%s» · %s\n  paquete: %s (%s)\n  base: %s@%s  worktree: %s (%s)\n  escritor: %s  fallos: %d/%d\n", e.Attempt(), e.Titulo, e.Fase, strings.Join(e.Bundle, ", "), e.Cmd, e.Base, e.SHARojo[:8], e.Worktree, e.Procedencia, valor(e.Escritor), e.Fallos, slice.MaxFallos)
+			fmt.Fprintf(stdout, "%s «%s» · %s\n  paquete: %s (%s)\n  base: %s@%s  worktree: %s (%s)\n  escritor: %s  fallos: %d/%d\n", e.Attempt(), e.Titulo, e.Fase, strings.Join(e.Bundle, ", "), e.Cmd, e.Base, e.SHARojo[:8], e.Worktree, e.Procedencia, app.Valor(e.Escritor), e.Fallos, slice.MaxFallos)
 			fmt.Fprintf(stdout, "  ruta: %s", e.RutaEfectiva())
 			if e.Ascendido {
 				fmt.Fprintf(stdout, " (subió de fix: %s)", e.RutaMotivo)
@@ -978,31 +846,6 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	return 1
 }
 
-func valor(s string) string {
-	if s == "" {
-		return "(nadie)"
-	}
-	return s
-}
-
-func hayContexto(p proyecto, nn string) bool {
-	items, _ := memoria.Load(p.memPath())
-	for _, it := range items {
-		if it.Slice == nn && it.Fuente == "scout" {
-			return true
-		}
-	}
-	return false
-}
-
-func recortar(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n-1]) + "…"
-}
-
 func partir(s string) []string {
 	var out []string
 	for _, x := range strings.Split(s, ",") {
@@ -1011,14 +854,4 @@ func partir(s string) []string {
 		}
 	}
 	return out
-}
-
-// rolArgs: un rol Codex (Astra) escribe rojos y planes en los repos hermanos del producto,
-// así que además del sandbox de worker puede escribir en la carpeta que los contiene.
-func rolArgs(kind, modelo, esfuerzo, name, root string) []string {
-	args := workerArgs(kind, modelo, esfuerzo, name, root)
-	if kind == "codex" {
-		args = append(args, "--add-dir", filepath.Dir(root))
-	}
-	return args
 }

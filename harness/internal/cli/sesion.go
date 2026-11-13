@@ -1,23 +1,19 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"sort"
 	"strings"
 
+	"orq/internal/app"
 	"orq/internal/canal"
-	"orq/internal/herdr"
+	"orq/internal/config"
+	"orq/internal/terminal"
 )
-
-// Distribución de herdr, siempre igual y con nombre:
-//
-//	pestaña del Owner      → atena-<proyecto>
-//	«orq · <proyecto>»     → orquestador-<proyecto>
-//	«plan · <proyecto>»    → planificador-<proyecto> | astra-<proyecto>
-//	«S-NN · <proyecto>»    → worker-<zona>-sNN (uno al lado del otro)
-const layout = `atena-P (Owner's tab) · "orq · P" orquestador-P · "plan · P" planificador-P | astra-P · "S-NN · P" worker-<zone>-sNN`
 
 func runSesion(args []string, stdout, stderr io.Writer) int {
 	p, err := abrirProyecto()
@@ -25,18 +21,18 @@ func runSesion(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	uso := "uso: orq sesion ver | abrir planificador|astra [--kind claude|codex --modelo M --esfuerzo E] | cerrar NOMBRE"
+	uso := "uso: orq sesion ver | abrir planificador|astra [--kind claude|codex --modelo M --esfuerzo E] | cerrar NOMBRE | reenviar NOMBRE"
 	if len(args) == 0 {
 		args = []string{"ver"}
 	}
-	ses, err := canal.LoadSesiones(p.sesPath())
+	ses, err := canal.LoadSesiones(p.SesPath())
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	switch args[0] {
 	case "ver":
-		fmt.Fprintln(stdout, "layout: "+layout)
+		fmt.Fprintln(stdout, "layout: "+app.Layout)
 		var ks []string
 		for k := range ses {
 			ks = append(ks, k)
@@ -55,8 +51,8 @@ func runSesion(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		if !herdr.Inside() {
-			fmt.Fprintln(stderr, "orq sesion: corre esto dentro de herdr (panel del Orquestador)")
+		if err := p.Dentro(); err != nil {
+			fmt.Fprintln(stderr, "orq sesion:", err)
 			return 1
 		}
 		rol := args[1]
@@ -64,19 +60,22 @@ func runSesion(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "ya hay %s (%s, panel %s); ciérrala antes con orq sesion cerrar %s\n", rol, s.Agente, s.Pane, rol)
 			return 1
 		}
-		s, err := lanzar(p, ses, rol, a)
+		s, usado, err := p.LanzarRol(context.Background(), ses, rol, *a)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq sesion:", err)
+			if errors.Is(err, terminal.ErrDesconocido) {
+				return 4
+			}
 			return 1
 		}
-		fmt.Fprintf(stdout, "%s: %s (%s %s) en panel %s\n", rol, s.Agente, a.kind, a.modelo, s.Pane)
+		fmt.Fprintf(stdout, "%s: %s (%s %s, cuenta: %s) en panel %s\n", rol, s.Agente, usado.Kind, usado.Modelo, config.Cuenta(usado.Entorno), s.Pane)
 		return 0
 	case "cerrar":
 		if len(args) != 2 {
 			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		cerradas, err := p.cerrarSesiones(ses, func(k string) bool { return k == args[1] })
+		cerradas, err := p.CerrarSesiones(context.Background(), ses, func(k string) bool { return k == args[1] })
 		if err != nil {
 			fmt.Fprintln(stderr, "orq sesion:", err)
 			return 1
@@ -87,37 +86,19 @@ func runSesion(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "cerrada: %s\n", strings.Join(cerradas, ", "))
 		return 0
+	case "reenviar":
+		// Tras mirar el panel: el arranque o el contrato no llegó, y el próximo comando lo repite.
+		if len(args) != 2 {
+			fmt.Fprintln(stderr, uso)
+			return 1
+		}
+		if err := p.Reenviar(args[1]); err != nil {
+			fmt.Fprintln(stderr, "orq sesion:", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "%s: el próximo lanzamiento vuelve a entregar su arranque o contrato\n", args[1])
+		return 0
 	}
 	fmt.Fprintln(stderr, uso)
 	return 1
-}
-
-// cerrarSesiones cierra los paneles que cumplen el filtro y los quita del registro. Atena es del
-// Owner y el Orquestador se releva, no se cierra: nunca entran aquí.
-func (p proyecto) cerrarSesiones(ses map[string]canal.Sesion, sirve func(string) bool) ([]string, error) {
-	var cerradas []string
-	for k, s := range ses {
-		if k == "atena" || k == "orquestador" || !sirve(k) {
-			continue
-		}
-		if s.Pane != "" && herdr.Inside() {
-			if err := herdr.ClosePane(s.Pane); err != nil && !strings.Contains(err.Error(), "not found") {
-				return cerradas, fmt.Errorf("%s: %v", k, err)
-			}
-		}
-		delete(ses, k)
-		cerradas = append(cerradas, k)
-	}
-	sort.Strings(cerradas)
-	return cerradas, canal.SaveSesiones(p.sesPath(), ses)
-}
-
-// panelDelSlice da un panel ya abierto de ese slice: los workers comparten la pestaña «S-NN · P».
-func panelDelSlice(ses map[string]canal.Sesion, nn string) (canal.Sesion, bool) {
-	for k, s := range ses {
-		if strings.HasPrefix(k, "worker-") && strings.HasSuffix(k, "-s"+nn) && s.Pane != "" {
-			return s, true
-		}
-	}
-	return canal.Sesion{}, false
 }

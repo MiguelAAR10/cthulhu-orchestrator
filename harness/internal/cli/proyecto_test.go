@@ -7,11 +7,22 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
+	"orq/internal/app"
 	"orq/internal/canal"
-	"orq/internal/herdr"
+	"orq/internal/terminal"
+	"orq/internal/terminal/fake"
 )
+
+// conTerminalFalso reemplaza el multiplexor por uno en memoria durante la prueba.
+func conTerminalFalso(t *testing.T) *fake.Driver {
+	t.Helper()
+	d := fake.Nuevo()
+	orig := app.NuevoDriver
+	app.NuevoDriver = func(string) terminal.Driver { return d }
+	t.Cleanup(func() { app.NuevoDriver = orig })
+	return d
+}
 
 func run(t *testing.T, args ...string) (string, string, int) {
 	t.Helper()
@@ -24,27 +35,24 @@ func TestMensajeSeGuardaYSeEntregaAlRolCorrecto(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("ORQ_ROOT", root)
 	t.Setenv("ORQ_ROL", "")
-	var llamadas [][]string
-	orig := herdr.Run
-	herdr.Run = func(a ...string) ([]byte, error) { llamadas = append(llamadas, a); return []byte(`{}`), nil }
-	defer func() { herdr.Run = orig }()
+	term := conTerminalFalso(t)
+	term.Actual = "w1:p1"
 
 	os.MkdirAll(filepath.Join(root, ".orq"), 0o755)
 	canal.SaveSesiones(filepath.Join(root, ".orq", "sesiones.json"), map[string]canal.Sesion{
 		"atena":       {Agente: "atena-x", Pane: "w1:p1"},
 		"orquestador": {Agente: "orquestador-x", Pane: "w1:p2"},
 	})
-	t.Setenv("HERDR_PANE_ID", "w1:p1")
-
 	out, errs, code := run(t, "msg", "send", "--para", "orquestador", "--tipo", "historia", "Como", "Owner", "quiero", "X")
 	if code != 0 {
 		t.Fatalf("code %d: %s", code, errs)
 	}
-	if !strings.Contains(out, "orquestador-x") || len(llamadas) != 1 || llamadas[0][2] != "orquestador-x" {
-		t.Fatalf("out=%q llamadas=%v", out, llamadas)
+	avisos := term.Ops("avisar")
+	if !strings.Contains(out, "orquestador-x") || len(avisos) != 1 || avisos[0].Destino != "orquestador-x" {
+		t.Fatalf("out=%q avisos=%+v", out, avisos)
 	}
-	if !strings.Contains(llamadas[0][3], "historia de atena") {
-		t.Fatalf("formato: %q", llamadas[0][3])
+	if !strings.Contains(avisos[0].Texto, "historia de atena") {
+		t.Fatalf("formato: %q", avisos[0].Texto)
 	}
 	out, _, _ = run(t, "msg", "leer")
 	if !strings.Contains(out, "atena→orquestador [historia] Como Owner quiero X") {
@@ -87,24 +95,6 @@ func TestOrqSkillDaLaGuiaDelRol(t *testing.T) {
 				t.Errorf("%s: la guía usa `orq %s`, que no existe", rol, cmd)
 			}
 		}
-	}
-}
-
-// El Orquestador lanza desde otro repo: queda registrado ahí para que el worker le avise directo.
-func TestRegistrarLlamador(t *testing.T) {
-	ses := map[string]canal.Sesion{"worker-back-s02": {Agente: "worker-back-s02", Pane: "w3D:pX"}}
-	registrarLlamador(ses, "orquestador", "w3D:pQ", time.Now())
-	if s := ses["orquestador"]; s.Agente != "w3D:pQ" || s.Pane != "w3D:pQ" {
-		t.Fatalf("%+v", s)
-	}
-	propio := map[string]canal.Sesion{"orquestador": {Agente: "orquestador-x-3", Pane: "w3D:pQ", Gen: 3}}
-	registrarLlamador(propio, "orquestador", "w3D:pQ", time.Now())
-	if propio["orquestador"].Agente != "orquestador-x-3" {
-		t.Fatal("en su propio repo no se pisa la sesión")
-	}
-	registrarLlamador(ses, "worker-front-s04", "w3D:pV", time.Now())
-	if _, ok := ses["worker-front-s04"]; ok {
-		t.Fatal("un worker no se registra como destino")
 	}
 }
 
@@ -238,6 +228,12 @@ func TestConfigVerMuestraValorYOrigen(t *testing.T) {
 	out, _, code = run(t, "skill", "orquestador")
 	if code != 0 || !strings.Contains(out, "(m-plan)") || strings.Contains(out, "{{") {
 		t.Fatalf("guía sin el modelo de la configuración (code %d): %s", code, out)
+	}
+	// Dos cuentas: se ve con cuál arranca cada rol.
+	os.WriteFile(ruta, []byte(`{"roles":{"atena":{"entorno":{"CLAUDE_CONFIG_DIR":"/cuentas/alt"}}}}`), 0o644)
+	out, errs, code = run(t, "config", "ver")
+	if code != 0 || !strings.Contains(out, "cuentas:") || !strings.Contains(out, "CLAUDE_CONFIG_DIR=/cuentas/alt") || !strings.Contains(out, "la del entorno de quien lanza") {
+		t.Fatalf("code %d: %s %s", code, out, errs)
 	}
 	// Un campo desconocido es un error, y lo dice.
 	os.WriteFile(ruta, []byte(`{"terminal":"orca","modelos":{}}`), 0o644)

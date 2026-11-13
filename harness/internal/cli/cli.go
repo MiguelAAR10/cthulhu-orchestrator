@@ -29,8 +29,9 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq halt --clear    quita HALT (solo tras liberar espacio)
   orq halt --set MSG  pone HALT a mano
 
-  orq config ver      configuración efectiva (terminal, modelo por rol y por dificultad, recursos) y de
-                      dónde salió cada valor: defecto, ~/.config/orq/config.json o <raíz>/.orq/config.json
+  orq config ver      configuración efectiva (terminal herdr|orca, agente/modelo/esfuerzo y cuenta por rol y
+                      por dificultad de worker, recursos) y de dónde salió cada valor: defecto,
+                      ~/.config/orq/config.json o <raíz>/.orq/config.json
   orq init [--modo=mejora|nuevo] detecta modo y stack, instala hooks y lista skills
   orq skills [instalar [NOMBRE...]|fijar|verificar]   skills del proyecto por rol, solo en su .claude/skills;
                                  fijar guarda su huella; verificar avisa FALTA/DEP/CAMBIO/NUNCA
@@ -39,7 +40,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq contexto                   hook SessionStart: rol, fase, relevo y memoria
   orq doc                        ficha viva del proyecto (.orq/PROYECTO.md) con un modelo barato
   orq doctor                     worktrees, ramas, sesiones y memoria sobrantes
-  orq up                         desde el panel del Atena (herdr): crea la sesión del Orquestador
+  orq up                         desde el panel del Atena (en el terminal configurado): crea la sesión del Orquestador
   orq msg send --para ROL --tipo T "texto"   historia|pregunta|respuesta|estado|cierre
   orq msg send ... [--intento S-NN/aK] [--ref ID] [--clave K]   un cierre exige el intento vigente
   orq msg reconciliar [--reenviar ID]   mensajes sin entrega confirmada
@@ -73,7 +74,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq slice recibo               el recibo vigente
   orq slice contrato [--worker N] [--alcance "..."] [--suite "cmd"] [--presupuesto "..."]
                                  el contrato del worker con los datos reales del slice
-  orq sesion ver | abrir planificador|astra | cerrar NOMBRE
+  orq sesion ver | abrir planificador|astra | cerrar NOMBRE | reenviar NOMBRE
                                  paneles con nombre: "orq · P", "plan · P" (planificador | astra),
                                  "S-NN · P" (workers). Al cerrar un slice se cierran sus paneles
   orq plan [--slice NN] cargar ARCHIVO.json | ver | hecha ID | debatido   (cargar no va en un fix)

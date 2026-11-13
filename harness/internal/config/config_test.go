@@ -28,14 +28,15 @@ func TestDefaultsIgualesAHoy(t *testing.T) {
 	if c.Terminal != "herdr" {
 		t.Fatalf("terminal = %q", c.Terminal)
 	}
-	roles := map[string]Agente{
+	roles := map[string][3]string{
 		"orquestador":  {"claude", "sonnet", "medium"},
 		"planificador": {"claude", "opus", "high"},
 		"astra":        {"codex", "gpt-6-astra", "high"},
 		"atena":        {"claude", "opus", "medium"},
 	}
 	for rol, want := range roles {
-		if got := c.ParaRol(rol, Agente{}); got != want {
+		a := c.ParaRol(rol, Agente{})
+		if got := [3]string{a.Kind, a.Modelo, a.Esfuerzo}; got != want || len(a.Entorno) != 0 {
 			t.Errorf("%s = %+v, antes %+v", rol, got, want)
 		}
 	}
@@ -70,7 +71,7 @@ func TestProyectoGanaAlUsuarioCampoPorCampoYGuardaElOrigen(t *testing.T) {
 		t.Fatal(err)
 	}
 	astra := c.Rol("astra")
-	if astra != (Agente{"codex", "m-proyecto", "low"}) {
+	if astra.Kind != "codex" || astra.Modelo != "m-proyecto" || astra.Esfuerzo != "low" {
 		t.Fatalf("astra = %+v", astra)
 	}
 	for clave, want := range map[string]string{
@@ -166,5 +167,66 @@ func TestExpandirGuias(t *testing.T) {
 	}
 	if strings.Contains(got, "{{") {
 		t.Errorf("quedaron marcas: %q", got)
+	}
+}
+
+// Dos cuentas de Claude: cada rol y cada dificultad de worker puede nombrar la suya.
+func TestCuentaPorRolYPorDificultad(t *testing.T) {
+	t.Setenv("ORQ_ESCRIBA_MODELO", "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	ruta := escribir(t, filepath.Join(t.TempDir(), "c.json"), `{
+	  "roles": {"atena": {"entorno": {"CLAUDE_CONFIG_DIR": "~/.claude-alt"}},
+	            "planificador": {"entorno": {"CLAUDE_CONFIG_DIR": "/cuentas/principal"}},
+	            "astra": {"entorno": {"CODEX_HOME": "/cuentas/codex"}}},
+	  "workers": {"alta": {"claude": {"entorno": {"CLAUDE_CONFIG_DIR": "~/.claude-alt"}}}}}`)
+	c, err := CargarDe(ruta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	atena, plan := c.ParaRol("atena", Agente{}), c.ParaRol("planificador", Agente{})
+	if atena.Entorno["CLAUDE_CONFIG_DIR"] != filepath.Join(home, ".claude-alt") || plan.Entorno["CLAUDE_CONFIG_DIR"] != "/cuentas/principal" {
+		t.Fatalf("atena %v · planificador %v", atena.Entorno, plan.Entorno)
+	}
+	if atena.Entorno["CLAUDE_CONFIG_DIR"] == plan.Entorno["CLAUDE_CONFIG_DIR"] {
+		t.Fatal("dos roles con cuentas distintas recibieron la misma")
+	}
+	if len(c.ParaRol("orquestador", Agente{}).Entorno) != 0 {
+		t.Fatal("un rol sin entorno configurado no recibe variables")
+	}
+	if got := c.WorkerEntorno("claude", "alta")["CLAUDE_CONFIG_DIR"]; got != filepath.Join(home, ".claude-alt") {
+		t.Fatalf("worker alta = %q", got)
+	}
+	if len(c.WorkerEntorno("claude", "")) != 0 || len(c.WorkerEntorno("codex", "alta")) != 0 {
+		t.Fatal("la cuenta de una dificultad no se filtra a otra")
+	}
+	// Astra con --kind claude no hereda el CODEX_HOME del rol: usa la cuenta de claude para trabajo difícil.
+	otro := c.ParaRol("astra", Agente{Kind: "claude"})
+	if _, hay := otro.Entorno["CODEX_HOME"]; hay || otro.Entorno["CLAUDE_CONFIG_DIR"] == "" {
+		t.Fatalf("astra con claude = %v", otro.Entorno)
+	}
+	if c.Origen("roles.atena.entorno.CLAUDE_CONFIG_DIR") != ruta {
+		t.Fatalf("origen = %s", c.Origen("roles.atena.entorno.CLAUDE_CONFIG_DIR"))
+	}
+	if Cuenta(nil) != "la del entorno de quien lanza" || Cuenta(plan.Entorno) != "CLAUDE_CONFIG_DIR=/cuentas/principal" {
+		t.Fatalf("%q %q", Cuenta(nil), Cuenta(plan.Entorno))
+	}
+}
+
+func TestEntornoSoloRutasNuncaSecretos(t *testing.T) {
+	dir := t.TempDir()
+	for nombre, cuerpo := range map[string]string{
+		"token":    `{"roles":{"atena":{"entorno":{"CLAUDE_CODE_OAUTH_TOKEN":"/x"}}}}`,
+		"api key":  `{"roles":{"astra":{"entorno":{"OPENAI_API_KEY":"/x"}}}}`,
+		"no ruta":  `{"roles":{"atena":{"entorno":{"CLAUDE_CONFIG_DIR":"sk-ant-abc"}}}}`,
+		"path":     `{"roles":{"atena":{"entorno":{"PATH":"/x"}}}}`,
+		"orq":      `{"workers":{"baja":{"claude":{"entorno":{"ORQ_ROL":"/x"}}}}}`,
+		"minusc":   `{"roles":{"atena":{"entorno":{"claude_dir":"/x"}}}}`,
+		"relativa": `{"roles":{"atena":{"entorno":{"CODEX_HOME":"./codex"}}}}`,
+	} {
+		ruta := escribir(t, filepath.Join(dir, strings.ReplaceAll(nombre, " ", "_")+".json"), cuerpo)
+		if _, err := CargarDe(ruta); err == nil {
+			t.Errorf("%s: se aceptó %s", nombre, cuerpo)
+		}
 	}
 }

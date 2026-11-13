@@ -8,10 +8,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
-	"time"
 
+	"orq/internal/agente"
 	"orq/internal/memoria"
 )
 
@@ -22,25 +21,16 @@ type Escriba struct {
 	Ask func(modelo, prompt string) (string, error)
 }
 
-// LimitePregunta corta una llamada colgada al modelo.
-const LimitePregunta = 3 * time.Minute
-
-// Nuevo devuelve el escriba que llama a `claude -p` con tiempo máximo.
-func Nuevo(modelo string) Escriba { return Escriba{Modelo: modelo, Ask: preguntar} }
-
-func preguntar(modelo, prompt string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), LimitePregunta)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "claude", "-p", "--model", modelo, "--output-format", "text", "--no-session-persistence")
-	cmd.Stdin = strings.NewReader(prompt)
-	out, err := cmd.Output()
-	if ctx.Err() != nil {
-		return "", fmt.Errorf("escriba (%s): sin respuesta en %s", modelo, LimitePregunta)
-	}
-	if err != nil {
-		return "", fmt.Errorf("escriba (%s): %v", modelo, err)
-	}
-	return string(out), nil
+// Nuevo devuelve el escriba que pregunta al modelo con tiempo máximo.
+// entorno son las variables de cuenta del rol «escriba» (CLAUDE_CONFIG_DIR).
+func Nuevo(modelo string, entorno map[string]string) Escriba {
+	return Escriba{Modelo: modelo, Ask: func(modelo, prompt string) (string, error) {
+		out, err := agente.Preguntar(context.Background(), modelo, prompt, entorno)
+		if err != nil {
+			return "", fmt.Errorf("escriba: %w", err)
+		}
+		return out, nil
+	}}
 }
 
 const promptCompactar = `Eres el escriba de un proyecto de software. Recibes hechos en JSONL con etiquetas.

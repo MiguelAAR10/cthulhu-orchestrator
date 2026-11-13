@@ -2,7 +2,6 @@ package cli
 
 import (
 	"embed"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -52,7 +51,7 @@ func runSkill(args []string, stdout, stderr io.Writer) int {
 	}
 	g, _ := guias.ReadFile("guias/" + rol + ".md")
 	p, err := abrirProyecto()
-	cfg := p.cfg
+	cfg := p.Cfg
 	if err != nil { // fuera de un repo, o con el proyecto ilegible: la guía sale con la capa del usuario
 		if cfg, err = config.Cargar(""); err != nil {
 			fmt.Fprintln(stderr, "orq:", err)
@@ -61,13 +60,13 @@ func runSkill(args []string, stdout, stderr io.Writer) int {
 	}
 	// Los modelos de la guía salen de la configuración, no del texto.
 	fmt.Fprint(stdout, cfg.Expandir(string(g)))
-	if p.root != "" {
-		ls := perfil.ParaRol(perfil.Lista(p.perfil()), rol)
+	if p.Root != "" {
+		ls := perfil.ParaRol(perfil.Lista(p.Perfil()), rol)
 		if len(ls) > 0 {
 			fmt.Fprintf(stdout, "\n## Skills de tu rol en este proyecto\n")
 			for _, s := range ls {
 				mark := "✓"
-				if !perfil.Instalada(p.root, s.Nombre) {
+				if !perfil.Instalada(p.Root, s.Nombre) {
 					mark = "· falta"
 				}
 				fmt.Fprintf(stdout, "- %s %s", s.Nombre, mark)
@@ -89,15 +88,4 @@ func nunca() []string {
 	}
 	slices.Sort(n)
 	return n
-}
-
-func (p proyecto) lockPath() string { return filepath.Join(p.dir, "skills.lock.json") }
-
-func (p proyecto) fijadas() map[string]perfil.Fijada {
-	m := map[string]perfil.Fijada{}
-	raw, err := os.ReadFile(p.lockPath())
-	if err == nil {
-		json.Unmarshal(raw, &m)
-	}
-	return m
 }
