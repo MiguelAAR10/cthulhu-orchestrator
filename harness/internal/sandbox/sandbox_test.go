@@ -308,3 +308,48 @@ func TestAutopruebaDetectaCajaRota(t *testing.T) {
 	}
 	t.Logf("%d sondas fallan con / montado", malas)
 }
+
+// Un vínculo deja ver un directorio de solo lectura en otra ruta, dentro de la copia escribible.
+func TestVinculoSoloLecturaDentroDeUnRW(t *testing.T) {
+	h, tmp := hostFalso(t)
+	copia := mkdir(t, filepath.Join(tmp, "copia"))
+	deps := mkdir(t, filepath.Join(tmp, "proyecto", "node_modules"))
+	args, _, err := construir(Spec{RW: []string{copia}, Vinculos: []Vinculo{{deps, filepath.Join(copia, "node_modules")}}}, h, []string{"true"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rw, ro := par(args, "--bind", copia, copia), par(args, "--ro-bind", deps, filepath.Join(copia, "node_modules"))
+	if rw < 0 || ro < 0 || ro < rw {
+		t.Fatalf("el vínculo debe montarse de solo lectura después de su RW: %v", args)
+	}
+	for nombre, v := range map[string]Vinculo{
+		"fuera de todo RW":     {deps, filepath.Join(tmp, "otra", "node_modules")},
+		"sobre el propio RW":   {deps, copia},
+		"sobre el sistema":     {deps, "/usr/lib/x"},
+		"relativo":             {deps, "node_modules"},
+		"origen que no existe": {filepath.Join(tmp, "no"), filepath.Join(copia, "x")},
+	} {
+		if _, _, err := construir(Spec{RW: []string{copia}, Vinculos: []Vinculo{v}}, h, []string{"true"}); err == nil {
+			t.Errorf("%s: se aceptó %+v", nombre, v)
+		}
+	}
+	if os.Getenv("ORQ_SIN_BWRAP") == "1" {
+		return
+	}
+	// De verdad: se lee, no se escribe, y el original queda intacto.
+	real := t.TempDir()
+	copiaR, depsR := mkdir(t, filepath.Join(real, "copia")), mkdir(t, filepath.Join(real, "deps"))
+	os.WriteFile(filepath.Join(depsR, "m.txt"), []byte("42"), 0o644)
+	cmd, err := Command(context.Background(), Spec{RW: []string{copiaR}, Cwd: copiaR, Vinculos: []Vinculo{{depsR, filepath.Join(copiaR, "deps")}}},
+		"sh", "-c", "cat deps/m.txt && ! touch deps/x 2>/dev/null && ! sh -c 'echo 0 > deps/m.txt' 2>/dev/null")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil || strings.TrimSpace(string(out)) != "42" {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(depsR, "m.txt")); string(raw) != "42" {
+		t.Fatalf("el original cambió: %q", raw)
+	}
+}

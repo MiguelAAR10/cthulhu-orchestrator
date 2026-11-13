@@ -5,8 +5,6 @@ package slice
 import (
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -159,48 +157,6 @@ func archivosDelRunner(cmd string) []string {
 	return out
 }
 
-// blobEn devuelve el hash de ruta en el commit sha, o "" si ahí no hay un archivo versionado.
-func blobEn(dir, sha, ruta string) string {
-	out, err := Git(dir, "ls-tree", sha, "--", ruta)
-	if err != nil {
-		return ""
-	}
-	campos := strings.Fields(out) // <modo> blob <hash>\t<ruta>
-	if len(campos) < 3 || campos[1] != "blob" {
-		return ""
-	}
-	return campos[2]
-}
-
-// vigiladosEn deriva los archivos del runner del comando, deja los versionados en sha y toma su hash.
-// Excluye lo que ya forma parte del paquete del examen: eso ya está en la huella.
-func vigiladosEn(dir, sha, cmd string, bundle []string) []Vigilado {
-	var out []Vigilado
-	for _, f := range archivosDelRunner(cmd) {
-		if slices.Contains(bundle, f) {
-			continue
-		}
-		if b := blobEn(dir, sha, f); b != "" {
-			out = append(out, Vigilado{Ruta: f, Blob: b})
-		}
-	}
-	return out
-}
-
-// runnerCambiado lista los archivos vigilados cuyo contenido en head ya no es el del rojo.
-func (e *Estado) runnerCambiado(head string) []string {
-	var cambiados []string
-	for _, v := range e.Vigilados {
-		switch b := blobEn(e.Worktree, head, v.Ruta); {
-		case b == "":
-			cambiados = append(cambiados, v.Ruta+" (borrado)")
-		case b != v.Blob:
-			cambiados = append(cambiados, v.Ruta)
-		}
-	}
-	return cambiados
-}
-
 // ErrRunnerCambio: un archivo que decide qué significa el comando cambió desde el rojo. No se corrió
 // nada y no cuenta como reparación fallida.
 type ErrRunnerCambio struct {
@@ -218,38 +174,49 @@ type VerificarOpc struct {
 	AceptoRunner string // motivo por el que se acepta un cambio en los archivos vigilados
 }
 
-// enlazarDeps da a dst las dependencias ignoradas que hay en src: node_modules como copia con enlaces
-// duros y .venv como enlace simbólico. Con comprobarGit, si el enlace no queda ignorado por git se quita
-// (un worktree sucio no se junta); una copia aislada no es un repo, así que ahí no se comprueba.
-func enlazarDeps(src, dst string, comprobarGit bool) {
-	for _, d := range []struct {
-		nombre string
-		duro   bool
-	}{{"node_modules", true}, {".venv", false}} {
-		de, a := filepath.Join(src, d.nombre), filepath.Join(dst, d.nombre)
-		if fi, err := os.Stat(de); err != nil || !fi.IsDir() {
+// blobEn devuelve el hash de ruta en el commit sha del repo principal, o "" si ahí no hay un archivo versionado.
+func (r Repo) blobEn(sha, ruta string) string {
+	out, err := r.git("ls-tree", sha, "--", ruta)
+	if err != nil {
+		return ""
+	}
+	campos := strings.Fields(out) // <modo> blob <hash>\t<ruta>
+	if len(campos) < 3 || campos[1] != "blob" {
+		return ""
+	}
+	return campos[2]
+}
+
+// vigiladosEn deriva los archivos del runner del comando, deja los versionados en sha y toma su hash.
+// Excluye lo que ya forma parte del paquete del examen: eso ya está en la huella.
+func (r Repo) vigiladosEn(sha, cmd string, bundle []string) []Vigilado {
+	var out []Vigilado
+	for _, f := range archivosDelRunner(cmd) {
+		if slices.Contains(bundle, f) {
 			continue
 		}
-		if _, err := os.Lstat(a); err == nil {
-			continue
-		}
-		if d.duro {
-			if exec.Command("cp", "-al", de, a).Run() != nil {
-				os.RemoveAll(a) // copia a medias: mejor un enlace que nada
-				os.Symlink(de, a)
-			}
-		} else {
-			os.Symlink(de, a)
-		}
-		if !comprobarGit {
-			continue
-		}
-		if _, err := Git(dst, "check-ignore", "-q", d.nombre); err != nil {
-			if fi, _ := os.Lstat(a); fi != nil && fi.Mode()&os.ModeSymlink != 0 {
-				os.Remove(a)
-			} else {
-				os.RemoveAll(a)
-			}
+		if b := r.blobEn(sha, f); b != "" {
+			out = append(out, Vigilado{Ruta: f, Blob: b})
 		}
 	}
+	return out
+}
+
+// runnerCambiado lista los archivos vigilados cuyo contenido en head ya no es el del rojo.
+func (r Repo) runnerCambiado(e *Estado, head string) ([]string, error) {
+	var cambiados []string
+	for _, v := range e.Vigilados {
+		out, err := r.git("ls-tree", head, "--", v.Ruta)
+		if err != nil {
+			return nil, err
+		}
+		campos := strings.Fields(out)
+		switch {
+		case len(campos) < 3 || campos[1] != "blob":
+			cambiados = append(cambiados, v.Ruta+" (borrado)")
+		case campos[2] != v.Blob:
+			cambiados = append(cambiados, v.Ruta)
+		}
+	}
+	return cambiados, nil
 }
