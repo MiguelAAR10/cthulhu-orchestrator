@@ -19,7 +19,7 @@ Scale: large. Evidence behind this plan: audit of 2026-11-12 (gate probe, forged
 | ID · criterion | Result and exit | Agent, model | Files | Depends · mode | Test and verifier | Worktree | State · commit |
 |---|---|---|---|---|---|---|---|
 | A0 · 4 | Lane router skill | orchestrator session | `orqskills/orq-ruta`, role skills, guides | none | `go test ./...` | no | integrated · 7f42430 |
-| A1 · 2 | Gate: tokenizer, harness paths protected, no helpers from worktrees, MCP | worker-gate, Opus (security-critical parsing) | `internal/gate`, hook templates, gate funcs in `cli.go` | none · parallel | `TestEvasiones`, validar-mvp part A; verifier ≠ implementer | `~/worktrees/cthulhu-gate` | in progress |
+| A1 · 2 | Gate: tokenizer, harness paths protected, no helpers from worktrees, MCP | worker-gate, Opus (security-critical parsing) | `internal/gate`, hook templates, gate funcs in `cli.go` | none · parallel | `TestEvasiones`, validar-mvp part A; verifier ≠ implementer | removed after merge | verified on integrated revision · b950633 (go test green, probe 27 BLOCK / 8 ALLOW as expected, validar-mvp 16/16, e2e-v05 74/74) |
 | A2 · 3,4,6 | One verdict, counting and isolated run by default, watched runner files, lanes in code | worker-verif, Sonnet | `internal/slice`, `proyecto.go`, `plan.go`, `metricas.go`, e2e | none · parallel | unit tests, e2e-v05; verifier ≠ implementer | removed after merge | verified on integrated revision · ecb3859 (go test green, e2e-v05 74/74) |
 | A3 · 1,6 | Worker isolation: clones, sandbox, state outside the repo, worker registry, migration | planner Opus → Astra → workers (rows added after analysis) | to be set by the plan | A1, A2 integrated · serial | forged-state e2e, live-slice migration test; independent review (high risk) | yes | analysis |
 | A4 · 5 | CI, README and rulebook say only what is enforced | Haiku/Sonnet | `.github/workflows`, `README.md`, `docs/REGLAS-HARNESS.md` | A1–A3 | CI green | no | pending |
@@ -34,11 +34,25 @@ Planner plan and Astra critique consolidated here; Astra verdict: GO with a cut.
 - Network: agent reaches only its provider API; exam has no egress. Live launch of a real sandboxed agent needs a dedicated credential from the Owner (not created by agents); until then it is tested with simulated workers.
 - Later: state relocation, persistent worker registry, automatic worker channel spool, second provider, overlays.
 
+## Proposals from research (not in scope until the Owner approves)
+Sources consolidated from three scouts on 2026-11-13 (A2A spec v1.0, Claude Code agent teams docs, Google/MIT scaling study arXiv 2512.08296, MAST arXiv 2503.13657, Anthropic multi-agent write-up, Cognition, METR, Hermes Agent docs, pnpm/uv/git docs).
+| # | Proposal | Value | Effort |
+|---|---|---|---|
+| P1 | Channel: sender identity derived by orq from the sandbox, not `--de`; pull inbox with the pane keystroke as a doorbell only; `cierre`/`estado` carry structured data the harness reads; auto idempotency key; messages to a closed attempt rejected. Borrow the A2A task/message/artifact model; do not speak A2A on the wire. | Removes impersonation and "may have arrived"; results become machine-checkable | M |
+| P2 | Measure tokens, wall time, attempts and outcome per lane and role in `orq metricas` | The only way to know whether Planner, Astra and parallel workers pay | S–M |
+| P3 | One worker by default; parallel only with declared disjoint zones and a reason | Evidence: multi-agent degrades sequential work, helps only decomposable work | S |
+| P4 | Astra and scouts only for large or risky slices | Fewer handoffs on medium work | S |
+| P5 | Dependency policy per ecosystem: read-only bind by default; when a task changes dependencies, private copy plus offline frozen install from a trusted store, re-installed by orq for the exam | No per-worker dependency copies; no egress | M |
+| P6 | Per-role skill allowlist installed read-only in the sandbox (worker: TDD + debugging; verifier: verification; Atena: interview), without skills that own worktrees, merging or PRs | Less context, no second scheduler fighting orq | S–M |
+| P7 | Decisions file per slice read by every worker and verifier | Less context loss between sessions | S |
+| P8 | Held-out exam variants the worker never sees | Evidence of agents gaming visible tests | M |
+Rejected: A2A over HTTP, agent cards, shared or hard-linked clones, reflinks (ext4 has none), partial clones, self-editing skills, agent swarms.
+
 ## Checkpoint
-- Phase: D for A1 (attempt 1 of 2; one earlier start was cut by a safety filter before any change and does not count). A2 verified. A3: analysis closed, spike B0 running, build rows pending spike results.
-- Integration branch: `harness-v2` (local only), tip ecb3859. Integration owner: orchestrator pane `w3X:p1`.
+- Phase: A1 and A2 integrated and verified. A3: spike done (bwrap allowlist root works; agents start inside the box only through a PATH shim; read-only dependency binds work; no overlay in bwrap 0.9.0). B1+B2 (sandbox package and containment test) in progress, attempt 1 of 2.
+- Integration branch: `harness-v2` (local only), tip b950633. Integration owner: orchestrator pane `w3X:p1`.
 - Versions: working `harness-v2`; installed `~/bin/orq` 1.0.0 untouched, in use by live workers in another project; rollback = `main` 1f2d0b0.
-- Open panes: worker-gate `w3X:p2` (worktree `~/worktrees/cthulhu-gate`, branch `v2/gate`), worker-spike `w3X:p6` (scratch only). Closed: planner, Astra, worker-verif.
+- Open panes: worker-sandbox `w3X:pA` (worktree `~/worktrees/cthulhu-sandbox`, branch `v2/sandbox`, based on dd90cc0: rebase or merge onto the tip at integration). Closed: planner, Astra, worker-verif, worker-gate, worker-spike, three research scouts.
 - Spend: not measured.
 - Pending Owner decision: dedicated credential for sandboxed agents.
-- Next action: integrate A1 when delivered; turn spike results into B rows and launch them.
+- Next action: integrate B1+B2; then launch B5 (clones, bundles, sandboxed exam, closing re-check, legacy conversion) against the sandbox API.
