@@ -106,11 +106,12 @@ What moves:
 Order notes: Q1 follows B6 because it runs inside the sandboxed verification. U1 follows Q1, not C3, because it edits the quality level and the box credential key, which exist only after Q1 and B6. Later rows for Q1, listed and not built: lint, SAST with base comparison, dependency audits (need network, so outside the box), held-out tests (P8). B5 waits for `git merge harness-v2` (sandbox package), which lands before it by order.
 
 ## Checkpoint
-- Phase: D. A1, A2 and B1+B2 integrated and verified on the integrated revision (tip 11426f3: go test green; `orq sandbox selftest` 11/11; `validacion/aislamiento.sh --todo` 13 pass, 1 pending = the forged-state close, owned by B5).
-- Proposals P1–P8 approved by the Owner on 2026-11-13 and assigned to the builder.
-- Builder: one Fable session, pane `w3X:pE`, worktree `~/worktrees/cthulhu-build`, branch `v2/build`. Order: technical plan, C1 config, C2 terminal driver (herdr + Orca), C3 machine awareness, B5 isolation, B6 launch in the box, C6 channel, C4 metrics, C5 lean defaults, A4 CI and docs. It records progress in the orchestrator's scratch progress file and must `git merge harness-v2` before B5.
+- Phase: D. Integrated and verified on the integrated revision (tip 7b37f02 plus this commit): A1 gate, A2 verification and lanes, B1+B2 sandbox, C1 config, C2 terminal driver with account per role, C3 machine awareness. Evidence at 7b37f02: `go test -race ./...` green; e2e-v05 74/74; validar-mvp 18/18; aislamiento.sh 13 pass, 1 pending (forged-state close, owned by B5); `orq config ver` and `orq status` show configuration origin and RAM/CPU capacity.
+- Builder: one Fable session, pane `w3X:pE`, worktree `~/worktrees/cthulhu-build`, branch `v2/build`, now on B5. Remaining in its order: B5, B6, C6, W1 vigia, C4, C5, Q1, U1, A4.
+- Agile design (routing by signals, context map, UI evidence, comprehension report, watcher, loop ledger) written by the architect (Fable) and under attack by Astra (Codex); both files live in the orchestrator's scratch dir until consolidated here. Its activities reach the builder as an addendum after the critique.
+- Proposals P1–P10 and the watcher approved by the Owner on 2026-11-13.
 - Integration branch: `harness-v2` (local only). Integration owner: orchestrator pane `w3X:p1`. Installed `~/bin/orq` 1.0.0 untouched; rollback = `main` 1f2d0b0.
 - Review owed: independent review of B5/B6 (high risk) before acceptance.
-- Pending Owner decision: dedicated credential for launching a real agent inside the sandbox; until then real launch is refused and tests use a simulated agent.
-- Spend: not measured.
-- Next action: review builder commits as they land; merge `v2/build` at activity boundaries.
+- Pending Owner decision: dedicated credential for launching a real agent inside the sandbox.
+- Spend: not measured by orq; the builder pane showed about USD 7.5 at its first ten minutes.
+- Next action: consolidate Astra's critique with the architect, send the addendum to the builder, keep integrating at activity boundaries.
