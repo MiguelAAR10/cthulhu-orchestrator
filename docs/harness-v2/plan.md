@@ -46,6 +46,9 @@ Sources consolidated from three scouts on 2026-11-13 (A2A spec v1.0, Claude Code
 | P6 | Per-role skill allowlist installed read-only in the sandbox (worker: TDD + debugging; verifier: verification; Atena: interview), without skills that own worktrees, merging or PRs | Less context, no second scheduler fighting orq | S–M |
 | P7 | Decisions file per slice read by every worker and verifier | Less context loss between sessions | S |
 | P8 | Held-out exam variants the worker never sees | Evidence of agents gaming visible tests | M |
+| P9 | Quality profile per language in three levels (rapido, normal, estricto): no new suppressions, secrets on the diff, typecheck, new-dependency check, fail-first proof for added tests, mutation testing on changed files as a report; results in the receipt, a missing tool is never a pass | Evidence that tests detect bugs when nobody reads the code | M–L |
+| P10 | `orq setup`: interactive terminal page in the AI EDGE RUNNERS look to choose driver, models per role, quality level, worker cap and RAM budget | Configuration without editing JSON | M |
+P9 and P10 approved by the Owner on 2026-11-13 (activities Q1 and U1 of the builder). Practitioner sources: mattpocock/skills, unclebob/swarm-forge and clj-mutate, Lauren Tan's pstack, Trail of Bits on mutation testing.
 Rejected: A2A over HTTP, agent cards, shared or hard-linked clones, reflinks (ext4 has none), partial clones, self-editing skills, agent swarms.
 
 ## Checkpoint
