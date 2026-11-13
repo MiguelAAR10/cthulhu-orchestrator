@@ -110,6 +110,7 @@ Order notes: Q1 follows B6 because it runs inside the sandboxed verification. U1
 - Builder: one Fable session, pane `w3X:pE`, worktree `~/worktrees/cthulhu-build`, branch `v2/build`, now on B5. Remaining in its order: B5, B6, C6, W1 vigia, C4, C5, Q1, U1, A4.
 - Agile design (routing by signals, context map, UI evidence, comprehension report, watcher, loop ledger) written by the architect (Fable) and under attack by Astra (Codex); both files live in the orchestrator's scratch dir until consolidated here. Its activities reach the builder as an addendum after the critique.
 - Proposals P1–P10 and the watcher approved by the Owner on 2026-11-13.
+- Owner decision 2026-11-13: the repository is English (comments, identifiers, CLI messages, commands, docs, commits); only what a role says to the Owner stays Spanish. New work is English from now; activity L1 (builder, before A4) translates the rest, keeping the Spanish command names and JSON keys as accepted aliases.
 - Integration branch: `harness-v2` (local only). Integration owner: orchestrator pane `w3X:p1`. Installed `~/bin/orq` 1.0.0 untouched; rollback = `main` 1f2d0b0.
 - Review owed: independent review of B5/B6 (high risk) before acceptance.
 - Pending Owner decision: dedicated credential for launching a real agent inside the sandbox.
