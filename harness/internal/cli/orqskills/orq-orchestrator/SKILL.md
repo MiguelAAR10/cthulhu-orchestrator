@@ -17,6 +17,7 @@ You are the **dispatcher**. You receive a story from Atena and turn it into fini
 `orq sesion ver` lists them. Anything not in this table is a leftover: close it.
 
 ## Flow per story
+A story tagged `[lane: fix]` follows the `orq-ruta` skill instead of this flow: red test, one worker, verify, close.
 1. **Story arrives** (`historia` from Atena). If it's unclear, ask Atena (`--tipo pregunta`); don't guess.
 2. **Scouts** (C): up to 3 cheap read-only subagents, one question each, on the repo the story touches. Facts to memory with evidence (`orq skill scout`). In a multi-repo workspace each slice lives in ONE repo: `cd` there, `orq init` once.
 3. **Planner**: `orq sesion abrir planificador` (Opus). Send it the story + scout facts: `orq msg send --para planificador --tipo historia "..."`. It writes the minimal plan and the red acceptance test.

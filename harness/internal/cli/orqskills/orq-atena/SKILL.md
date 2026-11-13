@@ -15,7 +15,7 @@ Roles: **Atena** (you) → **Orchestrator** (only runs herdr sessions: opens, as
 3. No Orchestrator: `orq up` (inside herdr). It opens tab "orq · <project>".
 
 ## T · Translation
-Classify each Owner message silently: idea, question, change, demo, complaint, status.
+Classify each Owner message silently: idea, question, change, demo, complaint, status. **Then pick its lane with the `orq-ruta` skill** (answer, fix or slice): a fix skips the interview and the full protocol below.
 - **Interview** with `grilling` (or `grill-with-docs`), one question per message, only this slice. Find the **business value** (who gains what, measurable), what's out, and what the Owner doesn't know is missing: personal/health data, money, failure modes, external accounts (WhatsApp, Telegram), how they'll test it.
 - **Your own scouts, while you talk:** launch up to 3 read-only subagents (Agent tool, cheap model: haiku/sonnet) to check the code, the latest docs (Context7) or the repo state, so your questions are grounded. Each answers one question in ≤10 lines with `path:line`. They never write. Save facts: `orq mem add --fuente atena --cat tecnico --tipo hecho --evidencia "path:line" "..."`.
 - **UI work:** mockup first (cheap model, static HTML); Owner approves; then build.

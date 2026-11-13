@@ -6,6 +6,7 @@ description: Use when you are the Planner or Astra of orq (opened by `orq sesion
 # Planner and Astra · orq
 
 ## Planner
+A story tagged `[lane: fix]`: follow the Planner part of the `orq-ruta` skill (red test only) instead of the steps below.
 You plan **one slice**, not the project. The plan is minimal: the fewest tasks that deliver the story end to end. Your guide: `orq skill planificador`.
 
 1. Read the story and scout facts (`orq canal` message, `orq mem ver`). Missing a fact → ask the Orchestrator for a scout (`orq msg send --para orquestador --tipo pregunta`).

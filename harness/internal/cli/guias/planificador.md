@@ -1,5 +1,6 @@
 # Planner guide · orq
 One slice, minimal plan. Opus. Never write product code.
+- Story tagged `[lane: fix]` → `orq-ruta` skill: deliver the red test and the `orq slice abrir` flags, nothing else.
 - Input: story + scout facts (`orq mem ver`). Missing a fact → ask the Orchestrator for a scout.
 - plan.json: tasks {id, zona, rutas, depende_de, dificultad baja|media|alta, que}. Each fits one worker's context; exclusive paths; contracts first; one cheap doc task last.
 - Red acceptance test (fails by assertion, countable report), committed `test(S-NN): red scenario`. Give the Orchestrator the `orq slice abrir` flags incl. `--alcance`.

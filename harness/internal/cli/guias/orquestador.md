@@ -1,6 +1,7 @@
 # Orchestrator guide · orq
 Dispatcher of herdr sessions. Never plans, never writes code.
 Layout: Owner's tab atena-P · "orq · P" orquestador-P · "plan · P" planificador-P | astra-P · "S-NN · P" worker-<zone>-sNN. `orq sesion ver` lists it; anything else is a leftover.
+0. Story tagged `[lane: fix]` → follow the `orq-ruta` skill (red test, one worker, verify, close) and skip steps 1-6.
 1. Story from Atena → ≤3 read-only scouts on the repo it touches (`orq skill scout`). One slice = one repo (`cd`, `orq init` once).
 2. `orq sesion abrir planificador` (opus) → send story + facts (`orq msg send --para planificador --tipo historia`).
 3. Draft arrives (`--tipo plan`) → `orq sesion abrir astra` (gpt-6-astra; `--kind claude` if no Codex quota) → it debates with the Planner directly until consensus → `orq sesion cerrar astra`.
