@@ -48,6 +48,57 @@ Sources consolidated from three scouts on 2026-11-13 (A2A spec v1.0, Claude Code
 | P8 | Held-out exam variants the worker never sees | Evidence of agents gaming visible tests | M |
 Rejected: A2A over HTTP, agent cards, shared or hard-linked clones, reflinks (ext4 has none), partial clones, self-editing skills, agent swarms.
 
+## Technical plan
+Owner of this section: the builder (branch `v2/build`). Order C1 → C2 → C3 → B5 → B6 → C6 → C4 → C5 → A4, one commit per activity, each green.
+
+### Target layout and dependency direction
+`cli` (flags, usage, printing) → `app` (use cases) → domain → adapters. Imports only point down; `internal/arch_test.go` parses every import and fails on an upward one.
+
+| Layer | Packages | Holds |
+|---|---|---|
+| cli | `internal/cli` | Argument parsing and output. No git, no multiplexer, no model table. |
+| app | `internal/app` (new) | `Proyecto`, launch of roles and workers, messaging, handoff and contract text, capacity, metrics. Receives its ports in a struct; tests pass fakes. |
+| domain | `slice`, `plan`, `canal`, `memoria`, `instinto`, `perfil`, `gate`, `config` (new), `limits`, `state`, `diario` (new) | State machines and rules. Pure on injected clock, git and sandbox where they decide acceptance. |
+| adapters | `terminal` (+`herdr`, `orca`, `fake`), `agente`, `sandbox`, `gitx`, `sysinfo`, `escriba`, `orqdir` | Everything that execs a process or reads the OS. |
+
+What moves:
+- `cli/proyecto.go` → `proyecto`, `abrirProyecto`, paths, `excluir` to `app/proyecto.go`; `porRol`, `arranque.completar` to `config`; `agentArgs`, `rolArgs` to `agente`; `lanzar`, the body of `runUp`/`runRelevo` to `app/roles.go`; the body of `runMsg` to `app/mensajes.go` (C6). `runSlice`, `runMem` keep only flags and printing.
+- `cli/v05.go` → `datosRelevo`, `Relevo.Markdown`, `contrato` to `app/relevo.go`; `lanzarWorker`, `registrarLlamador`, `workerArgs` to `app/workers.go` and `agente`; `memVigente` to `app/proyecto.go`.
+- `cli/v03.go` → `fase`, `escribirFicha`, the checks of `runDoctor` to `app/estado.go`; `runInit`, `runSkills` stay in cli (they only install files and print).
+- `cli/sesion.go` → `cerrarSesiones`, `panelDelSlice` to `app/roles.go`. `plan.Modelo` is deleted (C1). `internal/herdr` becomes `internal/terminal/herdr` (C2).
+
+### Ports
+| Port | Interface | Adapters |
+|---|---|---|
+| Terminal driver | `terminal.Driver`: `Dentro`, `PanelActual`, `CrearPanel`, `Arrancar`, `Avisar`, `Estado`, `Renombrar`, `Cerrar` | `terminal/herdr` (today), `terminal/orca` (C2, on the `orca` CLI), `terminal/fake` (tests) |
+| Agent runner | `agente.Runner`: argv and env for an interactive agent of a kind, model, effort; `Preguntar` for one headless answer | `agente` for claude and codex; a simulated binary in tests |
+| Sandbox | `slice.Caja`: `Command(ctx, sandbox.Spec, argv...)` | `internal/sandbox` (bubblewrap); no "off" adapter exists |
+| Clock | `func() time.Time` passed in (`now` parameters stay) | `time.Now`; fixed times in tests |
+| Git | `gitx.Git`: `Run(ctx, gitDir, args...)` with a timeout and a config that ignores user and system files | `gitx` on the `git` binary; always `--git-dir` of the main repo, never a worker repo as cwd |
+
+### Rules held everywhere
+1. Every external call (git, bwrap, herdr, orca, agent, exam) takes a `context` with a timeout; a timeout is reported as "unknown", never as success or as a plain failure.
+2. Every state transition is written to the journal (`.orq/diario.jsonl`, append under lock, `diario` package) before the state file changes, with slice, attempt, actor, from, to and an operation id. Repeating a command with the same effect is a no-op that says so.
+3. Lock order, always: `abrir` → `slice-NN` → `integracion` → file locks (`canal`, `memoria`, `diario`). No lock is taken while holding a later one; `slice` asserts it in tests.
+4. No ignored error on a path that decides acceptance (verify, ingest, merge, integrate, publish, close): a `go/ast` test over those functions fails when the error of a git, sandbox, journal or save call is discarded.
+5. `go test -race ./... -count=1`, `gofmt -l`, `go vet` clean on every commit. Standard library only.
+6. A launch is two-phase: intent journaled → driver call → result journaled. An intent without a result is "unknown" and is resolved by `Estado` before anything is retried.
+
+### Activities
+| ID | What lands | Exit test | Files |
+|---|---|---|---|
+| C1 | `config`: defaults = today; user file (`ORQ_CONFIG` or `~/.config/orq/config.json`) then `<root>/.orq/config.json`, merged per field, origin kept; unknown field is an error; `orq config ver`; `porRol` and `plan.Modelo` deleted; guides print models from config | `go test ./internal/config`; `TestDefaultsIgualesAHoy` pins the old tables; `grep` test: no model name outside `config` | `internal/config/*`, `cli/config.go`, `cli/proyecto.go`, `cli/v05.go`, `cli/skill.go`, `guias/*.md`, `plan/plan.go`, `escriba` |
+| C2 | `terminal.Driver`, herdr behind it, Orca adapter, fake; `app` package with role and worker launch; timed-out start = unknown, checked with `Estado` before retry | `go test ./internal/terminal/... ./internal/app`: fake driver proves no second launch after a timeout; Orca adapter tested against a stub `orca` binary; arch test | `internal/terminal/**`, `internal/app/*`, `internal/agente/*`, `cli/*` |
+| C3 | `sysinfo.Memoria/CPUs/Carga`; `app.Capacidad` = min(max_workers, RAM, CPU) with per-agent budget and reserve from config; gate and `slice lanzar` deny with the limiting factor; `orq status` shows RAM, CPU, disk, capacity | unit tests with fake `/proc` files; gate test denies on low RAM and says why | `sysinfo`, `config`, `gate`, `app/capacidad.go`, `cli/cli.go` |
+| B5 | Independent clones (`--no-hardlinks`), bundle in, `refs/orq/sNN/*`; merge by `merge-tree` + `commit-tree`; exam, `--sano`, integration re-run inside the sandbox on `git archive`; protected paths checked on the ingested diff; contract kept in `refs/orq/contrato/NN`, compared on verify and close; CERRANDO and `integrado` re-checked; `orq slice convertir` for 1.0.0 slices | `validacion/aislamiento.sh` green without `--todo`, part 2 asserting the refusal reason; `e2e-v05.sh`; slice tests | `slice/*`, `gitx`, `gate` (worker detection, contract read), `cli`, `validacion/*` |
+| B6 | PATH shim → `orq caja agente`; private agent config dir seeded by orq; credential only from `caja.credencial.<agente>`, else refusal naming the key; deps policy P5; skills allowlist P6 | `go test ./internal/app` with a simulated agent binary inside the real box; refusal test | `app/caja.go`, `cli/sandbox.go`, `config`, `agente` |
+| C6 | Identity from the box spool, `--de` ignored inside; inbox per role as source of truth, one-line doorbell; `datos` on `cierre`/`estado`; derived key; closed attempt rejects every type; task/message/artifact on disk | `go test ./internal/canal ./internal/app`: spoofed sender ignored, doorbell carries no body, stale attempt rejected | `canal/*`, `app/mensajes.go`, `cli` |
+| C4 | Journal-based metrics per slice, lane, role: wall time, attempts, verifications, sessions, tokens (best effort) | `go test ./internal/app` on a journal fixture; `orq metricas` shows the table | `diario`, `app/metricas.go`, `cli/metricas.go` |
+| C5 | One worker by default; a second zone needs `--paralelo "reason"`; Astra and scouts gated by `--escala grande` or `--riesgo`; `.orq/decisiones/NN.md` in every contract; skills and guides rewritten | tests for the three gates; guides tests | `slice`, `app`, `guias/*`, `orqskills/*`, `skills/*` |
+| A4 | GitHub Actions: gofmt, vet, `go test -race`, staticcheck if on PATH, `validacion/*`; README and REGLAS state only what is enforced and what a worker can still do | workflow file valid; scripts pass locally | `.github/workflows/ci.yml`, `README.md`, `docs/REGLAS-HARNESS.md` |
+
+Reorder note: none. B5 waits for `git merge harness-v2` (sandbox package), which lands before it by order.
+
 ## Checkpoint
 - Phase: A1 and A2 integrated and verified. A3: spike done (bwrap allowlist root works; agents start inside the box only through a PATH shim; read-only dependency binds work; no overlay in bwrap 0.9.0). B1+B2 (sandbox package and containment test) in progress, attempt 1 of 2.
 - Integration branch: `harness-v2` (local only), tip b950633. Integration owner: orchestrator pane `w3X:p1`.
