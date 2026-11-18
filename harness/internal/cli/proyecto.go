@@ -417,7 +417,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	}
 	// Pedir ayuda nunca ejecuta: un «verificar --help» corría el examen y podía gastar un intento.
 	if slices.ContainsFunc(args, func(a string) bool { return a == "-h" || a == "--help" || a == "help" }) {
-		fmt.Fprintln(stdout, "uso: orq slice [--slice NN] abrir|tomar|alcance|verificar|juntar|podar|examen|ruta|estado|recibo|rehuella|convertir ... · guía: orq skill orquestador")
+		fmt.Fprintln(stdout, "uso: orq slice [--slice NN] abrir|tomar|alcance|verificar|juntar|podar|examen|ruta|estado|recibo|rehuella|convertir|soltar ... · guía: orq skill orquestador")
 		return 0
 	}
 	show := func(out string) {
@@ -592,6 +592,18 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		fmt.Fprintf(stdout, "%s converted: contract written to git from the state (exam hash checked against %s), provenance %s. Verify it: `orq slice verificar --slice %s`\n", e.Attempt(), slice.Corto(e.SHARojo), e.Procedencia, e.NN)
+		return 0
+	case "soltar":
+		if len(args) != 2 || strings.TrimSpace(args[1]) == "" {
+			fmt.Fprintln(stderr, "uso: orq slice soltar NN   (clears a stale writer lease when no process works in the slice's worktree)")
+			return 1
+		}
+		e, err := r.Soltar(strings.TrimPrefix(args[1], "S-"))
+		if err != nil {
+			fmt.Fprintln(stderr, "orq slice:", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "%s: writer lease released (journaled)\n", e.Attempt())
 		return 0
 	case "rehuella":
 		if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {

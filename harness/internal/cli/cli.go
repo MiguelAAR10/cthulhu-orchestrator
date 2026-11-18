@@ -68,6 +68,8 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
                                  ratification (provenance «legado»). Its old processes must be stopped: lock,
                                  writer lease and processes in the worktree are checked. Until roadmap step 3
                                  the ratification is recorded, not authenticated as the Owner's
+  orq slice soltar NN            clears a stale writer lease, only when no process works in the
+                                 slice's worktree (the one git reports); journaled
   orq slice ruta slice "motivo"  sube un fix abierto a slice completo (no baja)
   orq slice tomar QUIEN [--relevo]   un solo escritor por slice
   orq slice reabrir "motivo"   un slice verificado vuelve a construirse para una reparación, con su trabajo

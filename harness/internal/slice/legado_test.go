@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"orq/internal/diario"
 )
 
 const ratifico = "Owner: S-01 was opened by orq 1.0.0, adopt it"
@@ -424,4 +426,45 @@ func TestConvertirEnUsoMiraElWorktreeDeGit(t *testing.T) {
 		t.Fatalf("a process in the worktree git reports must refuse, whatever the state says: %v", err)
 	}
 	sinContrato(t, r, "01")
+}
+
+// `soltar` clears a stale writer lease only when no process works in the slice's worktree (the one
+// git reports), and journals who held it; then the slice converts without editing the JSON by hand.
+func TestSoltarLiberaEscritorViejo(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	aLegado(t, r, e)
+	editarEstado(t, r, "01", func(m map[string]any) { m["escritor"], m["worktree"] = "worker-1", filepath.Join(t.TempDir(), "x") })
+	antes := EnUso
+	t.Cleanup(func() { EnUso = antes })
+	EnUso = func(dir string) []string {
+		if dir == e.Worktree {
+			return []string{"claude (pid 4242)"}
+		}
+		return nil
+	}
+	if _, err := r.Soltar("01"); err == nil || !strings.Contains(err.Error(), "4242") {
+		t.Fatalf("soltar with a process in the worktree must refuse and name it: %v", err)
+	}
+	if got, _ := r.Load("01"); got.Escritor != "worker-1" {
+		t.Fatalf("a refused soltar must keep the lease: %q", got.Escritor)
+	}
+	EnUso = func(string) []string { return nil }
+	got, err := r.Soltar("01")
+	if err != nil || got.Escritor != "" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if again, _ := r.Load("01"); again.Escritor != "" {
+		t.Fatalf("the cleared lease must be saved: %q", again.Escritor)
+	}
+	evs, err := diario.Leer(diario.Ruta(r.OrqDir))
+	if _, ok := diario.Ultimo(evs, func(ev diario.Evento) bool { return ev.Paso == "soltar" && ev.Actor == "worker-1" && ev.Slice == "01" }); err != nil || !ok {
+		t.Fatalf("soltar must journal who held the lease: %+v %v", evs, err)
+	}
+	if _, err := r.Soltar("01"); err == nil {
+		t.Fatal("soltar without a lease must say there is nothing to release")
+	}
+	if _, err := convertir(t, r, "01"); err != nil {
+		t.Fatal(err)
+	}
 }

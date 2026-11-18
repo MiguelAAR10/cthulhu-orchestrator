@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"orq/internal/config"
+	"orq/internal/diario"
 	"orq/internal/gitx"
 )
 
@@ -274,6 +275,35 @@ func (r Repo) Convertir(nn, ratifico, codigo string, out io.Writer) (*Estado, er
 		return e, err
 	}
 	return e, errors.Join(r.save(e), r.marcarSiClon(e))
+}
+
+// Soltar clears a stale writer lease (a 1.0.0 slice whose writer is gone), only when no process
+// works in the slice's worktree, and journals who held it.
+func (r Repo) Soltar(nn string) (*Estado, error) {
+	soltar, err := r.bloqueo(nn)
+	if err != nil {
+		return nil, err
+	}
+	defer soltar()
+	e, err := r.Load(nn)
+	if err != nil || e == nil {
+		return nil, errors.Join(err, errors.New("no hay slice abierto"))
+	}
+	if e.Escritor == "" {
+		return e, fmt.Errorf("%s has no writer lease: nothing to release", e.ID())
+	}
+	if dir, usan, err := r.enUsoSlice(e); err != nil {
+		return e, err
+	} else if len(usan) > 0 {
+		return e, fmt.Errorf("%s keeps its writer %s: processes still work inside %s: %s. Stop them first", e.ID(), e.Escritor, dir, strings.Join(usan, ", "))
+	}
+	ev := diario.Evento{Tipo: "fase", Paso: "soltar", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(), Actor: e.Escritor,
+		Detalle: "writer lease released: no process in the worktree"}
+	if err := diario.Anotar(diario.Ruta(r.OrqDir), ev); err != nil {
+		return e, fmt.Errorf("the release of %s's writer lease could not be journaled: %w", e.ID(), err)
+	}
+	e.Escritor = ""
+	return e, r.save(e)
 }
 
 // enUsoSlice lists processes inside the slice's worktree. The path is the one git reports for the
