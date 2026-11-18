@@ -32,20 +32,22 @@ type Marca struct {
 	Protegidos []string `json:"protegidos,omitempty"`
 }
 
-// LeerMarca busca la marca subiendo desde dir. ok=false si dir no está en un clon de worker.
+// LeerMarca busca la marca subiendo desde dir, también a través de repos anidados dentro del clon.
+// ok=false si dir no está en un clon de worker. Un dir vacío o relativo no se puede ubicar: cuenta
+// como worker (ok=true, marca vacía).
 func LeerMarca(dir string) (Marca, bool) {
-	for d := filepath.Clean(dir); d != "" && d != "/"; d = filepath.Dir(d) {
-		raw, err := os.ReadFile(filepath.Join(d, ".git", MarcaClon))
-		if err != nil {
-			if fi, errG := os.Lstat(filepath.Join(d, ".git")); errG == nil && fi != nil {
-				return Marca{}, false // la raíz de un repo que no es clon de orq
-			}
-			continue
-		}
-		var m Marca
-		return m, json.Unmarshal(raw, &m) == nil
+	if !filepath.IsAbs(dir) {
+		return Marca{}, true
 	}
-	return Marca{}, false
+	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+		if raw, err := os.ReadFile(filepath.Join(d, ".git", MarcaClon)); err == nil {
+			var m Marca
+			return m, json.Unmarshal(raw, &m) == nil
+		}
+		if filepath.Dir(d) == d {
+			return Marca{}, false
+		}
+	}
 }
 
 // ControlPorDefecto son rutas que activan código o cambian reglas en las sesiones de confianza.

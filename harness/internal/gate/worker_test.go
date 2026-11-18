@@ -114,3 +114,113 @@ func TestGateDeniesInClone(t *testing.T) {
 		}
 	}
 }
+
+// A repo nested inside a worker clone (`git init sub`, `git clone . sub`) must not turn the gate
+// off: the marker of an outer clone still makes every directory below it a worker.
+func TestGateDeniesInRepoNestedInClone(t *testing.T) {
+	base := t.TempDir()
+	principal := filepath.Join(base, "main")
+	gitInit(t, principal)
+	clon := clonMarcado(t, `{"root":"`+principal+`","slice":"01","rama":"slice/01","bundle":["tests/aceptacion/s01.sh"]}`)
+	iniciado := filepath.Join(clon, "sub")
+	gitInit(t, iniciado)
+	clonado := filepath.Join(clon, "copia")
+	if out, err := exec.Command("git", "clone", "-q", clon, clonado).CombinedOutput(); err != nil {
+		t.Fatalf("clone: %v\n%s", err, out)
+	}
+	os.Remove(filepath.Join(clonado, ".git", orqdir.MarcaClon)) // a clone copies no marker; be sure
+	env := Env{
+		DiskFreeGB: func(string) (float64, error) { return 999, nil },
+		Workers:    func() (int, error) { return 0, nil },
+		Now:        time.Now,
+		StateDir:   filepath.Join(base, "state"),
+		IsWorktree: IsWorker,
+		Bundle:     func(string) []string { return []string{"tests/aceptacion/s01.sh"} },
+		LimitsPath: filepath.Join(base, "limits.json"),
+		MainRoot:   func(string) string { return principal },
+	}
+	for _, cwd := range []string{iniciado, clonado} {
+		if !IsWorker(cwd) {
+			t.Errorf("%s: a repo nested in a marked clone must be a worker", cwd)
+		}
+		cases := []struct {
+			nombre string
+			p      Payload
+		}{
+			{"edit of the exam", Payload{ToolName: "Edit", ToolInput: map[string]any{"file_path": filepath.Join(clon, "tests/aceptacion/s01.sh")}}},
+			{"approve the exam", Payload{ToolName: "Bash", ToolInput: map[string]any{"command": "orq slice examen tests/aceptacion/s01.sh --aprobado x"}}},
+			{"approve the exam from main", Payload{ToolName: "Bash", ToolInput: map[string]any{"command": "cd " + principal + " && orq slice examen tests/aceptacion/s01.sh --aprobado x"}}},
+			{"write to the main .orq", Payload{ToolName: "Write", ToolInput: map[string]any{"file_path": filepath.Join(principal, ".orq/slices/01.json")}}},
+		}
+		for _, c := range cases {
+			c.p.Cwd = cwd
+			if d := Evaluate(c.p, baseLimits(), env); d.Allow {
+				t.Errorf("%s from %s: allowed in a repo nested in a worker clone, must be denied", c.nombre, cwd)
+			}
+		}
+	}
+}
+
+// An empty or relative cwd cannot be placed: it is a worker (fail closed), and it never hangs.
+func TestIsWorkerCwdVacioORelativo(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, cwd := range []string{"", ".", "sub/dir"} {
+		listo := make(chan bool, 1)
+		go func() { listo <- IsWorker(cwd) }()
+		select {
+		case w := <-listo:
+			if !w {
+				t.Errorf("cwd %q: must be treated as a worker", cwd)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("cwd %q: IsWorker hangs", cwd)
+		}
+	}
+}
+
+// The whole gate with an empty or relative cwd answers (it does not hang) and treats it as a worker.
+func TestGateCwdVacioORelativoNoSeCuelga(t *testing.T) {
+	t.Chdir(t.TempDir())
+	base := t.TempDir()
+	env := Env{
+		DiskFreeGB: func(string) (float64, error) { return 999, nil },
+		Workers:    func() (int, error) { return 0, nil },
+		Now:        time.Now,
+		StateDir:   filepath.Join(base, "state"),
+		IsWorktree: IsWorker,
+		Bundle:     func(string) []string { return nil },
+		LimitsPath: filepath.Join(base, "limits.json"),
+		MainRoot:   CheckoutPrincipal,
+	}
+	for _, cwd := range []string{"", ".", "a/b"} {
+		listo := make(chan Decision, 1)
+		go func() {
+			listo <- Evaluate(Payload{ToolName: "Bash", Cwd: cwd, ToolInput: map[string]any{"command": "orq slice examen x --aprobado y"}}, baseLimits(), env)
+		}()
+		select {
+		case d := <-listo:
+			if d.Allow {
+				t.Errorf("cwd %q: a worker-only denial was allowed", cwd)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("cwd %q: the gate hangs", cwd)
+		}
+	}
+}
+
+// CheckoutPrincipal with an empty or relative dir answers "" instead of walking "." forever.
+func TestCheckoutPrincipalCwdRelativoNoSeCuelga(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, cwd := range []string{"", ".", "a/b"} {
+		listo := make(chan string, 1)
+		go func() { listo <- CheckoutPrincipal(cwd) }()
+		select {
+		case r := <-listo:
+			if r != "" {
+				t.Errorf("cwd %q: %q", cwd, r)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("cwd %q: CheckoutPrincipal hangs", cwd)
+		}
+	}
+}

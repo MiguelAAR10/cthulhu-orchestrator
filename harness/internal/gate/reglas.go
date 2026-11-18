@@ -465,7 +465,10 @@ func codigoEnLinea(c simple) string {
 // CheckoutPrincipal devuelve la raíz del checkout principal del repo de dir,
 // siguiendo el archivo .git de un worktree enlazado. "" si no hay repo.
 func CheckoutPrincipal(dir string) string {
-	for d := dir; d != "" && d != "/"; d = filepath.Dir(d) {
+	if !filepath.IsAbs(dir) {
+		return "" // cannot be placed; IsWorker already treats it as a worker
+	}
+	for d := filepath.Clean(dir); d != "/" && filepath.Dir(d) != d; d = filepath.Dir(d) {
 		g := filepath.Join(d, ".git")
 		info, err := os.Lstat(g)
 		if err != nil {
