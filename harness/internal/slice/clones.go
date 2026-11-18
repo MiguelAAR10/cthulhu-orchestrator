@@ -219,9 +219,14 @@ func (r Repo) puntaDelSlice(e *Estado) (Ingesta, error) {
 	}
 	if esEnlazado(e.Worktree) {
 		// A 1.0.0 linked worktree shares the main repo's refs: its commits are already on the branch.
-		// Uncommitted files are asked to git as the owner's checkout would be; it only warns.
-		sucio, err := gitDueno(e.Worktree, "status", "--porcelain")
-		return Ingesta{Punta: actual, Sucio: strings.TrimSpace(sucio)}, err
+		// git is never run inside it (its filters and attributes are the worker's), so uncommitted files
+		// are not looked for: only committed work is verified, and close keeps a dirty worktree.
+		if ok, err := r.esAncestro(e.SHARojo, actual); err != nil {
+			return Ingesta{}, err
+		} else if !ok {
+			return Ingesta{}, fmt.Errorf("branch %s (%s) does not descend from the red commit %s: its history was rewritten. Not used", e.Rama, actual[:min(8, len(actual))], e.SHARojo[:min(8, len(e.SHARojo))])
+		}
+		return Ingesta{Punta: actual}, nil
 	}
 	return r.puntaDe(e, e.Worktree, e.Rama, "slice")
 }

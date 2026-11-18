@@ -100,6 +100,12 @@ func TestGateDeniesInClone(t *testing.T) {
 		{"subagent launch", Payload{ToolName: "Agent", ToolInput: map[string]any{"prompt": "help"}}},
 		{"write to the main .orq", Payload{ToolName: "Write", ToolInput: map[string]any{"file_path": filepath.Join(principal, ".orq/slices/01.json")}}},
 		{"close the slice", Payload{ToolName: "Bash", ToolInput: map[string]any{"command": "orq slice cerrar --aceptado"}}},
+		// The marker is what makes the clone a worker: removing or rewriting it would turn the gate off.
+		{"move the clone marker away", Payload{ToolName: "Bash", ToolInput: map[string]any{"command": "mv .git/orq-clon /tmp/x"}}},
+		{"truncate the clone marker", Payload{ToolName: "Bash", ToolInput: map[string]any{"command": ": > .git/orq-clon"}}},
+		{"write the clone marker", Payload{ToolName: "Write", ToolInput: map[string]any{"file_path": filepath.Join(clon, ".git", "orq-clon"), "content": "{}"}}},
+		{"edit the clone marker", Payload{ToolName: "Edit", ToolInput: map[string]any{"file_path": ".git/orq-clon"}}},
+		{"move the clone's .git", Payload{ToolName: "Bash", ToolInput: map[string]any{"command": "mv .git .git-old"}}},
 	}
 	for _, c := range cases {
 		c.p.Cwd = clon

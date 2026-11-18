@@ -1323,3 +1323,41 @@ func TestConvertirEstadoViejo(t *testing.T) {
 		t.Fatal("converting a slice that already has a contract must say so")
 	}
 }
+
+// orq never runs git with its cwd in a worker's copy: a clean filter the worker sets up in a 1.0.0
+// linked worktree must not run when the slice is verified.
+func TestEstadoViejoNoCorreGitEnElWorktree(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	aLegado(t, r, e)
+	centinela := filepath.Join(t.TempDir(), "filter-ran")
+	if _, err := Git(r.Root, "config", "filter.x.clean", "touch "+centinela+"; cat"); err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, ".gitattributes", "*.txt filter=x\n")
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	os.Remove(centinela)
+	time.Sleep(10 * time.Millisecond)
+	os.WriteFile(filepath.Join(e.Worktree, "total.txt"), []byte("170\n"), 0o644) // new mtime: status would re-filter
+	r.Verificar("", t0)
+	if _, err := os.Stat(centinela); err == nil {
+		t.Fatal("verify ran git in the worker's worktree (its clean filter ran)")
+	}
+}
+
+// The tip of a legacy slice must descend from its red commit, as a clone's does.
+func TestEstadoViejoPuntaDesciendeDelRojo(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	aLegado(t, r, e)
+	otra, err := Git(r.Root, "commit-tree", "-m", "otra historia", e.SHARojo+"^{tree}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Git(r.Root, "update-ref", "refs/heads/"+e.Rama, otra); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "does not descend") {
+		t.Fatalf("a tip that does not descend from the red commit must be refused: %v", err)
+	}
+}
