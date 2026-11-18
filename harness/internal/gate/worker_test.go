@@ -224,3 +224,45 @@ func TestCheckoutPrincipalCwdRelativoNoSeCuelga(t *testing.T) {
 		}
 	}
 }
+
+// RepoPropio places the worker's repository at its marked clone, through nested repos, with the
+// branch the marker names; an unmarked repo has no branch; a relative dir cannot be placed.
+func TestRepoPropio(t *testing.T) {
+	clon := clonMarcado(t, `{"root":"/x/repo","slice":"01","rama":"slice/01"}`)
+	anidado := filepath.Join(clon, "sub")
+	gitInit(t, anidado)
+	for _, dir := range []string{clon, filepath.Join(clon, "a"), anidado} {
+		if raiz, rama := RepoPropio(dir); raiz != clon || rama != "slice/01" {
+			t.Fatalf("%s: got %q %q", dir, raiz, rama)
+		}
+	}
+	plano := filepath.Join(t.TempDir(), "repo")
+	gitInit(t, plano)
+	if raiz, rama := RepoPropio(filepath.Join(plano, "x")); raiz != plano || rama != "" {
+		t.Fatalf("plain repo: got %q %q", raiz, rama)
+	}
+	if raiz, rama := RepoPropio(filepath.Join(clonMarcado(t, "{"), "x")); raiz == "" || rama != "" {
+		t.Fatalf("corrupt marker: the clone is still the repo, with no branch: %q %q", raiz, rama)
+	}
+	if raiz, _ := RepoPropio("rel/dir"); raiz != "" {
+		t.Fatalf("relative dir: got %q", raiz)
+	}
+}
+
+// From a real clone, git against the main repo is denied and git in the clone passes.
+func TestWorkerGitContraElRepoPrincipal(t *testing.T) {
+	principal := filepath.Join(t.TempDir(), "repo")
+	gitInit(t, principal)
+	clon := clonMarcado(t, `{"root":"`+principal+`","slice":"01","rama":"slice/01"}`)
+	env := Env{Now: time.Now, IsWorktree: IsWorker, RepoPropio: RepoPropio}
+	for cmd, permite := range map[string]bool{
+		"git -C " + principal + " update-ref refs/heads/main HEAD": false,
+		"cd " + principal + " && git commit --allow-empty -m x":    false,
+		"git status && git -C . log":                               true,
+	} {
+		d := Evaluate(Payload{ToolName: "Bash", Cwd: clon, ToolInput: map[string]any{"command": cmd}}, baseLimits(), env)
+		if d.Allow != permite {
+			t.Fatalf("%s: allow=%v (%s)", cmd, d.Allow, d.Reason)
+		}
+	}
+}

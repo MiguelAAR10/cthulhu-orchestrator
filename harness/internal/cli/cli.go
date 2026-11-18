@@ -176,6 +176,7 @@ func realEnv() gate.Env {
 		Bundle:     bundleAbierto,
 		LimitsPath: limits.DefaultPath(),
 		MainRoot:   checkoutPrincipal,
+		RepoPropio: gate.RepoPropio,
 	}
 }
 

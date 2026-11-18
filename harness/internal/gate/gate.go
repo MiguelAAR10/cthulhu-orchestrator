@@ -40,6 +40,9 @@ type Env struct {
 	LimitsPath string
 	// MainRoot devuelve el checkout principal del repo de cwd, cuyo .orq/ es del orquestador.
 	MainRoot func(cwd string) string
+	// RepoPropio returns the root of the worker's own repository (its clone) and its branch.
+	// "" root: the repository cannot be placed and a worker runs no git.
+	RepoPropio func(cwd string) (raiz, rama string)
 	// Capacidad dice si la máquina (RAM, CPU, carga) admite un agente más con vivos corriendo.
 	// Devuelve "" si cabe, o el motivo. nil = no se mira la máquina (pruebas del resto de reglas).
 	Capacidad func(cwd string, vivos int) (motivo string, err error)
@@ -65,6 +68,17 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 		for _, c := range cmds {
 			if d, ok := destructivo(c, resolver("/", p.Cwd)); ok {
 				return d
+			}
+		}
+		if wt {
+			raiz, rama := "", ""
+			if env.RepoPropio != nil {
+				raiz, rama = env.RepoPropio(p.Cwd)
+			}
+			for _, c := range cmds {
+				if d, ok := gitAjeno(c, raiz, rama); ok {
+					return d
+				}
 			}
 		}
 		for _, c := range cmds {
