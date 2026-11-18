@@ -276,7 +276,7 @@ func (r Repo) integrar(e *Estado) (string, error) {
 		return "", err
 	}
 	if len(tocoExamen)+len(otras) > 0 {
-		return "", fmt.Errorf("the verified commit %s changes protected paths (%s): not integrated. Nothing was deleted", rec.Head[:8], strings.Join(cabeza(append(tocoExamen, otras...), 5), ", "))
+		return "", fmt.Errorf("the verified commit %s changes protected paths (%s): not integrated. Nothing was deleted", Corto(rec.Head), strings.Join(cabeza(append(tocoExamen, otras...), 5), ", "))
 	}
 	sha, conflicto, err := r.fusionar(base, rec.Head, fmt.Sprintf("slice %s: %s", e.Attempt(), e.Titulo))
 	if err != nil {
@@ -343,7 +343,7 @@ func (r Repo) publicar(e *Estado) error {
 			return err
 		}
 		if st != "" {
-			return fmt.Errorf("integrado y revalidado (%s), pero tu checkout tiene cambios sin commit en %s. Commitéalos o guárdalos y vuelve a correr el cierre: continúa donde quedó", e.Integrado[:8], e.Base)
+			return fmt.Errorf("integrado y revalidado (%s), pero tu checkout tiene cambios sin commit en %s. Commitéalos o guárdalos y vuelve a correr el cierre: continúa donde quedó", Corto(e.Integrado), e.Base)
 		}
 		if _, err := gitDueno(r.Root, "merge", "--ff-only", e.Integrado); err != nil {
 			return fmt.Errorf("%w: %s avanzó mientras tanto; vuelve a correr el cierre e integra de nuevo", ErrBaseAvanzo, e.Base)
@@ -355,7 +355,7 @@ func (r Repo) publicar(e *Estado) error {
 		return err
 	}
 	if strings.Contains(wl+"\n", "branch refs/heads/"+e.Base+"\n") {
-		return fmt.Errorf("integrado y revalidado (%s), pero %s está abierta en otro worktree. Cámbiate a %s en el checkout principal y vuelve a correr el cierre", e.Integrado[:8], e.Base, e.Base)
+		return fmt.Errorf("integrado y revalidado (%s), pero %s está abierta en otro worktree. Cámbiate a %s en el checkout principal y vuelve a correr el cierre", Corto(e.Integrado), e.Base, e.Base)
 	}
 	tip, err := r.git("rev-parse", "refs/heads/"+e.Base)
 	if err != nil {

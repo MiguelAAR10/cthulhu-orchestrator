@@ -468,7 +468,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "%s abierto en rojo sobre %s (%s) · ruta %s. Worktree: %s\nPaquete protegido: %s\n", e.Attempt(), e.Base, e.SHARojo[:8], e.RutaEfectiva(), e.Worktree, strings.Join(e.Bundle, ", "))
+		fmt.Fprintf(stdout, "%s abierto en rojo sobre %s (%s) · ruta %s. Worktree: %s\nPaquete protegido: %s\n", e.Attempt(), e.Base, slice.Corto(e.SHARojo), e.RutaEfectiva(), e.Worktree, strings.Join(e.Bundle, ", "))
 		if len(e.Vigilados) > 0 {
 			var rs []string
 			for _, v := range e.Vigilados {
@@ -539,7 +539,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "%s verificado: el examen pasa intacto en %s.\n", e.Attempt(), e.Recibo.Head[:8])
+		fmt.Fprintf(stdout, "%s verificado: el examen pasa intacto en %s.\n", e.Attempt(), slice.Corto(e.Recibo.Head))
 		if e.Recibo.Contado {
 			fmt.Fprintf(stdout, "  %d ejecutadas, %d omitidas, %d fallidas\n", e.Recibo.Ejecutados, e.Recibo.Omitidos, e.Recibo.Fallidos)
 		}
@@ -576,16 +576,19 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s sube a la ruta slice (%s). Sigue el flujo completo desde el Planificador: plan, Astra, orq plan cargar, equipo. El rojo y los commits se quedan\n", e.Attempt(), motivo)
 		return 0
 	case "convertir":
-		if len(args) != 2 || strings.TrimSpace(args[1]) == "" {
-			fmt.Fprintln(stderr, "uso: orq slice convertir NN   (a slice opened by orq 1.0.0, with its old processes stopped)")
+		fs := flag.NewFlagSet("slice convertir", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		ratifico := fs.String("ratifico", "", "who approved adopting this 1.0.0 slice, and why")
+		if len(args) < 2 || strings.TrimSpace(args[1]) == "" || fs.Parse(args[2:]) != nil || strings.TrimSpace(*ratifico) == "" || fs.NArg() > 0 {
+			fmt.Fprintln(stderr, "uso: orq slice convertir NN --ratifico \"<who approved it and why>\"   (a slice opened by orq 1.0.0, with its old processes stopped; the ratification is recorded, not authenticated, until roadmap step 3)")
 			return 1
 		}
-		e, err := r.Convertir(strings.TrimPrefix(args[1], "S-"))
+		e, err := r.Convertir(strings.TrimPrefix(args[1], "S-"), *ratifico, stdout)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "%s converted: contract written to git from the state (exam hash checked against %s), provenance %s. Verify it: `orq slice verificar --slice %s`\n", e.Attempt(), e.SHARojo[:7], e.Procedencia, e.NN)
+		fmt.Fprintf(stdout, "%s converted: contract written to git from the state (exam hash checked against %s), provenance %s. Verify it: `orq slice verificar --slice %s`\n", e.Attempt(), slice.Corto(e.SHARojo), e.Procedencia, e.NN)
 		return 0
 	case "rehuella":
 		if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {
@@ -600,7 +603,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		}
 		memoria.Add(p.MemPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
 			Texto: app.Recortar(e.Attempt()+" huella reparada: "+motivo, memoria.MaxTexto)}, time.Now())
-		fmt.Fprintf(stdout, "%s: huella tomada del rojo (%s), el examen es idéntico. Vuelve a verificar\n", e.Attempt(), e.SHARojo[:7])
+		fmt.Fprintf(stdout, "%s: huella tomada del rojo (%s), el examen es idéntico. Vuelve a verificar\n", e.Attempt(), slice.Corto(e.SHARojo))
 		return 0
 	case "reabrir":
 		if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {
@@ -741,7 +744,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "%s: examen protegido %s (base %s)\n  cmd: %s\n", e.ID(), strings.Join(e.Bundle, ", "), e.SHAExamen[:8], e.Cmd)
+		fmt.Fprintf(stdout, "%s: examen protegido %s (base %s)\n  cmd: %s\n", e.ID(), strings.Join(e.Bundle, ", "), slice.Corto(e.SHAExamen), e.Cmd)
 		return 0
 	case "podar":
 		if len(args) < 2 {
@@ -825,7 +828,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			if nn != "" && e.NN != nn {
 				continue
 			}
-			fmt.Fprintf(stdout, "%s «%s» · %s\n  paquete: %s (%s)\n  base: %s@%s  worktree: %s (%s)\n  escritor: %s  fallos: %d/%d\n", e.Attempt(), e.Titulo, e.Fase, strings.Join(e.Bundle, ", "), e.Cmd, e.Base, e.SHARojo[:8], e.Worktree, e.Procedencia, app.Valor(e.Escritor), e.Fallos, slice.MaxFallos)
+			fmt.Fprintf(stdout, "%s «%s» · %s\n  paquete: %s (%s)\n  base: %s@%s  worktree: %s (%s)\n  escritor: %s  fallos: %d/%d\n", e.Attempt(), e.Titulo, e.Fase, strings.Join(e.Bundle, ", "), e.Cmd, e.Base, slice.Corto(e.SHARojo), e.Worktree, e.Procedencia, app.Valor(e.Escritor), e.Fallos, slice.MaxFallos)
 			fmt.Fprintf(stdout, "  ruta: %s", e.RutaEfectiva())
 			if e.Ascendido {
 				fmt.Fprintf(stdout, " (subió de fix: %s)", e.RutaMotivo)
@@ -841,12 +844,12 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stdout, "  bloqueado: %s\n", e.Motivo)
 			}
 			if e.Recibo != nil {
-				fmt.Fprintf(stdout, "  recibo: %s exit %d en %s\n", e.Recibo.Attempt, e.Recibo.Exit, e.Recibo.Head[:8])
+				fmt.Fprintf(stdout, "  recibo: %s exit %d en %s\n", e.Recibo.Attempt, e.Recibo.Exit, slice.Corto(e.Recibo.Head))
 			}
 			for _, w := range e.Equipo {
 				j := "sin juntar"
 				if w.Juntado != "" {
-					j = "juntado " + w.Juntado[:8]
+					j = "juntado " + slice.Corto(w.Juntado)
 				}
 				fmt.Fprintf(stdout, "  equipo: %-22s %-6s %-6s %s · %s\n", w.Nombre, w.Agente, w.Zona, strings.Join(w.Rutas, ","), j)
 			}

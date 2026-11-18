@@ -99,6 +99,7 @@ type Estado struct {
 	Equipo      []Worker   `json:"equipo,omitempty"`    // workers en paralelo dentro del slice
 	Motivo      string     `json:"motivo,omitempty"`    // por qué está bloqueado
 	Alcance     []string   `json:"alcance,omitempty"`   // rutas que la historia justifica tocar
+	Ratifico    string     `json:"ratifico,omitempty"`  // who approved adopting a 1.0.0 slice, and why
 }
 
 func (e *Estado) ID() string      { return fmt.Sprintf("S-%s", e.NN) }

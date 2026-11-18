@@ -121,6 +121,7 @@ func TestDecisiones(t *testing.T) {
 		{bash("orq slice verificar"), soloOrq},
 		{bash("orq slice ruta slice \"x\""), soloOrq},
 		{bash("orq slice convertir 01"), soloOrq},
+		{bash(`orq slice convertir 01 --ratifico "Owner: ok"`), soloOrq},
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice examen tests/s01.sh --aprobado \"req ATN-1\""}}, ""},
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "cd /main && orq slice examen tests/s01.sh --aprobado x"}}, ""},
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice alcance src/ --aprobado x"}}, ""},

@@ -76,7 +76,7 @@ func (p Proyecto) DatosRelevo(rol string) Relevo {
 	}
 	rv.Reproducir = fmt.Sprintf("cd %s && %s", e.Worktree, e.Cmd)
 	if e.Recibo != nil {
-		rv.Comprobado = fmt.Sprintf("recibo %s en %s: exit %d, %d ejecutadas", e.Recibo.Attempt, e.Recibo.Head[:8], e.Recibo.Exit, e.Recibo.Ejecutados)
+		rv.Comprobado = fmt.Sprintf("recibo %s en %s: exit %d, %d ejecutadas", e.Recibo.Attempt, slice.Corto(e.Recibo.Head), e.Recibo.Exit, e.Recibo.Ejecutados)
 	}
 	if e.Motivo != "" {
 		rv.Falla = e.Motivo
@@ -150,7 +150,7 @@ func (p Proyecto) Contrato(nn, worker, alcance, suite, presupuesto string) (stri
 	var b strings.Builder
 	fmt.Fprintf(&b, "CONTRATO %s · worker: %s\n", e.Attempt(), worker)
 	fmt.Fprintf(&b, "Objetivo del slice: %s\n", rv.Objetivo)
-	fmt.Fprintf(&b, "Worktree: %s · rama %s · base %s@%s. No crees otro; comprueba `git rev-parse --show-toplevel`.\n", wt, rama, e.Base, e.SHARojo[:8])
+	fmt.Fprintf(&b, "Worktree: %s · rama %s · base %s@%s. No crees otro; comprueba `git rev-parse --show-toplevel`.\n", wt, rama, e.Base, slice.Corto(e.SHARojo))
 	if yo != nil {
 		fmt.Fprintf(&b, "Tu zona: %s → solo cambias %s. Lo de otra zona se lo pides a su dueño; si tocas fuera, `orq slice juntar` rechaza tu trabajo.\n", yo.Zona, strings.Join(yo.Rutas, ", "))
 		var otros []string

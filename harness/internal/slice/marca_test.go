@@ -43,3 +43,12 @@ func TestLeerMarcaCwdVacioORelativo(t *testing.T) {
 		}
 	}
 }
+
+// Corto never panics on a short, empty or ref-name value read from the state.
+func TestCortoNoEntraEnPanico(t *testing.T) {
+	for in, want := range map[string]string{"": "", "abc": "abc", "slice/01": "slice/01", "0123456789abcdef": "01234567"} {
+		if got := Corto(in); got != want {
+			t.Errorf("Corto(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

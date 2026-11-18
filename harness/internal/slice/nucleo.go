@@ -316,7 +316,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if e.Fase != Implementando && e.Fase != Verificado {
 		return e, "", fmt.Errorf("%s está en %s; no se verifica ahora", e.ID(), e.Fase)
 	}
-	if e, err = r.adoptarSiLegado(e); err != nil {
+	if err = r.confiable(e); err != nil {
 		return e, "", err
 	}
 	in, err := r.puntaDelSlice(e)

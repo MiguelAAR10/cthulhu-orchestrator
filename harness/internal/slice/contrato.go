@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 
@@ -36,12 +37,13 @@ type Contrato struct {
 	TimeoutSeg int        `json:"timeout_seg,omitempty"`
 	Vigilados  []Vigilado `json:"vigilados,omitempty"`
 	Alcance    []string   `json:"alcance,omitempty"`
+	Ratifico   string     `json:"ratifico,omitempty"`
 }
 
 func contratoDe(e *Estado) Contrato {
 	return Contrato{NN: e.NN, Test: e.Test, Bundle: e.Bundle, Cmd: e.Cmd, Sano: e.Sano, Base: e.Base, Rama: e.Rama,
 		SHARojo: e.SHARojo, SHAExamen: e.SHAExamen, Huella: e.Huella, Reporte: e.Reporte, Formato: e.Formato,
-		Omitir: e.Omitir, SinConteo: e.SinConteo, TimeoutSeg: e.TimeoutSeg, Vigilados: e.Vigilados, Alcance: e.Alcance}
+		Omitir: e.Omitir, SinConteo: e.SinConteo, TimeoutSeg: e.TimeoutSeg, Vigilados: e.Vigilados, Alcance: e.Alcance, Ratifico: e.Ratifico}
 }
 
 func refContrato(nn string) string  { return "refs/orq/contrato/" + nn }
@@ -105,7 +107,7 @@ func (r Repo) confiable(e *Estado) error {
 		return fmt.Errorf("no se pudo leer el contrato de %s: %w", e.ID(), err)
 	}
 	if !existe {
-		return fmt.Errorf("%w: %s was opened by an older orq. Stop its old processes and convert it: `orq slice convertir %s`", ErrSinContrato, e.ID(), e.NN)
+		return fmt.Errorf("%w: %s was opened by an older orq. It is not adopted on its own: stop its old processes and convert it: `orq slice convertir %s --ratifico \"<who and why>\"`", ErrSinContrato, e.ID(), e.NN)
 	}
 	if dif := diferencias(c, contratoDe(e)); len(dif) > 0 {
 		return fmt.Errorf("%w: %s dice otra cosa que el contrato que orq guardó en git (%s) en: %s. Alguien reescribió .orq/slices/%s.json; no se acepta nada con ese estado. El contrato vigente: cmd=%q, examen=%s",
@@ -186,10 +188,18 @@ const ProcedenciaLegado = "legado"
 // ErrProcesosVivos: another process holds the slice lock, so the 1.0.0 processes are still running.
 var ErrProcesosVivos = errors.New("the slice lock is held by another process")
 
-// Convertir adopts a slice opened by orq 1.0.0 (schema 0, no contract in git): it checks that the
-// exam hash in the state is the hash of the exam at the red commit, writes the contract from the
-// state and records the provenance «legado». It refuses while another process holds the slice lock.
-func (r Repo) Convertir(nn string) (*Estado, error) {
+// Convertir adopts a slice opened by orq 1.0.0 (schema 0, no contract in git). Only this command
+// adopts, never verify, and only with a ratification saying who approved it and why, which goes into
+// the contract. The red and exam commits must be full SHAs of commits on the base branch of the main
+// repo (not of the worker's branch), and the exam hash in the state must be the hash of the exam at
+// that commit. It refuses while the old processes may still run: the slice lock held, the writer
+// lease held, or a process with its cwd inside the worktree. It shows cmd, bundle and commits on out
+// before sealing.
+func (r Repo) Convertir(nn, ratifico string, out io.Writer) (*Estado, error) {
+	ratifico = strings.TrimSpace(ratifico)
+	if ratifico == "" {
+		return nil, errors.New("not converted: --ratifico \"<who approved it and why>\" is required")
+	}
 	e, err := r.Load(nn)
 	if err != nil || e == nil {
 		return nil, errors.Join(err, errors.New("no hay slice abierto"))
@@ -210,19 +220,80 @@ func (r Repo) Convertir(nn string) (*Estado, error) {
 	if e.Esquema >= EsquemaActual {
 		return e, fmt.Errorf("%s was opened by this version and its contract is missing from git: it is not converted, close it as rejected", e.ID())
 	}
+	if e.Escritor != "" {
+		return e, fmt.Errorf("%s is not converted: the writer lease is held by %s, so a worker may still be running. Stop it first", e.ID(), e.Escritor)
+	}
+	if usan := EnUso(e.Worktree); len(usan) > 0 {
+		return e, fmt.Errorf("%s is not converted: processes still work inside %s: %s. Stop them first", e.ID(), e.Worktree, strings.Join(usan, ", "))
+	}
+	if err := r.enLaBase(e, "red", e.SHARojo); err != nil {
+		return e, err
+	}
+	if e.SHAExamen != "" {
+		if err := r.enLaBase(e, "exam", e.SHAExamen); err != nil {
+			return e, err
+		}
+	}
 	h, err := HuellaEnCommit(r.Root, e.baseExamen(), e.Bundle, e.Cmd)
 	if err != nil {
 		return e, err
 	}
 	if h != e.Huella {
-		return e, fmt.Errorf("%s is not converted: the exam hash in the state does not match the exam at the red commit %s. Someone changed the state or the exam", e.ID(), e.SHARojo[:min(8, len(e.SHARojo))])
+		return e, fmt.Errorf("%s is not converted: the exam hash in the state does not match the exam at commit %s. Someone changed the state or the exam", e.ID(), e.baseExamen())
 	}
-	e.Procedencia = ProcedenciaLegado
+	if out != nil {
+		fmt.Fprintf(out, "%s: sealing the contract from the state\n  cmd: %s\n  bundle: %s\n  red commit: %s\n", e.Attempt(), e.Cmd, strings.Join(e.Bundle, ", "), e.SHARojo)
+		if e.SHAExamen != "" {
+			fmt.Fprintf(out, "  exam commit: %s\n", e.SHAExamen)
+		}
+		fmt.Fprintf(out, "  ratified: %s\n", ratifico)
+	}
+	e.Procedencia, e.Ratifico = ProcedenciaLegado, ratifico
 	if err := r.sellar(e); err != nil {
 		return e, err
 	}
 	return e, errors.Join(r.save(e), r.marcarSiClon(e))
 }
+
+// enLaBase checks that sha is a full commit SHA (40 hex, not a ref name or a prefix) and that it is
+// on the base branch of the main repo.
+func (r Repo) enLaBase(e *Estado, que, sha string) error {
+	if !esSHACompleto(sha) {
+		return fmt.Errorf("%s is not converted: the %s commit in the state (%q) is not a full SHA", e.ID(), que, sha)
+	}
+	if got, code, err := r.gitCodigo("rev-parse", "-q", "--verify", sha+"^{commit}"); err != nil {
+		return err
+	} else if code != 0 || got != sha {
+		return fmt.Errorf("%s is not converted: the %s commit %s is not a commit of the main repo", e.ID(), que, sha)
+	}
+	base, code, err := r.gitCodigo("rev-parse", "-q", "--verify", "refs/heads/"+e.Base+"^{commit}")
+	if err != nil {
+		return err
+	} else if code != 0 || !esSHACompleto(base) {
+		return fmt.Errorf("%s is not converted: the base branch %q does not exist in the main repo", e.ID(), e.Base)
+	}
+	if ok, err := r.esAncestro(sha, base); err != nil {
+		return err
+	} else if !ok {
+		return fmt.Errorf("%s is not converted: the %s commit %s is not on the base branch %s of the main repo", e.ID(), que, sha, e.Base)
+	}
+	return nil
+}
+
+func esSHACompleto(s string) bool {
+	if len(s) != 40 {
+		return false
+	}
+	for _, c := range s {
+		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// Corto is the short form of a SHA for messages; it never panics on a short or empty value.
+func Corto(sha string) string { return sha[:min(8, len(sha))] }
 
 // marcarSiClon is a no-op for a linked worktree: there is no clone to mark.
 func (r Repo) marcarSiClon(e *Estado) error {
@@ -230,13 +301,4 @@ func (r Repo) marcarSiClon(e *Estado) error {
 		return r.marcar(e, e.Worktree, e.Rama)
 	}
 	return nil
-}
-
-// adoptarSiLegado converts a 1.0.0 slice on its first verification; any other state is left as is.
-func (r Repo) adoptarSiLegado(e *Estado) (*Estado, error) {
-	err := r.confiable(e)
-	if !errors.Is(err, ErrSinContrato) || e.Esquema >= EsquemaActual {
-		return e, err
-	}
-	return r.Convertir(e.NN)
 }

@@ -203,7 +203,7 @@ git status --porcelain >"$1/sucio" 2>/dev/null; exit 0`
 	if ok, err := r.esAncestro(e.SHARojo, punta); err != nil {
 		return in, err
 	} else if !ok {
-		return in, errors.Join(fmt.Errorf("la rama %s del clon %s no desciende del rojo %s: el worker reescribió la historia. No se usa", rama, clon, e.SHARojo[:8]), r.borrarRef(ref))
+		return in, errors.Join(fmt.Errorf("la rama %s del clon %s no desciende del rojo %s: el worker reescribió la historia. No se usa", rama, clon, Corto(e.SHARojo)), r.borrarRef(ref))
 	}
 	in.Punta, in.Nuevo = punta, punta != antes
 	return in, nil
