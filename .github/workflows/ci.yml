@@ -1,0 +1,18 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: harness/go.mod
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Allow unprivileged user namespaces (bubblewrap on Ubuntu 24.04)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: make ci
+        run: make ci
