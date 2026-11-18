@@ -292,19 +292,32 @@ func (r Repo) Alinear(nn string) (*Estado, *Alineacion, error) {
 	permitido := append([]string{e.Test}, e.Bundle...)
 	permitido = append(permitido, e.Alcance...)
 	acotado := len(e.Alcance) > 0
-	ramas := []string{e.Rama}
+	// Each branch is read at its clone's tip when there is a clone: the main repo only learns of a
+	// worker's commits when they are brought in, and drift must show before that.
+	type fuente struct{ rama, clon, nombre string }
+	fuentes := []fuente{{rama: e.Rama, nombre: "slice"}}
+	if len(e.Equipo) == 0 {
+		fuentes[0].clon = e.Worktree
+	}
 	for _, w := range e.Equipo {
 		permitido = append(permitido, w.Rutas...)
 		acotado = acotado || len(w.Rutas) > 0
-		ramas = append(ramas, w.Rama)
+		fuentes = append(fuentes, fuente{w.Rama, w.Worktree, w.Nombre})
 	}
 	a := &Alineacion{}
 	visto := map[string]bool{}
-	for _, rama := range ramas {
-		if _, code, err := r.gitCodigo("rev-parse", "-q", "--verify", "refs/heads/"+rama); err != nil || code != 0 {
+	for _, f := range fuentes {
+		punta := "refs/heads/" + f.rama
+		if f.clon != "" && esClon(f.clon) {
+			in, err := r.ingerir(e, f.clon, f.rama, f.nombre) // only fetches into refs/orq/sNN/<name>
+			if err != nil {
+				return e, nil, err
+			}
+			punta = in.Punta
+		} else if _, code, err := r.gitCodigo("rev-parse", "-q", "--verify", punta); err != nil || code != 0 {
 			continue
 		}
-		fs, err := r.tocadas(e.SHARojo, "refs/heads/"+rama)
+		fs, err := r.tocadas(e.SHARojo, punta)
 		if err != nil {
 			return e, nil, err
 		}

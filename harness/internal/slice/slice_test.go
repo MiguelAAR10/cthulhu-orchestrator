@@ -724,8 +724,12 @@ func TestAlinearDetectaDesvio(t *testing.T) {
 	}
 }
 
-// Los worktrees nuevos traen node_modules y .venv del repo si git los ignora; si no, nada.
+// Decision 5 (step 1): node_modules and .venv of the main checkout reach every clone as a read-only
+// link, when git ignores them. Not built: until B6 the worker runs outside the box with the owner's
+// uid, so any link into the main checkout is writable by the worker, and P5 forbids per-worker copies.
+// See docs/harness-v2/step1-report.md, decision 5.
 func TestPrepararDeps(t *testing.T) {
+	t.Skip("blocked until B6 (worker inside the box): see docs/harness-v2/step1-report.md, decision 5")
 	r := repoDeJuguete(t)
 	commitEn(t, r.Root, ".gitignore", "node_modules/\n.venv\n")
 	os.MkdirAll(filepath.Join(r.Root, "node_modules", "vite"), 0o755)
@@ -735,18 +739,32 @@ func TestPrepararDeps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !existe(filepath.Join(e.Worktree, "node_modules", "vite", "index.js")) {
-		t.Fatal("falta node_modules en el worktree del slice")
+	soloLectura := func(dir string) {
+		t.Helper()
+		if !existe(filepath.Join(dir, "node_modules", "vite", "index.js")) {
+			t.Fatalf("node_modules missing in %s", dir)
+		}
+		if fi, err := os.Lstat(filepath.Join(dir, ".venv")); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf(".venv must be a link in %s: %v", dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "node_modules", "vite", "index.js"), []byte("planted"), 0o644); err == nil {
+			t.Fatalf("writing through node_modules in %s must fail", dir)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".venv", "bin", "python"), []byte("planted"), 0o755); err == nil {
+			t.Fatalf("writing through .venv in %s must fail", dir)
+		}
 	}
-	if fi, err := os.Lstat(filepath.Join(e.Worktree, ".venv")); err != nil || fi.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf(".venv debe ser un enlace: %v", err)
-	}
+	soloLectura(e.Worktree)
 	if st, _ := Git(e.Worktree, "status", "--porcelain"); st != "" {
 		t.Fatalf("el worktree queda sucio: %s", st)
 	}
 	_, w, err := r.Sumar("01", "w-front", "claude", "front", []string{"web"})
-	if err != nil || !existe(filepath.Join(w.Worktree, "node_modules", "vite", "index.js")) {
-		t.Fatalf("falta node_modules en la zona: %v", err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	soloLectura(w.Worktree)
+	if got, _ := os.ReadFile(filepath.Join(r.Root, "node_modules", "vite", "index.js")); string(got) != "x" {
+		t.Fatal("a worker changed the main checkout's node_modules")
 	}
 }
 
