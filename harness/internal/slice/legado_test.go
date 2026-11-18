@@ -307,3 +307,49 @@ func TestEstadoViejoPuntaDesciendeDelRojo(t *testing.T) {
 		t.Fatalf("a tip that does not descend from the red commit must be refused: %v", err)
 	}
 }
+
+// The base is never taken from the state: the reviewer's bypass (state base = the slice branch, an
+// exam commit of the worker's own on it, a recomputed hash) and an alias branch made from the worktree
+// are refused, naming both the state's base and the trusted one.
+func TestConvertirBaseNoSaleDelEstado(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	aLegado(t, r, e)
+	commitEn(t, e.Worktree, "tests/s01.sh", "exit 0\n")
+	falso := mustGit(t, e.Worktree, "rev-parse", "HEAD")
+	h, err := HuellaEnCommit(r.Root, falso, e.Bundle, e.Cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, e.Worktree, "branch", "x", falso) // refs are shared with the main repo
+	for _, base := range []string{e.Rama, "x"} {
+		editarEstado(t, r, "01", func(m map[string]any) { m["base"], m["sha_examen"], m["huella"] = base, falso, h })
+		_, err := r.Convertir("01", ratifico, io.Discard)
+		if err == nil || !strings.Contains(err.Error(), `"`+base+`"`) || !strings.Contains(err.Error(), `"main"`) {
+			t.Fatalf("state base %q: must be refused naming it and the trusted base main: %v", base, err)
+		}
+		sinContrato(t, r, "01")
+	}
+}
+
+// The trusted base is the project config's `base` when it defines one, else main, else master; a
+// slice/* branch or the slice's own branch is never trusted.
+func TestBaseConfiable(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	if b, err := r.baseConfiable(e); err != nil || b != "main" {
+		t.Fatalf("default: %q %v", b, err)
+	}
+	mustGit(t, r.Root, "branch", "-m", "main", "master")
+	if b, err := r.baseConfiable(e); err != nil || b != "master" {
+		t.Fatalf("no main: %q %v", b, err)
+	}
+	mustGit(t, r.Root, "branch", "desarrollo")
+	for cfg, ok := range map[string]bool{"desarrollo": true, "slice/09": false, e.Rama: false, "no-existe": false} {
+		os.WriteFile(filepath.Join(r.Root, ".orq", "config.json"), []byte(`{"base":"`+cfg+`"}`), 0o644)
+		b, err := r.baseConfiable(e)
+		if ok != (err == nil) || ok && b != cfg {
+			t.Errorf("config base %q: %q %v", cfg, b, err)
+		}
+	}
+}

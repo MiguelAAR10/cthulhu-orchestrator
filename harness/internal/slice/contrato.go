@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"strings"
 
+	"orq/internal/config"
 	"orq/internal/gitx"
 )
 
@@ -190,8 +191,8 @@ var ErrProcesosVivos = errors.New("the slice lock is held by another process")
 
 // Convertir adopts a slice opened by orq 1.0.0 (schema 0, no contract in git). Only this command
 // adopts, never verify, and only with a ratification saying who approved it and why, which goes into
-// the contract. The red and exam commits must be full SHAs of commits on the base branch of the main
-// repo (not of the worker's branch), and the exam hash in the state must be the hash of the exam at
+// the contract. The base is the trusted one (baseConfiable), never the state's; the state must name it.
+// The red and exam commits must be full SHAs of commits on that branch of the main repo, and the exam hash in the state must be the hash of the exam at
 // that commit. It refuses while the old processes may still run: the slice lock held, the writer
 // lease held, or a process with its cwd inside the worktree. It shows cmd, bundle and commits on out
 // before sealing.
@@ -226,11 +227,18 @@ func (r Repo) Convertir(nn, ratifico string, out io.Writer) (*Estado, error) {
 	if usan := EnUso(e.Worktree); len(usan) > 0 {
 		return e, fmt.Errorf("%s is not converted: processes still work inside %s: %s. Stop them first", e.ID(), e.Worktree, strings.Join(usan, ", "))
 	}
-	if err := r.enLaBase(e, "red", e.SHARojo); err != nil {
+	base, err := r.baseConfiable(e)
+	if err != nil {
+		return e, err
+	}
+	if e.Base != base {
+		return e, fmt.Errorf("%s is not converted: the state says base %q, but the trusted base is %q (project config `base`, else main, else master)", e.ID(), e.Base, base)
+	}
+	if err := r.enLaBase(e, base, "red", e.SHARojo); err != nil {
 		return e, err
 	}
 	if e.SHAExamen != "" {
-		if err := r.enLaBase(e, "exam", e.SHAExamen); err != nil {
+		if err := r.enLaBase(e, base, "exam", e.SHAExamen); err != nil {
 			return e, err
 		}
 	}
@@ -257,7 +265,7 @@ func (r Repo) Convertir(nn, ratifico string, out io.Writer) (*Estado, error) {
 
 // enLaBase checks that sha is a full commit SHA (40 hex, not a ref name or a prefix) and that it is
 // on the base branch of the main repo.
-func (r Repo) enLaBase(e *Estado, que, sha string) error {
+func (r Repo) enLaBase(e *Estado, rama, que, sha string) error {
 	if !esSHACompleto(sha) {
 		return fmt.Errorf("%s is not converted: the %s commit in the state (%q) is not a full SHA", e.ID(), que, sha)
 	}
@@ -266,16 +274,16 @@ func (r Repo) enLaBase(e *Estado, que, sha string) error {
 	} else if code != 0 || got != sha {
 		return fmt.Errorf("%s is not converted: the %s commit %s is not a commit of the main repo", e.ID(), que, sha)
 	}
-	base, code, err := r.gitCodigo("rev-parse", "-q", "--verify", "refs/heads/"+e.Base+"^{commit}")
+	base, code, err := r.gitCodigo("rev-parse", "-q", "--verify", "refs/heads/"+rama+"^{commit}")
 	if err != nil {
 		return err
 	} else if code != 0 || !esSHACompleto(base) {
-		return fmt.Errorf("%s is not converted: the base branch %q does not exist in the main repo", e.ID(), e.Base)
+		return fmt.Errorf("%s is not converted: the base branch %q does not exist in the main repo", e.ID(), rama)
 	}
 	if ok, err := r.esAncestro(sha, base); err != nil {
 		return err
 	} else if !ok {
-		return fmt.Errorf("%s is not converted: the %s commit %s is not on the base branch %s of the main repo", e.ID(), que, sha, e.Base)
+		return fmt.Errorf("%s is not converted: the %s commit %s is not on the base branch %s of the main repo", e.ID(), que, sha, rama)
 	}
 	return nil
 }
@@ -301,4 +309,32 @@ func (r Repo) marcarSiClon(e *Estado) error {
 		return r.marcar(e, e.Worktree, e.Rama)
 	}
 	return nil
+}
+
+// baseConfiable is the base branch a 1.0.0 slice is checked against, never read from the state:
+// the project config's `base` if it defines one, else main if it exists, else master. A slice/*
+// branch or the slice's own branch is never trusted.
+func (r Repo) baseConfiable(e *Estado) (string, error) {
+	c, err := config.CargarDe(config.RutaProyecto(r.Root))
+	if err != nil {
+		return "", err
+	}
+	base := c.Base
+	if base == "" {
+		base = "master"
+		if _, code, err := r.gitCodigo("rev-parse", "-q", "--verify", "refs/heads/main^{commit}"); err != nil {
+			return "", err
+		} else if code == 0 {
+			base = "main"
+		}
+	}
+	if strings.HasPrefix(base, "slice/") || base == e.Rama {
+		return "", fmt.Errorf("%s is not converted: the trusted base %q is a slice branch", e.ID(), base)
+	}
+	if got, code, err := r.gitCodigo("rev-parse", "-q", "--verify", "refs/heads/"+base+"^{commit}"); err != nil {
+		return "", err
+	} else if code != 0 || !esSHACompleto(got) {
+		return "", fmt.Errorf("%s is not converted: the trusted base branch %q does not exist in the main repo", e.ID(), base)
+	}
+	return base, nil
 }
