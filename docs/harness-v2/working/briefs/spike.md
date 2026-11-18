@@ -1,0 +1,10 @@
+# Brief B0 · sandbox spike (scratch only)
+
+Read /tmp/claude-1000/-home-miguel-projects-MiguelAR10-Builder-AI-Edge-Runners-experiments-cthulhu-orchestrator/97993ac3-28de-4b5f-887a-6d3b8a94f645/scratchpad/briefs/COMMON.md (its rules on ~/bin/orq and real state apply), then section 4 of /tmp/claude-1000/-home-miguel-projects-MiguelAR10-Builder-AI-Edge-Runners-experiments-cthulhu-orchestrator/97993ac3-28de-4b5f-887a-6d3b8a94f645/scratchpad/plan-aislamiento.md.
+Work only inside /tmp/claude-1000/-home-miguel-projects-MiguelAR10-Builder-AI-Edge-Runners-experiments-cthulhu-orchestrator/97993ac3-28de-4b5f-887a-6d3b8a94f645/scratchpad/spike. Write results to /tmp/claude-1000/-home-miguel-projects-MiguelAR10-Builder-AI-Edge-Runners-experiments-cthulhu-orchestrator/97993ac3-28de-4b5f-887a-6d3b8a94f645/scratchpad/spike/sandbox-spike.md: per hypothesis PASS | FAIL | NOT RUN, the exact command, and the decisive output line.
+
+Run H1, H2, H3, H7, H8 and H9 as written there, using toy repos you create under /tmp/claude-1000/-home-miguel-projects-MiguelAR10-Builder-AI-Edge-Runners-experiments-cthulhu-orchestrator/97993ac3-28de-4b5f-887a-6d3b8a94f645/scratchpad/spike.
+H4 (herdr): you may create ONE new tab in workspace w3X labelled "spike" and panes inside it; never touch, read or close any other pane or tab; close yours when finished. Test (a) and (b). For starting an agent inside the box use `--model haiku`.
+H5 and H6 need credentials the Owner has not provided: do NOT create tokens, do NOT copy or read credential files. Instead test only this cheaper variant and label it clearly: with the real config dir ($CLAUDE_CONFIG_DIR) bound read-write inside an allowlist-root bwrap that shares the host network (`--share-net`), does `claude -p "reply ok" --model haiku` succeed, and which files under the config dir did it modify (`find -newer`)? Mark H6 NOT RUN.
+For each FAIL give the cheapest workaround you verified, or say none found.
+Budget: 40 minutes. Final reply 10 lines or fewer: path, table of results, blockers.
