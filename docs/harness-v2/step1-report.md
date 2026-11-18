@@ -133,3 +133,18 @@ Consequences to know:
 - `sha_examen` is the slice-branch head when an exam was added mid-slice, so it is not on `Base`. Those 1.0.0 slices are refused and are closed as rejected.
 
 `make ci` (exit 0): gofmt clean, go vet clean, `go test -race` 21 packages ok, e2e-v05 77 pass / 0 fail, aislamiento 14 pass / 0 fail / 0 pending.
+
+## Review fixes 2
+
+Fixes for `docs/harness-v2/reviews/step1-review-2.md` (verdict: corregir, item 3 and H4). Each fix started as a test that I saw fail.
+
+| Commit | Item | What changed |
+|---|---|---|
+| 1fb3718 | 1 · trusted base | `Convertir` never takes `Base` from the state. `baseConfiable`: the project config's `base` (new optional C1 field, read from `<root>/.orq/config.json` only), else `main` if it exists, else `master`; a `slice/*` branch, the slice's own `Rama` or a missing branch is refused. A state whose `base` differs is refused, naming both. Tests: `TestConvertirBaseNoSaleDelEstado` (the reviewer's bypass with `base`=`slice/01`, and a `git branch x <commit>` alias made from the worktree), `TestBaseConfiable`. |
+| 1684567 | 2 · ratification bound to what was shown | `orq slice convertir NN` without `--ratifico` is a dry run: it prints cmd, bundle, red commit, exam commit, trusted base and a 12-hex `code` (sha256 of those values), seals nothing, exits 1 (`ErrEnSeco`). Sealing needs `--ratifico "<who and why>" --codigo <code>`; the code is recomputed at seal time and a mismatch (wrong code, or the state changed after the dry run) is refused. Test: `TestConvertirEnSecoYCodigo`; CLI usage cases in `convertir_test.go`. |
+| 8a2f47e | 4 · H4 residue | The in-use check (`enUsoSlice`) asks `EnUso` about the worktree `git worktree list --porcelain` reports for `refs/heads/<Rama>`, plus the state's path (a clone is not a git worktree). Test: `TestConvertirEnUsoMiraElWorktreeDeGit` (forged `worktree` field; before the fix it converted). |
+| 28cc527 | 3 · stale lease | `orq slice soltar NN` (orchestrator-only in the gate) clears `Escritor` only when no process has its cwd in the slice's worktree (same check as item 4), and journals it (`diario`: `paso: soltar`, actor = the old writer). Tests: `TestSoltarLiberaEscritorViejo` (refused with a process inside, released and journaled without, then converts), gate case in `decisiones_test.go`. |
+
+Still true: the ratification is recorded, not authenticated, until roadmap step 3; an exam commit added mid-slice is not on the base, so such 1.0.0 slices are refused.
+
+`make ci` (exit 0): gofmt clean, go vet clean, `go test -race` all packages ok, e2e-v05 77 pass / 0 fail, aislamiento 14 pass / 0 fail / 0 pending.
