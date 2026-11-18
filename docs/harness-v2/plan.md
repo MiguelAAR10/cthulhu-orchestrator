@@ -63,6 +63,10 @@ Until step 7, Codex workers run with no hook and no box: the pilot says so and u
 
 **Owner rules (2026-11-18):** Codex is never used, for any role (workers, reviews, Astra); the "second provider" of step 7 is to be named by the Owner. Fable plans and reviews only when the Owner asks; Opus builds; Sonnet/Haiku for mechanical work and scouts. One session at a time: a worker finishes and closes, a fresh Opus reviewer checks it, fixes if needed, the orchestrator integrates and runs `make ci`, then the next step.
 
+**Loop rules (Owner, 2026-11-18, Lauren Tan's pstack criteria):** trust before parallelism — one worker at a time until a step is reviewed and green; a second worker only for an independent step with disjoint files, and only after the current one is approved. Strongest layer first: make the bad pattern impossible in code, then lint/types/CI, then tests, then prompts. Encode every repeated review finding as a permanent check (attack catalog row, lint rule, test). Prove it works on the real artifact (`make ci` on the integrated revision, by the orchestrator). After two failed fixes on the same item, attack the premise instead of a third fix, and escalate to the Owner.
+
+**Step 1b (added 2026-11-18):** `staticcheck` (pinned) in `make ci`; one attack catalog test (`TestAtaques`) with a row per known attack (audit, reviews, exam trap), all blocked; mutation testing of orq's critical packages (`gate`, `slice`, `sandbox`) with `gremlins` (pinned), report first with a baseline, then the score may not drop; surviving mutants there are killed or justified in writing. Dev tools live in `~/go/bin`; orq stays standard library only. Mutation on the worker's diff for built projects: step 5, as a receipt report.
+
 **Frozen:** pub/sub bus and hive memory, second orchestrator, U1 `orq setup`, L1 translation, Orca adapter work, C6 and W1 as separate pieces (their useful parts are in 2b), full Q1 quality profile, mutation and held-out tests (until the pilot shows wrong acceptances), model-compacted memory and injected "instincts". Not claimed: catching cheaters as the core value; being the only verifier.
 
 ## Activities
