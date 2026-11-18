@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"orq/internal/limits"
+	"orq/internal/orqdir"
 	"orq/internal/state"
 )
 
@@ -212,6 +213,24 @@ func IsLinkedWorktree(dir string) bool {
 		if err == nil {
 			return !info.IsDir()
 		}
+	}
+	return false
+}
+
+// IsWorker reports whether dir belongs to a worker: a linked worktree (orq 1.0.0) or a clone
+// that orq marked. It looks at the nearest .git upward. The marker counts by existing: an empty,
+// corrupt or unreadable marker is still a worker (fail closed).
+func IsWorker(dir string) bool {
+	for d := filepath.Clean(dir); d != "" && d != "/"; d = filepath.Dir(d) {
+		info, err := os.Lstat(filepath.Join(d, ".git"))
+		if err != nil {
+			continue
+		}
+		if !info.IsDir() {
+			return true
+		}
+		_, err = os.Lstat(filepath.Join(d, ".git", orqdir.MarcaClon))
+		return !os.IsNotExist(err)
 	}
 	return false
 }

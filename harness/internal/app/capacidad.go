@@ -22,7 +22,7 @@ func MedirReal() Medir {
 		Maquina: sysinfo.LeerMaquina,
 		Vivos: func(l limits.Limits) ([]sysinfo.Proc, error) {
 			procs, err := sysinfo.ListProcs()
-			return sysinfo.Workers(procs, l.WorkerProcessName, gate.IsLinkedWorktree), err
+			return sysinfo.Workers(procs, l.WorkerProcessName, gate.IsWorker), err
 		},
 	}
 }

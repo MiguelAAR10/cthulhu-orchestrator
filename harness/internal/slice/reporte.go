@@ -3,15 +3,10 @@ package slice
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
 	"encoding/xml"
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -98,47 +93,3 @@ func Contar(formato string, raw []byte) (Conteo, error) {
 
 // TimeoutDefecto corta exámenes colgados.
 const TimeoutDefecto = 600 * time.Second
-
-// RunCmd corre un comando con sh y el tiempo por defecto.
-func RunCmd(dir, cmd string) (string, int, bool) { return RunCmdT(dir, cmd, TimeoutDefecto) }
-
-// RunCmdT corre el comando en su propio grupo de procesos; al vencer el tiempo mata el grupo entero.
-func RunCmdT(dir, cmd string, limite time.Duration) (string, int, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), limite)
-	defer cancel()
-	c := exec.CommandContext(ctx, "sh", "-c", cmd)
-	c.Dir = dir
-	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	c.Cancel = func() error { return syscall.Kill(-c.Process.Pid, syscall.SIGKILL) }
-	c.WaitDelay = 2 * time.Second
-	var buf bytes.Buffer
-	c.Stdout, c.Stderr = &buf, &buf
-	err := c.Run()
-	out := buf.String()
-	if ctx.Err() != nil {
-		return out + fmt.Sprintf("\n[orq] cortado tras %s\n", limite), -1, false
-	}
-	code := 0
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
-		code = ee.ExitCode()
-	} else if err != nil {
-		code = -1
-	}
-	return out, code, err == nil
-}
-
-// copiaAislada extrae el commit en una carpeta temporal propia: sin archivos ignorados ni sin commit.
-func copiaAislada(worktree, head string) (string, error) {
-	dir, err := os.MkdirTemp("", "orq-exec-")
-	if err != nil {
-		return "", err
-	}
-	c := exec.Command("sh", "-c", fmt.Sprintf("git archive %s | tar -x -C %q", head, dir))
-	c.Dir = worktree
-	if out, err := c.CombinedOutput(); err != nil {
-		os.RemoveAll(dir)
-		return "", fmt.Errorf("copia aislada: %s", out)
-	}
-	return dir, nil
-}

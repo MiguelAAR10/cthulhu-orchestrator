@@ -54,11 +54,14 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq relevo [--solo-archivo] ROL   escribe .orq/relevo-ROL.md y abre una sesión fresca
   orq slice abrir NN --titulo T --test RUTA --cmd "CMD" [--bundle a,b] [--sano "CMD"] [--alcance rutas] [--sin-scouts "motivo"]
          (--reporte F --formato tap|junit|gotest-json | --sin-conteo "motivo") [--permite-omitir]
-         [--en-sitio "motivo"] [--ruta fix|slice] [--timeout S]
-                                 descubre, exige base sana y rojo por aserción; crea el worktree.
-                                 Cuenta pruebas por defecto; el examen corre en una copia limpia del commit
-                                 (--en-sitio lo corre en el worktree); --ruta fix = un worker, sin equipo ni plan
+         [--ruta fix|slice] [--timeout S]
+                                 descubre, exige base sana y rojo por aserción; crea el clon del worker.
+                                 Cuenta pruebas por defecto; el examen corre siempre en la caja, sobre una copia
+                                 limpia del commit; --ruta fix = un worker, sin equipo ni plan
                                  (--aislado se acepta y no hace nada)
+  orq slice convertir NN         adopts a slice opened by orq 1.0.0: checks the exam hash against the red
+                                 commit, writes its contract to git (provenance «legado»). Its old processes
+                                 must be stopped; verify does the same on its own
   orq slice ruta slice "motivo"  sube un fix abierto a slice completo (no baja)
   orq slice tomar QUIEN [--relevo]   un solo escritor por slice
   orq slice reabrir "motivo"   un slice verificado vuelve a construirse para una reparación, con su trabajo
@@ -172,15 +175,27 @@ func realEnv() gate.Env {
 		DiskFreeGB: sysinfo.FreeGB,
 		Now:        time.Now,
 		StateDir:   state.Dir(),
-		IsWorktree: gate.IsLinkedWorktree,
+		IsWorktree: gate.IsWorker,
 		Bundle:     bundleAbierto,
 		LimitsPath: limits.DefaultPath(),
-		MainRoot:   gate.CheckoutPrincipal,
+		MainRoot:   checkoutPrincipal,
 	}
+}
+
+// checkoutPrincipal is the main checkout whose .orq a worker must not touch. A clone has its
+// own .git, so the main checkout comes from the clone marker.
+func checkoutPrincipal(cwd string) string {
+	if m, ok := slice.LeerMarca(cwd); ok && m.Root != "" {
+		return m.Root
+	}
+	return gate.CheckoutPrincipal(cwd)
 }
 
 // bundleAbierto lee el paquete del examen del slice abierto del repo de cwd.
 func bundleAbierto(cwd string) []string {
+	if m, ok := slice.LeerMarca(cwd); ok { // a clone has no .orq: its marker carries the bundle
+		return m.Bundle
+	}
 	out, err := exec.Command("git", "-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
 	if err != nil {
 		return nil

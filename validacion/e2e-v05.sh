@@ -2,7 +2,8 @@
 # Prueba de punta a punta de orq con un repo de juguete:
 # rojo con conteo → trampa bloqueada → reintento → verde con recibo → cierre viejo rechazado →
 # relevo sin duplicar → cierre interrumpido de verdad en cada etapa y retomado →
-# conteo obligatorio, rutas fix/slice, runner vigilado y examen en copia aislada.
+# conteo obligatorio, rutas fix/slice, runner vigilado, examen siempre en copia aislada (sin --en-sitio)
+# y el gate dentro del clon del worker.
 # Uso: validacion/e2e-v05.sh [carpeta-temporal]. No toca nada fuera de esa carpeta.
 set -u
 BASE="${1:-$(mktemp -d)}"
@@ -81,6 +82,9 @@ ok "$(gate Bash "$W10" '{"command":"orq slice cerrar --aceptado"}')" 2 "gate: un
 ok "$(gate Bash "$W10" '{"command":"cd tests && echo x > d10.txt"}')" 2 "gate: el worker no toca el fixture ni con cd"
 ok "$(gate Bash "$W10" '{"command":"git push origin main"}')" 2 "gate: nada de push"
 ok "$(gate Bash "$W10" '{"command":"echo ok > v10.txt"}')" 0 "gate: el trabajo normal pasa"
+[ -f "$W10/.git/orq-clon" ]; ok $? 0 "the worker copy is an orq clone (marker in .git)"
+ok "$(gate Bash "$W10" '{"command":"orq slice examen tests/s10.sh --aprobado \"req ATN-1\""}')" 2 "gate: a worker in a clone cannot approve an exam"
+ok "$(gate Bash "$W10" "{\"command\":\"cd $PWD && orq slice examen tests/s10.sh --aprobado x\"}")" 2 "gate: nor by cd to the main checkout"
 (cd "$W10" && echo ok > v10.txt && git add -A && git commit -qm impl10)
 (cd "$ORQ_WORKTREES/tienda-s11" && echo ok > v11.txt && git add -A && git commit -qm impl11)
 ok "$(q slice --slice 10 verificar)" 0 "S-10 verifica"
@@ -137,16 +141,13 @@ ok "$(q slice verificar)" 1 "un archivo ignorado del worker no hace pasar el exa
 ok "$(q slice verificar)" 0 "el trabajo real sí verifica"
 ok "$(q slice cerrar --aceptado)" 0 "cierra el slice aislado"
 ruido 24
-q slice abrir 24 --titulo ensitio --test tests/s24.sh --cmd 'sh tests/s24.sh' --reporte out.tap --formato tap --en-sitio 'el examen lee un artefacto ignorado' --sin-scouts e2e >/dev/null
-W24="$ORQ_WORKTREES/tienda-s24"; echo x > "$W24/ruido24.txt"   # ignorado: solo el modo en sitio lo ve
-(cd "$W24" && echo ok > v24.txt && git add -A && git commit -qm impl24)   # el cierre revalida en el merge, sin archivos ignorados
-ok "$(q slice verificar)" 0 "con --en-sitio el examen corre en el worktree"
-orq slice recibo | grep -q "corrido en sitio"; ok $? 0 "el recibo dice que corrió en sitio"
-ok "$(q slice cerrar --aceptado)" 0 "cierra el slice en sitio"
+ok "$(q slice abrir 24 --titulo ensitio --test tests/s24.sh --cmd 'sh tests/s24.sh' --reporte out.tap --formato tap --en-sitio 'el examen lee un artefacto ignorado' --sin-scouts e2e)" 1 "--en-sitio is refused: the exam always runs in the box"
+grep -q -- "--en-sitio ya no existe" /tmp/orq-e2e.$$; ok $? 0 "the refusal says why"
+ok "$(git branch --list slice/24 | wc -l)" 0 "the refused open leaves no slice branch"
 orq metricas > met2.txt
-grep -q "slices aceptados e integrados: 12" met2.txt; ok $? 0 "métricas: 12 aceptados"
+grep -q "slices aceptados e integrados: 11" met2.txt; ok $? 0 "métricas: 11 aceptados"
 grep -q "ruta fix: 1 aceptados" met2.txt; ok $? 0 "métricas: 1 fix aceptado"
-grep -q "ruta slice: 11 aceptados" met2.txt; ok $? 0 "métricas: 11 en la ruta slice"
+grep -q "ruta slice: 10 aceptados" met2.txt; ok $? 0 "métricas: 10 en la ruta slice"
 grep -q "fixes que subieron a slice: 1" met2.txt; ok $? 0 "métricas: 1 fix subió a slice"
 echo "== higiene"
 orq doctor >/tmp/orq-e2e.$$ 2>&1; d=$?

@@ -8,7 +8,8 @@
 # Parte 1: desde `orq sandbox exec --rw <worker>`, cada ataque falla y deja su blanco intacto; un commit
 #          dentro del worker funciona (control positivo).
 # Parte 2: el ataque de estado falsificado (forja): el worker commitea basura y reescribe el slice como
-#          VERIFICADO; al cerrar, main no debe avanzar.
+#          VERIFICADO; al cerrar, main no debe avanzar y la negativa tiene que ser la del contrato en git.
+# Sin bwrap: «SKIP: bwrap missing» y salida 1 (0 solo con ORQ_CI_ALLOW_SKIP=1).
 #
 # ORQ apunta al binario a probar; sin ORQ se compila uno fresco del árbol. Usa ORQ_STATE, ORQ_LIMITS y
 # ORQ_WORKTREES propios en directorios temporales que se borran al terminar. No toca repos reales.
@@ -45,6 +46,13 @@ PASS=0; FAIL=0; PEND=0
 ok()   { PASS=$((PASS+1)); printf '  ✔ %s\n' "$1"; }
 fail() { FAIL=$((FAIL+1)); printf '  ✘ %s\n' "$1"; }
 huella() { if [[ -e "$1" || -L "$1" ]]; then sha256sum "$1" | cut -d' ' -f1; else echo ausente; fi; }
+
+# Without bubblewrap nothing here can be proved: say so and fail, unless CI explicitly allows the skip.
+if ! command -v bwrap >/dev/null 2>&1; then
+  echo "SKIP: bwrap missing (install bubblewrap); isolation not tested"
+  [[ "${ORQ_CI_ALLOW_SKIP:-}" == 1 ]] && exit 0
+  exit 1
+fi
 
 echo "== Autoprueba de la caja"
 if "$ORQ" sandbox selftest; then ok "orq sandbox selftest"; else fail "orq sandbox selftest"; echo "sin caja sana no sigue"; exit 1; fi
@@ -142,13 +150,17 @@ json.dump(e,open(p,"w"),indent=2)
 PY
   (cd "$WF" && sh tests/s01.sh >/dev/null 2>&1) && { echo "    preparación: el examen real pasó, la forja no prueba nada"; exit 2; }
   antes=$(git rev-parse main)
-  orq slice cerrar --aceptado 2>&1 | tail -3 | sed 's/^/    cerrar: /'
+  salida=$(orq slice cerrar --aceptado 2>&1); rc=$?
+  printf '%s\n' "$salida" | tail -3 | sed 's/^/    cerrar: /'
   despues=$(git rev-parse main)
   echo "    main ${antes:0:8} → ${despues:0:8}; v01.txt en main = '$(git show main:v01.txt 2>/dev/null)'"
-  [[ "$antes" == "$despues" ]]
+  [[ "$antes" == "$despues" ]] || exit 1
+  # The refusal must be the contract check, not some other failure that happens to stop the close.
+  [[ $rc -ne 0 && "$salida" == *"el estado no coincide con el contrato"* && "$salida" == *"refs/orq/contrato/01"* ]] || exit 3
 )
 parte2; rc=$?
-if [[ $rc -eq 0 ]]; then ok "forja: main no avanza con un estado falsificado"
+if [[ $rc -eq 0 ]]; then ok "forja: main no avanza y el cierre se niega por el contrato en git"
+elif [[ $rc -eq 3 ]]; then fail "forja: main no avanzó, pero el cierre no se negó por el contrato (motivo equivocado)"
 elif [[ $rc -eq 2 ]]; then fail "forja: la preparación falló, el ataque no se pudo montar"
 elif [[ $TODO -eq 1 ]]; then PEND=$((PEND+1)); printf '  … PENDING forja: main avanzó con un estado falsificado (falta que el cierre revalide contra el contrato)\n'
 else fail "forja: main avanzó con un estado falsificado"; fi

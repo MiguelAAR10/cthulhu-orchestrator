@@ -287,18 +287,17 @@ func abrirConReporte(r Repo, o Opciones) (*Estado, string, error) {
 	return r.Abrir("01", "total", "tests/s01.sh", examen, o, t0)
 }
 
+// A green exit with 0 tests run is not green. The fixture goes through Abrir: the runner itself reports
+// «1..0» once total.txt is right, so state and contract agree.
 func TestVerdeSinPruebasEjecutadasFalla(t *testing.T) {
-	r := repoConReporte(t, tapReal)
+	r := repoConReporte(t, `if cmp -s total.txt tests/datos.txt; then printf '1..0\n' > out.tap; else printf 'not ok 1 total\n' > out.tap; exit 1; fi
+`)
 	e, _, err := abrirConReporte(r, Opciones{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// el worker "arregla" sin tocar el examen, pero el runner no ejecuta nada
 	commitEn(t, e.Worktree, "total.txt", "170\n")
-	e.Cmd = "printf '1..0\n' > out.tap"
-	r.save(e)
-	e.Huella, _ = Huella(e.Worktree, e.Bundle, e.Cmd)
-	r.save(e)
 	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "0 pruebas") {
 		t.Fatalf("got %v", err)
 	}
@@ -724,8 +723,12 @@ func TestAlinearDetectaDesvio(t *testing.T) {
 	}
 }
 
-// Los worktrees nuevos traen node_modules y .venv del repo si git los ignora; si no, nada.
+// Decision 5 (step 1): node_modules and .venv of the main checkout reach every clone as a read-only
+// link, when git ignores them. Not built: until B6 the worker runs outside the box with the owner's
+// uid, so any link into the main checkout is writable by the worker, and P5 forbids per-worker copies.
+// See docs/harness-v2/step1-report.md, decision 5.
 func TestPrepararDeps(t *testing.T) {
+	t.Skip("blocked until B6 (worker inside the box): see docs/harness-v2/step1-report.md, decision 5")
 	r := repoDeJuguete(t)
 	commitEn(t, r.Root, ".gitignore", "node_modules/\n.venv\n")
 	os.MkdirAll(filepath.Join(r.Root, "node_modules", "vite"), 0o755)
@@ -735,18 +738,32 @@ func TestPrepararDeps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !existe(filepath.Join(e.Worktree, "node_modules", "vite", "index.js")) {
-		t.Fatal("falta node_modules en el worktree del slice")
+	soloLectura := func(dir string) {
+		t.Helper()
+		if !existe(filepath.Join(dir, "node_modules", "vite", "index.js")) {
+			t.Fatalf("node_modules missing in %s", dir)
+		}
+		if fi, err := os.Lstat(filepath.Join(dir, ".venv")); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf(".venv must be a link in %s: %v", dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "node_modules", "vite", "index.js"), []byte("planted"), 0o644); err == nil {
+			t.Fatalf("writing through node_modules in %s must fail", dir)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".venv", "bin", "python"), []byte("planted"), 0o755); err == nil {
+			t.Fatalf("writing through .venv in %s must fail", dir)
+		}
 	}
-	if fi, err := os.Lstat(filepath.Join(e.Worktree, ".venv")); err != nil || fi.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf(".venv debe ser un enlace: %v", err)
-	}
+	soloLectura(e.Worktree)
 	if st, _ := Git(e.Worktree, "status", "--porcelain"); st != "" {
 		t.Fatalf("el worktree queda sucio: %s", st)
 	}
 	_, w, err := r.Sumar("01", "w-front", "claude", "front", []string{"web"})
-	if err != nil || !existe(filepath.Join(w.Worktree, "node_modules", "vite", "index.js")) {
-		t.Fatalf("falta node_modules en la zona: %v", err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	soloLectura(w.Worktree)
+	if got, _ := os.ReadFile(filepath.Join(r.Root, "node_modules", "vite", "index.js")); string(got) != "x" {
+		t.Fatal("a worker changed the main checkout's node_modules")
 	}
 }
 
@@ -817,27 +834,30 @@ func TestAmpliarZona(t *testing.T) {
 }
 
 // Una huella mal tomada se repara solo si el examen es idéntico al del rojo; un examen cambiado no.
+// Rehash only from BLOQUEADO. The fixture is a hash orq took wrong at open: state and contract both
+// carry it, verify blocks on it, and rehuella takes it again from the red commit.
 func TestRehuella(t *testing.T) {
 	r := repoDeJuguete(t)
 	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Rehuella("01", "x"); err == nil {
-		t.Fatal("en construcción no se repara")
+	if _, err := r.Rehuella("01", "x"); err == nil || !strings.Contains(err.Error(), "solo se repara desde "+Bloqueado) {
+		t.Fatalf("from IMPLEMENTANDO it must refuse: %v", err)
 	}
 	commitEn(t, e.Worktree, "total.txt", "170\n")
-	e2, _ := r.Load("01")
-	e2.Huella = "mal"
-	r.save(e2)
-	if _, _, err := r.Verificar("01", t0); err == nil {
-		t.Fatal("con huella mala debe bloquear")
+	e.Huella = "mal"
+	if err := errors.Join(r.sellar(e), r.save(e)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, err := r.Verificar("01", t0); err == nil || got.Fase != Bloqueado {
+		t.Fatalf("a wrong hash must block: %+v %v", got, err)
 	}
 	if _, err := r.Rehuella("01", "edición sin commit al abrir (Atena)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := r.Verificar("01", t0); err != nil {
-		t.Fatal(err)
+	if got, _, err := r.Verificar("01", t0); err != nil || got.Fase != Verificado {
+		t.Fatalf("%+v %v", got, err)
 	}
 }
 
@@ -948,30 +968,42 @@ func TestSinConteoQuedaEnElEstadoYEnCadaRecibo(t *testing.T) {
 }
 
 // Lo que hay en el worktree y git ignora no puede hacer pasar el examen: se corre sobre una copia de HEAD.
-func TestVerificarAisladoPorDefectoYOptOut(t *testing.T) {
-	prep := func(t *testing.T, o Opciones) (Repo, *Estado) {
+// There is no opt-out: --en-sitio was removed and opening with it is refused, opening nothing.
+func TestVerificarSiempreAisladoYEnSitioRechazado(t *testing.T) {
+	prep := func(t *testing.T, o Opciones) (Repo, *Estado, error) {
 		r := repoConReporte(t, `cmp -s total.txt tests/datos.txt || test -f ruido.txt
 `)
 		os.WriteFile(filepath.Join(r.Root, ".git", "info", "exclude"), []byte(".orq/\nruido.txt\n"), 0o644)
 		o.SinConteo = "juguete"
 		e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, o, t0)
 		if err != nil {
-			t.Fatal(err)
+			return r, e, err
 		}
 		commitEn(t, e.Worktree, "otro.txt", "x\n")
 		os.WriteFile(filepath.Join(e.Worktree, "ruido.txt"), []byte("x\n"), 0o644) // ignorado: el worktree sigue limpio
-		return r, e
+		return r, e, nil
 	}
-	r, _ := prep(t, Opciones{})
+	r, _, err := prep(t, Opciones{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, _, err := r.Verificar("", t0); err == nil {
 		t.Fatal("un archivo ignorado del worker hizo pasar el examen por defecto")
 	}
-	r, e := prep(t, Opciones{EnSitio: "el examen lee un artefacto ignorado"})
-	e, _, err := r.Verificar("", t0)
-	if err != nil || e.Recibo.Aislado || !strings.Contains(e.Recibo.Nota, "el examen lee un artefacto ignorado") {
-		t.Fatalf("en sitio debe pasar y decirlo en el recibo: %+v %v", e.Recibo, err)
+	r, e, err := prep(t, Opciones{EnSitio: "el examen lee un artefacto ignorado"})
+	if err == nil || e != nil || !strings.Contains(err.Error(), "--en-sitio ya no existe") {
+		t.Fatalf("--en-sitio must be refused with its reason: %+v %v", e, err)
 	}
-	r, _ = prep(t, Opciones{Aislado: true}) // --aislado sigue aceptándose y no cambia nada
+	if ab, _ := r.Abiertos(); len(ab) != 0 {
+		t.Fatalf("a refused open must leave nothing open: %+v", ab)
+	}
+	if out, _ := Git(r.Root, "branch", "--list", "slice/01"); out != "" {
+		t.Fatal("a refused open must not create the slice branch")
+	}
+	r, _, err = prep(t, Opciones{Aislado: true}) // --aislado sigue aceptándose y no cambia nada
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, _, err := r.Verificar("", t0); err == nil {
 		t.Fatal("--aislado debe seguir siendo el modo por defecto")
 	}
@@ -1190,62 +1222,142 @@ func TestMetricasRegistrosViejosSonSlice(t *testing.T) {
 	}
 }
 
-// Un slice abierto por orq 1.0.0 (sin ninguno de los campos nuevos) sigue verificando y cerrando.
-func TestEstadoViejoSigueVerificandoYCerrando(t *testing.T) {
-	r := repoDeJuguete(t)
-	e := abrir(t, r)
-	raw, _ := os.ReadFile(r.estadoPath("01"))
+// aLegado turns a slice opened by this version into what orq 1.0.0 left on disk: a linked worktree
+// instead of a clone, a state without the new fields (schema 0) and no contract in git.
+func aLegado(t *testing.T, r Repo, e *Estado) {
+	t.Helper()
+	if err := os.RemoveAll(e.Worktree); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Git(r.Root, "worktree", "add", "-q", e.Worktree, e.Rama); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Git(r.Root, "update-ref", "-d", refContrato(e.NN)); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(r.estadoPath(e.NN))
 	var m map[string]any
 	json.Unmarshal(raw, &m)
 	for _, k := range []string{"sin_conteo", "en_sitio", "vigilados", "ruta", "ascendido", "ruta_motivo", "aislado", "esquema"} {
 		delete(m, k)
 	}
+	m["procedencia"] = "git"
 	raw, _ = json.Marshal(m)
-	os.WriteFile(r.estadoPath("01"), raw, 0o644)
+	os.WriteFile(r.estadoPath(e.NN), raw, 0o644)
+}
+
+// Acceptance 6: a slice opened by orq 1.0.0 (schema 0, linked worktree, no contract in git) is
+// adopted on verify — contract written from the state, provenance «legado» — and then closes.
+func TestEstadoViejoSigueVerificandoYCerrando(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	aLegado(t, r, e)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
 	got, _, err := r.Verificar("", t0)
-	if err != nil || got.Fase != Verificado || got.Recibo.Contado {
+	if err != nil || got.Fase != Verificado || got.Recibo.Contado || got.Procedencia != "legado" {
 		t.Fatalf("%+v %v", got, err)
+	}
+	var c Contrato
+	if hay, err := r.leerBlob(refContrato("01"), &c); err != nil || !hay || c.Huella != got.Huella {
+		t.Fatalf("adoption must write the contract to git: %v %v %+v", hay, err, c)
 	}
 	if reg, _, _, err := r.Cerrar("", true, "", t0.Add(time.Hour)); err != nil || reg.Result != "aceptado" || reg.Ruta != RutaSlice {
 		t.Fatalf("%+v %v", reg, err)
 	}
+	if _, err := os.Stat(e.Worktree); !os.IsNotExist(err) {
+		t.Fatal("the 1.0.0 linked worktree must be removed on close")
+	}
 }
 
-// Un estado con forma de orq 1.0.0 (sin «esquema») se verifica como entonces: en el worktree, sin
-// vigilar el runner, y en copia aislada solo si traía aislado=true.
-func TestEstadoViejoVerificaEnElWorktree(t *testing.T) {
+// A legacy slice is verified like any other: on a clean copy of its commit in the box, never in the
+// worktree. A file that only exists in the worktree does not make it pass.
+func TestEstadoViejoVerificaEnCopiaLimpia(t *testing.T) {
 	r := repoConReporte(t, `cmp -s total.txt tests/datos.txt || test -f ruido.txt
 `)
 	os.WriteFile(filepath.Join(r.Root, ".git", "info", "exclude"), []byte(".orq/\nruido.txt\n"), 0o644)
-	viejo := func(aislado bool) {
-		e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete"}, t0)
-		if err != nil || e.Esquema != EsquemaActual {
-			t.Fatalf("%+v %v", e, err)
-		}
-		raw, _ := os.ReadFile(r.estadoPath("01"))
-		var m map[string]any
-		json.Unmarshal(raw, &m)
-		for _, k := range []string{"sin_conteo", "en_sitio", "vigilados", "ruta", "ascendido", "ruta_motivo", "esquema"} {
-			delete(m, k)
-		}
-		if aislado {
-			m["aislado"] = true
-		}
-		raw, _ = json.Marshal(m)
-		os.WriteFile(r.estadoPath("01"), raw, 0o644)
-		commitEn(t, e.Worktree, "otro.txt", "x\n")
-		os.WriteFile(filepath.Join(e.Worktree, "ruido.txt"), []byte("x\n"), 0o644) // ignorado: solo existe en el worktree
+	e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete"}, t0)
+	if err != nil {
+		t.Fatal(err)
 	}
-	viejo(false)
-	e, _, err := r.Verificar("", t0)
-	if err != nil || e.Fase != Verificado || e.Recibo.Aislado {
-		t.Fatalf("un estado de 1.0.0 debe verificar en el worktree: %+v %v", e, err)
+	aLegado(t, r, e)
+	commitEn(t, e.Worktree, "otro.txt", "x\n")
+	os.WriteFile(filepath.Join(e.Worktree, "ruido.txt"), []byte("x\n"), 0o644) // ignored: only in the worktree
+	got, _, err := r.Verificar("", t0)
+	if err == nil || got.Fase == Verificado || got.Procedencia != "legado" {
+		t.Fatalf("a legacy slice must verify on a clean copy, not in the worktree: %+v %v", got, err)
 	}
-	r.Cerrar("", false, "fin", t0)
-	Git(r.Root, "branch", "-D", "slice/01")
-	viejo(true)
-	if _, _, err := r.Verificar("", t0); err == nil {
-		t.Fatal("aislado=true de 1.0.0 debe seguir corriendo en copia aislada")
+	if rec := leerJSONL[Recibo](r.recibosPath()); len(rec) != 1 || !rec[0].Aislado {
+		t.Fatalf("receipt must say it ran on a clean copy: %+v", rec)
+	}
+}
+
+// Adoption refuses while the old processes still hold the slice lock, and when the exam hash in the
+// state does not match the exam at the red commit. `Convertir` does the same adoption explicitly.
+func TestConvertirEstadoViejo(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	aLegado(t, r, e)
+	soltar, err := r.candado("slice-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "stop") {
+		t.Fatalf("adoption with the lock held must refuse and say to stop the processes: %v", err)
+	}
+	soltar()
+	raw, _ := os.ReadFile(r.estadoPath("01"))
+	bien := string(raw)
+	os.WriteFile(r.estadoPath("01"), []byte(strings.Replace(bien, e.Huella, strings.Repeat("0", 64), 1)), 0o644)
+	if _, err := r.Convertir("01"); err == nil || !strings.Contains(err.Error(), "hash") {
+		t.Fatalf("a state whose exam hash does not match the red commit must not be adopted: %v", err)
+	}
+	if hay, _ := r.leerBlob(refContrato("01"), &Contrato{}); hay {
+		t.Fatal("a refused adoption must not write a contract")
+	}
+	os.WriteFile(r.estadoPath("01"), []byte(bien), 0o644)
+	got, err := r.Convertir("01")
+	if err != nil || got.Procedencia != "legado" || r.confiable(got) != nil {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if _, err := r.Convertir("01"); err == nil {
+		t.Fatal("converting a slice that already has a contract must say so")
+	}
+}
+
+// orq never runs git with its cwd in a worker's copy: a clean filter the worker sets up in a 1.0.0
+// linked worktree must not run when the slice is verified.
+func TestEstadoViejoNoCorreGitEnElWorktree(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	aLegado(t, r, e)
+	centinela := filepath.Join(t.TempDir(), "filter-ran")
+	if _, err := Git(r.Root, "config", "filter.x.clean", "touch "+centinela+"; cat"); err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, ".gitattributes", "*.txt filter=x\n")
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	os.Remove(centinela)
+	time.Sleep(10 * time.Millisecond)
+	os.WriteFile(filepath.Join(e.Worktree, "total.txt"), []byte("170\n"), 0o644) // new mtime: status would re-filter
+	r.Verificar("", t0)
+	if _, err := os.Stat(centinela); err == nil {
+		t.Fatal("verify ran git in the worker's worktree (its clean filter ran)")
+	}
+}
+
+// The tip of a legacy slice must descend from its red commit, as a clone's does.
+func TestEstadoViejoPuntaDesciendeDelRojo(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	aLegado(t, r, e)
+	otra, err := Git(r.Root, "commit-tree", "-m", "otra historia", e.SHARojo+"^{tree}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Git(r.Root, "update-ref", "refs/heads/"+e.Rama, otra); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "does not descend") {
+		t.Fatalf("a tip that does not descend from the red commit must be refused: %v", err)
 	}
 }

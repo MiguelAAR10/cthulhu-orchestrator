@@ -4,6 +4,7 @@ package gate
 // opciones; el texto de los argumentos (un patrón de grep, un mensaje de commit) no cuenta.
 
 import (
+	"orq/internal/orqdir"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,7 +159,8 @@ func soloOrquestador(c simple) bool {
 	}
 	switch a[0] {
 	case "slice":
-		return hay(a[1:2], "abrir", "cerrar", "reintentar", "tomar", "lanzar", "juntar")
+		return hay(a[1:2], "abrir", "cerrar", "reintentar", "tomar", "lanzar", "juntar",
+			"examen", "alcance", "rehuella", "reabrir", "ruta", "verificar", "convertir")
 	case "plan":
 		return hay(a[1:2], "cargar", "hecha", "debatido")
 	case "sesion":
@@ -211,6 +213,8 @@ type proteccion struct {
 func proteccionDe(p Payload, l limits.Limits, env Env, wt bool) proteccion {
 	pr := proteccion{cwd: resolver("/", p.Cwd)}
 	if wt {
+		// The clone marker makes a clone a worker: moving or rewriting it would switch the gate off.
+		pr.rel = append(pr.rel, ".git/"+orqdir.MarcaClon)
 		pr.rel = append(pr.rel, l.Protected...)
 		if env.Bundle != nil {
 			pr.rel = append(pr.rel, env.Bundle(p.Cwd)...)

@@ -263,8 +263,12 @@ func TestWorkerNoCierraNiAbre(t *testing.T) {
 			t.Errorf("el orquestador no pudo: %q (%s)", c, d.Reason)
 		}
 	}
-	if d := Evaluate(bash("orq slice verificar"), baseLimits(), wt); !d.Allow {
-		t.Error("un worker debe poder pedir verificación")
+	// Verifying is the orchestrator's step: a worker reports its result and asks for it.
+	if d := Evaluate(bash("orq slice verificar"), baseLimits(), wt); d.Allow {
+		t.Error("a worker must not run the verification itself")
+	}
+	if d := Evaluate(bash("orq slice verificar"), baseLimits(), main); !d.Allow {
+		t.Errorf("the orchestrator must be able to verify (%s)", d.Reason)
 	}
 }
 
@@ -278,8 +282,11 @@ func TestNoSeEsquivaConOpcionesComillasNiRutas(t *testing.T) {
 			t.Errorf("dejó pasar %q", c)
 		}
 	}
-	if d := Evaluate(bash("orq slice --slice 01 verificar"), baseLimits(), env); !d.Allow {
-		t.Errorf("negó verificar: %s", d.Reason)
+	if d := Evaluate(bash("orq slice --slice 01 verificar"), baseLimits(), env); d.Allow {
+		t.Error("let a worker verify through --slice")
+	}
+	if d := Evaluate(bash("orq slice --slice 01 estado"), baseLimits(), env); !d.Allow {
+		t.Errorf("denied a read-only slice command: %s", d.Reason)
 	}
 }
 

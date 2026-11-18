@@ -32,7 +32,13 @@ type Spec struct {
 	Cwd string            // directorio de trabajo dentro de la caja; vacío = $HOME (tmpfs)
 	Net bool              // false: sin red alguna
 	Env map[string]string // las únicas variables del proceso, más PATH y HOME que pone el paquete
+	// Vinculos montan de solo lectura un directorio en otra ruta, siempre dentro de un RW del Spec:
+	// las dependencias del proyecto (node_modules) vistas dentro de la copia donde corre el examen.
+	Vinculos []Vinculo
 }
+
+// Vinculo es un montaje de solo lectura de Origen en Destino.
+type Vinculo struct{ Origen, Destino string }
 
 // Dentro dice si el proceso actual corre dentro de una caja.
 func Dentro() bool {
@@ -227,6 +233,22 @@ func construir(s Spec, h host, argv []string) ([]string, []string, error) {
 	}
 	if s.Net && h.Resolv != "" {
 		ms = append(ms, montaje{src: h.Resolv, dst: h.Resolv})
+	}
+	// Un vínculo solo puede caer dentro de algo que el Spec ya dio como escribible: no tapa rutas del sistema.
+	for _, v := range s.Vinculos {
+		m, err := validar(v.Origen, false, h)
+		if err != nil {
+			return nil, nil, err
+		}
+		dst := filepath.Clean(v.Destino)
+		dentroDeRW := false
+		for _, x := range ms {
+			dentroDeRW = dentroDeRW || x.rw && dst != x.dst && bajo(dst, x.dst)
+		}
+		if !filepath.IsAbs(v.Destino) || !dentroDeRW {
+			return nil, nil, fmt.Errorf("sandbox: el vínculo %s → %s debe caer dentro de una ruta escribible del Spec", v.Origen, v.Destino)
+		}
+		ms = append(ms, montaje{src: m.src, dst: dst})
 	}
 	// Una ruta pedida dos veces con permisos distintos es ambigua: mejor fallar.
 	vistos := map[string]bool{}
