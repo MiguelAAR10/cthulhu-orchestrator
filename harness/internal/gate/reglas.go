@@ -158,7 +158,8 @@ func soloOrquestador(c simple) bool {
 	}
 	switch a[0] {
 	case "slice":
-		return hay(a[1:2], "abrir", "cerrar", "reintentar", "tomar", "lanzar", "juntar")
+		return hay(a[1:2], "abrir", "cerrar", "reintentar", "tomar", "lanzar", "juntar",
+			"examen", "alcance", "rehuella", "reabrir", "ruta", "verificar", "convertir")
 	case "plan":
 		return hay(a[1:2], "cargar", "hecha", "debatido")
 	case "sesion":

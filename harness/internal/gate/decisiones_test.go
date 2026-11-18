@@ -112,6 +112,24 @@ func TestDecisiones(t *testing.T) {
 		// un subagente desde el checkout principal tampoco toca el harness
 		{Payload{ToolName: "Edit", Cwd: R, AgentID: "a1", ToolInput: map[string]any{"file_path": L}}, protegido},
 		{Payload{ToolName: "Bash", Cwd: R, AgentID: "a1", ToolInput: map[string]any{"command": "orq msg send --para atena hola"}}, ""},
+		// exam, scope, rehash, reopen, lane, verify and convert belong to the orchestrator
+		{bash("orq slice examen tests/s01.sh --aprobado \"req ATN-1\""), soloOrq},
+		{bash("cd /main && orq slice examen tests/s01.sh --aprobado x"), soloOrq},
+		{bash("orq slice alcance src/ --aprobado x"), soloOrq},
+		{bash("orq slice rehuella"), soloOrq},
+		{bash("orq slice reabrir 01"), soloOrq},
+		{bash("orq slice verificar"), soloOrq},
+		{bash("orq slice ruta slice \"x\""), soloOrq},
+		{bash("orq slice convertir 01"), soloOrq},
+		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice examen tests/s01.sh --aprobado \"req ATN-1\""}}, ""},
+		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "cd /main && orq slice examen tests/s01.sh --aprobado x"}}, ""},
+		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice alcance src/ --aprobado x"}}, ""},
+		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice rehuella"}}, ""},
+		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice reabrir 01"}}, ""},
+		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice verificar"}}, ""},
+		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice ruta slice \"x\""}}, ""},
+		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice convertir 01"}}, ""},
+		{bash(`orq halt --set "x"`), ""}, // pausing destroys nothing
 		// fuera de un worktree no cambia nada
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "g=git; $g status; echo x > $d/a"}}, ""},
 		{Payload{ToolName: "Edit", Cwd: R, ToolInput: map[string]any{"file_path": L}}, ""},
