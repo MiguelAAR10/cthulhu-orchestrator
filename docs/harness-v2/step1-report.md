@@ -116,3 +116,20 @@ Summary first, then the full ledger lines with the cost if each is wrong.
 - Final: Ruling: I2 auto-adoption trusts the state (spec plan.md:80 asks ratification; step1-plan decision 2 says verify adopts) — kept the plan's behaviour plus the new ancestry check; the plan/spec conflict goes to the Owner in the report — cost if wrong: an unsandboxed 1.0.0 worker that forges cmd+hash in the state gets a weaker exam adopted without a human.
 - Final: Ruling: I3 workers can still write main's refs (git -C main update-ref, writes into main/.git) — not fixed: the spec stops growing the shell gate and B6 (worker in the box) is the fix; the contract model depends on B6, said in the report — cost if wrong: until B6 a worker can delete or rewrite refs/orq/contrato/NN.
 - Final: Ruling: I1 second half (a corrupt marker makes Bundle/MainRoot fall back to the clone) — not fixed separately: the marker is now protected from the worker's tools; remaining paths are interpreter scripts, open until B6 — cost if wrong: a script-corrupted marker opens main/.orq to tool writes.
+
+## Review fixes
+
+Fixes for `docs/harness-v2/reviews/step1-review.md` (verdict: corregir). Each fix started as a test that I saw fail.
+
+| Commit | Findings | What changed |
+|---|---|---|
+| 7bbfd50 | ALTA 1, BAJA 5 | `gate.IsWorker` and `slice.LeerMarca` keep walking up past a `.git` that has no marker. A directory is a worker if any ancestor has `.git/orq-clon` or a `.git` file. An empty or relative cwd counts as a worker. `IsWorker`, `LeerMarca` and `CheckoutPrincipal` stop when `Dir(d) == d`. Tests: `TestGateDeniesInRepoNestedInClone` (`git init sub` and `git clone . sub` inside a clone: exam Edit, `orq slice examen --aprobado` from the clone and from main, and a write to main `.orq` are all denied), `TestIsWorkerCwdVacioORelativo`, `TestCheckoutPrincipalCwdRelativoNoSeCuelga`, `TestLeerMarca*`. |
+| 374d3cf | ALTA 2, ALTA 3, MEDIA 4, tests | `verificar` never adopts. It returns `ErrSinContrato` naming `orq slice convertir NN --ratifico "<who and why>"`. Only `Convertir(nn, ratifico, out)` adopts, and it requires a non-empty ratification, which it stores in the contract (`ratifico`). `sha_rojo` and `sha_examen` must be 40-hex, equal to `rev-parse --verify <x>^{commit}`, and ancestors of `refs/heads/<Base>` in main. Before sealing it prints cmd, bundle, the red/exam commits and the ratification. It refuses while the slice lock is held, while the `Escritor` lease is held, or while a process has its cwd inside the worktree (`EnUso`, i.e. `sysinfo.Usan`). SHAs read from the state are shortened with `slice.Corto`, which cannot panic. `convertir` stays orchestrator-only in the gate (the case with `--ratifico` is tested). The usage text says the ratification is recorded but not authenticated until roadmap step 3. `TestEstadoViejoNoCorreGitEnElWorktree` now requires a receipt. Before this fix it never reached the exam, because `.gitattributes` is protected; the test now approves it with `Ampliar`. New tests: `TestConvertirRechazaExamenForjadoCoherente`, `TestConvertirExigeSHACompletoEnLaBase`, `TestConvertirSeNiegaConEscritorOProcesoDentro`. |
+
+`validacion/e2e-v05.sh`: no case relied on automatic adoption, so the script is unchanged.
+
+Consequences to know:
+- No command releases the `Escritor` lease (only blocking, reopening and rehuella clear it). A 1.0.0 slice that still names a writer cannot be converted until something clears the lease.
+- `sha_examen` is the slice-branch head when an exam was added mid-slice, so it is not on `Base`. Those 1.0.0 slices are refused and are closed as rejected.
+
+`make ci` (exit 0): gofmt clean, go vet clean, `go test -race` 21 packages ok, e2e-v05 77 pass / 0 fail, aislamiento 14 pass / 0 fail / 0 pending.
