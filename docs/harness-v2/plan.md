@@ -61,6 +61,8 @@ Source: external Fable review in four rounds and a usage scout over ~200 real sl
 | 8 | Portable knowledge: project-knowledge doc reviewed once by a human; catalog open to external sources, pinned and verified, installed only with approval | a new repo reaches its first accepted story in ≤ 1 day; one project's rules apply to another of the same stack | 4 |
 Until step 7, Codex workers run with no hook and no box: the pilot says so and uses repos where a mistake is cheap.
 
+**Owner rules (2026-11-18):** Codex is never used, for any role (workers, reviews, Astra); the "second provider" of step 7 is to be named by the Owner. Fable plans and reviews only when the Owner asks; Opus builds; Sonnet/Haiku for mechanical work and scouts. One session at a time: a worker finishes and closes, a fresh Opus reviewer checks it, fixes if needed, the orchestrator integrates and runs `make ci`, then the next step.
+
 **Frozen:** pub/sub bus and hive memory, second orchestrator, U1 `orq setup`, L1 translation, Orca adapter work, C6 and W1 as separate pieces (their useful parts are in 2b), full Q1 quality profile, mutation and held-out tests (until the pilot shows wrong acceptances), model-compacted memory and injected "instincts". Not claimed: catching cheaters as the core value; being the only verifier.
 
 ## Activities
