@@ -287,18 +287,17 @@ func abrirConReporte(r Repo, o Opciones) (*Estado, string, error) {
 	return r.Abrir("01", "total", "tests/s01.sh", examen, o, t0)
 }
 
+// A green exit with 0 tests run is not green. The fixture goes through Abrir: the runner itself reports
+// «1..0» once total.txt is right, so state and contract agree.
 func TestVerdeSinPruebasEjecutadasFalla(t *testing.T) {
-	r := repoConReporte(t, tapReal)
+	r := repoConReporte(t, `if cmp -s total.txt tests/datos.txt; then printf '1..0\n' > out.tap; else printf 'not ok 1 total\n' > out.tap; exit 1; fi
+`)
 	e, _, err := abrirConReporte(r, Opciones{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// el worker "arregla" sin tocar el examen, pero el runner no ejecuta nada
 	commitEn(t, e.Worktree, "total.txt", "170\n")
-	e.Cmd = "printf '1..0\n' > out.tap"
-	r.save(e)
-	e.Huella, _ = Huella(e.Worktree, e.Bundle, e.Cmd)
-	r.save(e)
 	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "0 pruebas") {
 		t.Fatalf("got %v", err)
 	}
@@ -835,27 +834,30 @@ func TestAmpliarZona(t *testing.T) {
 }
 
 // Una huella mal tomada se repara solo si el examen es idéntico al del rojo; un examen cambiado no.
+// Rehash only from BLOQUEADO. The fixture is a hash orq took wrong at open: state and contract both
+// carry it, verify blocks on it, and rehuella takes it again from the red commit.
 func TestRehuella(t *testing.T) {
 	r := repoDeJuguete(t)
 	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Rehuella("01", "x"); err == nil {
-		t.Fatal("en construcción no se repara")
+	if _, err := r.Rehuella("01", "x"); err == nil || !strings.Contains(err.Error(), "solo se repara desde "+Bloqueado) {
+		t.Fatalf("from IMPLEMENTANDO it must refuse: %v", err)
 	}
 	commitEn(t, e.Worktree, "total.txt", "170\n")
-	e2, _ := r.Load("01")
-	e2.Huella = "mal"
-	r.save(e2)
-	if _, _, err := r.Verificar("01", t0); err == nil {
-		t.Fatal("con huella mala debe bloquear")
+	e.Huella = "mal"
+	if err := errors.Join(r.sellar(e), r.save(e)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, err := r.Verificar("01", t0); err == nil || got.Fase != Bloqueado {
+		t.Fatalf("a wrong hash must block: %+v %v", got, err)
 	}
 	if _, err := r.Rehuella("01", "edición sin commit al abrir (Atena)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := r.Verificar("01", t0); err != nil {
-		t.Fatal(err)
+	if got, _, err := r.Verificar("01", t0); err != nil || got.Fase != Verificado {
+		t.Fatalf("%+v %v", got, err)
 	}
 }
 
