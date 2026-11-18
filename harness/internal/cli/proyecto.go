@@ -579,11 +579,14 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fs := flag.NewFlagSet("slice convertir", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		ratifico := fs.String("ratifico", "", "who approved adopting this 1.0.0 slice, and why")
-		if len(args) < 2 || strings.TrimSpace(args[1]) == "" || fs.Parse(args[2:]) != nil || strings.TrimSpace(*ratifico) == "" || fs.NArg() > 0 {
-			fmt.Fprintln(stderr, "uso: orq slice convertir NN --ratifico \"<who approved it and why>\"   (a slice opened by orq 1.0.0, with its old processes stopped; the ratification is recorded, not authenticated, until roadmap step 3)")
+		codigo := fs.String("codigo", "", "the code the dry run showed")
+		uso := "uso: orq slice convertir NN [--ratifico \"<who approved it and why>\" --codigo CODE]   (a slice opened by orq 1.0.0, with its old processes stopped. Without --ratifico it is a dry run that shows what it would seal and its code; the ratification is recorded, not authenticated, until roadmap step 3)"
+		if len(args) < 2 || strings.TrimSpace(args[1]) == "" || fs.Parse(args[2:]) != nil || fs.NArg() > 0 ||
+			(*ratifico != "" || *codigo != "") && (strings.TrimSpace(*ratifico) == "" || *codigo == "") {
+			fmt.Fprintln(stderr, uso)
 			return 1
 		}
-		e, err := r.Convertir(strings.TrimPrefix(args[1], "S-"), *ratifico, stdout)
+		e, err := r.Convertir(strings.TrimPrefix(args[1], "S-"), *ratifico, *codigo, stdout)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1

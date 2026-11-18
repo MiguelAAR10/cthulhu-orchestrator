@@ -10,8 +10,8 @@ func TestUsoSinEnSitioYConConvertir(t *testing.T) {
 	if strings.Contains(usage, "--en-sitio") {
 		t.Fatal("usage still offers --en-sitio")
 	}
-	if !strings.Contains(usage, "orq slice convertir NN --ratifico") {
-		t.Fatal("usage does not list `orq slice convertir NN --ratifico`")
+	if !strings.Contains(usage, `orq slice convertir NN [--ratifico "quién y por qué" --codigo CODE]`) {
+		t.Fatal("usage does not list `orq slice convertir NN [--ratifico ... --codigo CODE]`")
 	}
 	if strings.Contains(usage, "verify does the same on its own") {
 		t.Fatal("usage still says verify adopts a legacy slice")
@@ -28,13 +28,16 @@ func TestSliceConvertirSliceActualSeNiega(t *testing.T) {
 	if _, errs, code := run(t, append(abrirBase, "--reporte", "out.tap", "--formato", "tap")...); code != 0 {
 		t.Fatalf("abrir: %d %s", code, errs)
 	}
-	for _, args := range [][]string{{"slice", "convertir"}, {"slice", "convertir", "01"}, {"slice", "convertir", "01", "--ratifico", " "}} {
-		if _, errs, code := run(t, args...); code != 1 || !strings.Contains(errs, "uso: orq slice convertir NN --ratifico") {
+	for _, args := range [][]string{{"slice", "convertir"}, {"slice", "convertir", "01", "--ratifico", " ", "--codigo", "x"},
+		{"slice", "convertir", "01", "--ratifico", "Owner: test"}, {"slice", "convertir", "01", "--codigo", "x"}} {
+		if _, errs, code := run(t, args...); code != 1 || !strings.Contains(errs, "uso: orq slice convertir NN [--ratifico") {
 			t.Fatalf("%v: %d %s", args, code, errs)
 		}
 	}
-	if out, errs, code := run(t, "slice", "convertir", "01", "--ratifico", "Owner: test"); code != 1 || !strings.Contains(errs, "nothing to convert") {
-		t.Fatalf("%d %s %s", code, out, errs)
+	for _, args := range [][]string{{"slice", "convertir", "01"}, {"slice", "convertir", "01", "--ratifico", "Owner: test", "--codigo", "abc"}} {
+		if out, errs, code := run(t, args...); code != 1 || !strings.Contains(errs, "nothing to convert") {
+			t.Fatalf("%v: %d %s %s", args, code, out, errs)
+		}
 	}
 }
 

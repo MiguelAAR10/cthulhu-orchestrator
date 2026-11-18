@@ -8,6 +8,8 @@ package slice
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -194,13 +196,14 @@ var ErrProcesosVivos = errors.New("the slice lock is held by another process")
 // the contract. The base is the trusted one (baseConfiable), never the state's; the state must name it.
 // The red and exam commits must be full SHAs of commits on that branch of the main repo, and the exam hash in the state must be the hash of the exam at
 // that commit. It refuses while the old processes may still run: the slice lock held, the writer
-// lease held, or a process with its cwd inside the worktree. It shows cmd, bundle and commits on out
-// before sealing.
-func (r Repo) Convertir(nn, ratifico string, out io.Writer) (*Estado, error) {
+// lease held, or a process with its cwd inside the worktree. Without a ratification it is a dry run:
+// it shows cmd, bundle, commits, base and a code over them, and returns ErrEnSeco. Sealing needs
+// that code, recomputed here, so the ratification covers exactly what was shown.
+// ErrEnSeco: convertir ran without --ratifico; it showed what it would seal and sealed nothing.
+var ErrEnSeco = errors.New("dry run, nothing sealed")
+
+func (r Repo) Convertir(nn, ratifico, codigo string, out io.Writer) (*Estado, error) {
 	ratifico = strings.TrimSpace(ratifico)
-	if ratifico == "" {
-		return nil, errors.New("not converted: --ratifico \"<who approved it and why>\" is required")
-	}
 	e, err := r.Load(nn)
 	if err != nil || e == nil {
 		return nil, errors.Join(err, errors.New("no hay slice abierto"))
@@ -249,18 +252,39 @@ func (r Repo) Convertir(nn, ratifico string, out io.Writer) (*Estado, error) {
 	if h != e.Huella {
 		return e, fmt.Errorf("%s is not converted: the exam hash in the state does not match the exam at commit %s. Someone changed the state or the exam", e.ID(), e.baseExamen())
 	}
-	if out != nil {
-		fmt.Fprintf(out, "%s: sealing the contract from the state\n  cmd: %s\n  bundle: %s\n  red commit: %s\n", e.Attempt(), e.Cmd, strings.Join(e.Bundle, ", "), e.SHARojo)
-		if e.SHAExamen != "" {
-			fmt.Fprintf(out, "  exam commit: %s\n", e.SHAExamen)
+	cod := codigoConversion(e, base)
+	if ratifico == "" {
+		if out != nil {
+			fmt.Fprintf(out, "%s: convertir would seal this contract from the state\n  cmd: %s\n  bundle: %s\n  red commit: %s\n  exam commit: %s\n  base: %s\n  code: %s\n",
+				e.Attempt(), e.Cmd, strings.Join(e.Bundle, ", "), e.SHARojo, def(e.SHAExamen, "(none)"), base, cod)
 		}
-		fmt.Fprintf(out, "  ratified: %s\n", ratifico)
+		return e, fmt.Errorf("%w: to seal what was shown: `orq slice convertir %s --ratifico \"<who approved it and why>\" --codigo %s`", ErrEnSeco, e.NN, cod)
+	}
+	if codigo != cod {
+		return e, fmt.Errorf("%s is not converted: code %q is not the code of what convertir shows now. Run `orq slice convertir %s` without --ratifico and check it again", e.ID(), codigo, e.NN)
+	}
+	if out != nil {
+		fmt.Fprintf(out, "%s: sealing the contract shown under code %s · ratified: %s\n", e.Attempt(), cod, ratifico)
 	}
 	e.Procedencia, e.Ratifico = ProcedenciaLegado, ratifico
 	if err := r.sellar(e); err != nil {
 		return e, err
 	}
 	return e, errors.Join(r.save(e), r.marcarSiClon(e))
+}
+
+// codigoConversion binds a ratification to what the dry run showed: 12 hex of the sha256 of cmd,
+// bundle, red commit, exam commit and trusted base.
+func codigoConversion(e *Estado, base string) string {
+	h := sha256.Sum256([]byte(strings.Join([]string{e.Cmd, strings.Join(e.Bundle, "\n"), e.SHARojo, e.SHAExamen, base}, "\x00")))
+	return hex.EncodeToString(h[:])[:12]
+}
+
+func def(s, d string) string {
+	if s == "" {
+		return d
+	}
+	return s
 }
 
 // enLaBase checks that sha is a full commit SHA (40 hex, not a ref name or a prefix) and that it is

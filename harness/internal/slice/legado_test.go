@@ -76,7 +76,7 @@ func TestEstadoViejoSigueVerificandoYCerrando(t *testing.T) {
 	if got, _ := r.Load("01"); got.Procedencia == ProcedenciaLegado {
 		t.Fatal("verify must not mark the slice as adopted")
 	}
-	if _, err := r.Convertir("01", ratifico, io.Discard); err != nil {
+	if _, err := convertir(t, r, "01"); err != nil {
 		t.Fatal(err)
 	}
 	got, _, err := r.Verificar("", t0)
@@ -102,7 +102,7 @@ func TestEstadoViejoVerificaEnCopiaLimpia(t *testing.T) {
 		t.Fatal(err)
 	}
 	aLegado(t, r, e)
-	if _, err := r.Convertir("01", ratifico, io.Discard); err != nil {
+	if _, err := convertir(t, r, "01"); err != nil {
 		t.Fatal(err)
 	}
 	commitEn(t, e.Worktree, "otro.txt", "x\n")
@@ -117,8 +117,8 @@ func TestEstadoViejoVerificaEnCopiaLimpia(t *testing.T) {
 }
 
 // Convertir refuses while the old processes hold the slice lock, without a ratification, and when the
-// exam hash in the state does not match the exam at the red commit. It shows what it seals and keeps
-// the ratification in the contract.
+// exam hash in the state does not match the exam at the red commit. It keeps the ratification in the
+// contract.
 func TestConvertirEstadoViejo(t *testing.T) {
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
@@ -127,12 +127,12 @@ func TestConvertirEstadoViejo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Convertir("01", ratifico, io.Discard); err == nil || !strings.Contains(err.Error(), "stop") {
+	if _, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), io.Discard); err == nil || !strings.Contains(err.Error(), "stop") {
 		t.Fatalf("adoption with the lock held must refuse and say to stop the processes: %v", err)
 	}
 	soltar()
 	for _, vacio := range []string{"", "   "} {
-		if _, err := r.Convertir("01", vacio, io.Discard); err == nil || !strings.Contains(err.Error(), "--ratifico") {
+		if _, err := r.Convertir("01", vacio, "", io.Discard); err == nil || !strings.Contains(err.Error(), "--ratifico") {
 			t.Fatalf("adoption without a ratification must refuse: %v", err)
 		}
 	}
@@ -140,26 +140,24 @@ func TestConvertirEstadoViejo(t *testing.T) {
 	raw, _ := os.ReadFile(r.estadoPath("01"))
 	bien := string(raw)
 	os.WriteFile(r.estadoPath("01"), []byte(strings.Replace(bien, e.Huella, strings.Repeat("0", 64), 1)), 0o644)
-	if _, err := r.Convertir("01", ratifico, io.Discard); err == nil || !strings.Contains(err.Error(), "hash") {
+	if _, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), io.Discard); err == nil || !strings.Contains(err.Error(), "hash") {
 		t.Fatalf("a state whose exam hash does not match the red commit must not be adopted: %v", err)
 	}
 	sinContrato(t, r, "01")
 	os.WriteFile(r.estadoPath("01"), []byte(bien), 0o644)
 	var out bytes.Buffer
-	got, err := r.Convertir("01", ratifico, &out)
+	got, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), &out)
 	if err != nil || got.Procedencia != ProcedenciaLegado || r.confiable(got) != nil {
 		t.Fatalf("%+v %v", got, err)
 	}
-	for _, want := range []string{e.Cmd, "tests/s01.sh", "tests/datos.txt", e.SHARojo, ratifico} {
-		if !strings.Contains(out.String(), want) {
-			t.Errorf("conversion must show %q before sealing; it showed:\n%s", want, out.String())
-		}
+	if !strings.Contains(out.String(), ratifico) { // what it seals is shown by the dry run (TestConvertirEnSecoYCodigo)
+		t.Errorf("conversion must show the ratification; it showed:\n%s", out.String())
 	}
 	var c Contrato
 	if hay, err := r.leerBlob(refContrato("01"), &c); err != nil || !hay || c.Ratifico != ratifico || c.Huella != e.Huella {
 		t.Fatalf("the contract must keep the ratification: %v %v %+v", hay, err, c)
 	}
-	if _, err := r.Convertir("01", ratifico, io.Discard); err == nil || !strings.Contains(err.Error(), "nothing to convert") {
+	if _, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), io.Discard); err == nil || !strings.Contains(err.Error(), "nothing to convert") {
 		t.Fatalf("converting a slice that already has a contract must say so: %v", err)
 	}
 }
@@ -181,7 +179,7 @@ func TestConvertirRechazaExamenForjadoCoherente(t *testing.T) {
 		t.Fatal(err)
 	}
 	editarEstado(t, r, "01", func(m map[string]any) { m["sha_examen"], m["huella"] = falso, h })
-	if _, err := r.Convertir("01", ratifico, io.Discard); err == nil || !strings.Contains(err.Error(), "base") {
+	if _, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), io.Discard); err == nil || !strings.Contains(err.Error(), "base") {
 		t.Fatalf("an exam commit off the base branch must not be adopted, even with a matching hash: %v", err)
 	}
 	sinContrato(t, r, "01")
@@ -213,7 +211,7 @@ func TestConvertirExigeSHACompletoEnLaBase(t *testing.T) {
 				m["sha_examen"] = c[1]
 			}
 		})
-		if _, err := r.Convertir("01", ratifico, io.Discard); err == nil {
+		if _, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), io.Discard); err == nil {
 			t.Errorf("%s: adopted, must be refused", nombre)
 		}
 		sinContrato(t, r, "01")
@@ -235,7 +233,7 @@ func TestConvertirSeNiegaConEscritorOProcesoDentro(t *testing.T) {
 	e := abrir(t, r)
 	aLegado(t, r, e)
 	editarEstado(t, r, "01", func(m map[string]any) { m["escritor"] = "worker-1" })
-	if _, err := r.Convertir("01", ratifico, io.Discard); err == nil || !strings.Contains(err.Error(), "worker-1") {
+	if _, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), io.Discard); err == nil || !strings.Contains(err.Error(), "worker-1") {
 		t.Fatalf("adoption with the writer lease held must refuse and name the writer: %v", err)
 	}
 	sinContrato(t, r, "01")
@@ -248,7 +246,7 @@ func TestConvertirSeNiegaConEscritorOProcesoDentro(t *testing.T) {
 		}
 		return nil
 	}
-	if _, err := r.Convertir("01", ratifico, io.Discard); err == nil || !strings.Contains(err.Error(), "4242") {
+	if _, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), io.Discard); err == nil || !strings.Contains(err.Error(), "4242") {
 		t.Fatalf("adoption with a process inside the worktree must refuse and name it: %v", err)
 	}
 	sinContrato(t, r, "01")
@@ -261,7 +259,7 @@ func TestEstadoViejoNoCorreGitEnElWorktree(t *testing.T) {
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	aLegado(t, r, e)
-	if _, err := r.Convertir("01", ratifico, io.Discard); err != nil {
+	if _, err := convertir(t, r, "01"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.Ampliar("01", []string{".gitattributes"}); err != nil { // approved: verify must run
@@ -293,7 +291,7 @@ func TestEstadoViejoPuntaDesciendeDelRojo(t *testing.T) {
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	aLegado(t, r, e)
-	if _, err := r.Convertir("01", ratifico, io.Discard); err != nil {
+	if _, err := convertir(t, r, "01"); err != nil {
 		t.Fatal(err)
 	}
 	otra, err := Git(r.Root, "commit-tree", "-m", "otra historia", e.SHARojo+"^{tree}")
@@ -324,7 +322,7 @@ func TestConvertirBaseNoSaleDelEstado(t *testing.T) {
 	mustGit(t, e.Worktree, "branch", "x", falso) // refs are shared with the main repo
 	for _, base := range []string{e.Rama, "x"} {
 		editarEstado(t, r, "01", func(m map[string]any) { m["base"], m["sha_examen"], m["huella"] = base, falso, h })
-		_, err := r.Convertir("01", ratifico, io.Discard)
+		_, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), io.Discard)
 		if err == nil || !strings.Contains(err.Error(), `"`+base+`"`) || !strings.Contains(err.Error(), `"main"`) {
 			t.Fatalf("state base %q: must be refused naming it and the trusted base main: %v", base, err)
 		}
@@ -351,5 +349,58 @@ func TestBaseConfiable(t *testing.T) {
 		if ok != (err == nil) || ok && b != cfg {
 			t.Errorf("config base %q: %q %v", cfg, b, err)
 		}
+	}
+}
+
+// codigoActual is the code a dry run shows now ("" if the dry run refuses).
+func codigoActual(t *testing.T, r Repo, nn string) string {
+	t.Helper()
+	var out bytes.Buffer
+	if _, err := r.Convertir(nn, "", "", &out); !errors.Is(err, ErrEnSeco) {
+		return ""
+	}
+	_, c, _ := strings.Cut(out.String(), "code: ")
+	return strings.TrimSpace(c)
+}
+
+func convertir(t *testing.T, r Repo, nn string) (*Estado, error) {
+	t.Helper()
+	return r.Convertir(nn, ratifico, codigoActual(t, r, nn), io.Discard)
+}
+
+// Without --ratifico convertir is a dry run: it shows cmd, bundle, red and exam commits, the trusted
+// base and a code over them, seals nothing and fails. Sealing needs that code, recomputed at seal
+// time: a wrong code, or a code shown before the state changed, is refused.
+func TestConvertirEnSecoYCodigo(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	aLegado(t, r, e)
+	var out bytes.Buffer
+	if _, err := r.Convertir("01", "", "", &out); !errors.Is(err, ErrEnSeco) {
+		t.Fatalf("a dry run must fail with ErrEnSeco: %v", err)
+	}
+	sinContrato(t, r, "01")
+	cod := codigoActual(t, r, "01")
+	if len(cod) != 12 || strings.Trim(cod, "0123456789abcdef") != "" {
+		t.Fatalf("code must be 12 hex: %q\n%s", cod, out.String())
+	}
+	for _, want := range []string{e.Cmd, "tests/s01.sh", "tests/datos.txt", e.SHARojo, "base: main", cod} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("dry run must show %q; it showed:\n%s", want, out.String())
+		}
+	}
+	for _, mal := range []string{"", "000000000000", cod[:6]} {
+		if _, err := r.Convertir("01", ratifico, mal, io.Discard); err == nil || !strings.Contains(err.Error(), "code") {
+			t.Fatalf("code %q must be refused: %v", mal, err)
+		}
+		sinContrato(t, r, "01")
+	}
+	editarEstado(t, r, "01", func(m map[string]any) { m["sha_examen"] = e.SHARojo }) // valid, but not what was shown
+	if _, err := r.Convertir("01", ratifico, cod, io.Discard); err == nil || !strings.Contains(err.Error(), "code") {
+		t.Fatalf("a code shown before the state changed must be refused: %v", err)
+	}
+	sinContrato(t, r, "01")
+	if _, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), io.Discard); err != nil {
+		t.Fatal(err)
 	}
 }

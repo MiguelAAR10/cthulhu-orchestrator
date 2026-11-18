@@ -59,13 +59,15 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
                                  Cuenta pruebas por defecto; el examen corre siempre en la caja, sobre una copia
                                  limpia del commit; --ruta fix = un worker, sin equipo ni plan
                                  (--aislado se acepta y no hace nada)
-  orq slice convertir NN --ratifico "quién y por qué"
+  orq slice convertir NN [--ratifico "quién y por qué" --codigo CODE]
                                  adopts a slice opened by orq 1.0.0: only this command adopts (verify never
-                                 does). Red and exam commits must be full SHAs on the base branch; checks the
-                                 exam hash, shows cmd/bundle/red, writes the contract with the ratification
-                                 (provenance «legado»). Its old processes must be stopped: lock, writer lease
-                                 and processes in the worktree are checked. Until roadmap step 3 the
-                                 ratification is recorded, not authenticated as the Owner's
+                                 does). Without --ratifico it is a dry run: shows cmd, bundle, red and exam
+                                 commits, the trusted base (config «base», else main, else master) and a
+                                 code, seals nothing, exits 1. Sealing needs that code. Commits must be full
+                                 SHAs on the trusted base; checks the exam hash; writes the contract with the
+                                 ratification (provenance «legado»). Its old processes must be stopped: lock,
+                                 writer lease and processes in the worktree are checked. Until roadmap step 3
+                                 the ratification is recorded, not authenticated as the Owner's
   orq slice ruta slice "motivo"  sube un fix abierto a slice completo (no baja)
   orq slice tomar QUIEN [--relevo]   un solo escritor por slice
   orq slice reabrir "motivo"   un slice verificado vuelve a construirse para una reparación, con su trabajo
