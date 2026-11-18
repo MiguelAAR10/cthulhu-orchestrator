@@ -9,7 +9,7 @@ As the Owner, I want `orq` to enforce by program what the README promises, and t
 3. A slice cannot be opened without counted tests unless a reason is given; verification runs on a clean copy of the commit.
 4. `orq slice abrir --ruta fix` runs a fix with one worker and no plan; `orq metricas` shows time per lane.
 5. `make test` and both scripts in `validacion/` pass in CI.
-6. Slices opened with orq 1.0.0 still verify and close with the new binary.
+6. v2 does not inherit 1.0.0 slices (Owner, 2026-11-18, after three failed reviews of legacy adoption): it refuses a schema-0 slice with a message saying to close it with orq 1.0.0 first. Open 1.0.0 slices are drained with 1.0.0 before v2 is installed.
 
 7. Recovery: a run interrupted mid-slice is resumed by a new session with no access to the previous conversation. It recovers the goal and current slice revision, the relevant decisions and open questions, the real commits, pending changes and processes, the evidence still valid for that state, and the next safe action. It checks memory against Git and the live run, and resolves or flags an ambiguous attempt before repeating anything.
 8. Pilot: one real slice end to end on a real project (see Direction), with a recorded harness commit, at least one accepted correct result and one rejected known failure, each with a precise reason.
