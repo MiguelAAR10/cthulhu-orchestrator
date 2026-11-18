@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 	"strings"
 
 	"orq/internal/config"
@@ -227,8 +228,10 @@ func (r Repo) Convertir(nn, ratifico, codigo string, out io.Writer) (*Estado, er
 	if e.Escritor != "" {
 		return e, fmt.Errorf("%s is not converted: the writer lease is held by %s, so a worker may still be running. Stop it first", e.ID(), e.Escritor)
 	}
-	if usan := EnUso(e.Worktree); len(usan) > 0 {
-		return e, fmt.Errorf("%s is not converted: processes still work inside %s: %s. Stop them first", e.ID(), e.Worktree, strings.Join(usan, ", "))
+	if dir, usan, err := r.enUsoSlice(e); err != nil {
+		return e, err
+	} else if len(usan) > 0 {
+		return e, fmt.Errorf("%s is not converted: processes still work inside %s: %s. Stop them first", e.ID(), dir, strings.Join(usan, ", "))
 	}
 	base, err := r.baseConfiable(e)
 	if err != nil {
@@ -271,6 +274,34 @@ func (r Repo) Convertir(nn, ratifico, codigo string, out io.Writer) (*Estado, er
 		return e, err
 	}
 	return e, errors.Join(r.save(e), r.marcarSiClon(e))
+}
+
+// enUsoSlice lists processes inside the slice's worktree. The path is the one git reports for the
+// slice branch (`git worktree list --porcelain`), not the state's `worktree` field, which anyone with
+// disk access can rewrite; the state's path is checked as well (a clone is not a git worktree).
+func (r Repo) enUsoSlice(e *Estado) (dir string, usan []string, err error) {
+	out, err := r.git("worktree", "list", "--porcelain")
+	if err != nil {
+		return "", nil, err
+	}
+	var dirs []string
+	actual := ""
+	for _, l := range strings.Split(out, "\n") {
+		if p, ok := strings.CutPrefix(l, "worktree "); ok {
+			actual = p
+		} else if l == "branch refs/heads/"+e.Rama && actual != r.Root {
+			dirs = append(dirs, actual)
+		}
+	}
+	if e.Worktree != "" && !slices.Contains(dirs, e.Worktree) {
+		dirs = append(dirs, e.Worktree)
+	}
+	for _, d := range dirs {
+		if u := EnUso(d); len(u) > 0 {
+			return d, u, nil
+		}
+	}
+	return "", nil, nil
 }
 
 // codigoConversion binds a ratification to what the dry run showed: 12 hex of the sha256 of cmd,

@@ -404,3 +404,24 @@ func TestConvertirEnSecoYCodigo(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The in-use check looks at the worktree git reports for the slice branch, not the state's
+// `worktree` field: a live worker that forges that field is still seen.
+func TestConvertirEnUsoMiraElWorktreeDeGit(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	aLegado(t, r, e)
+	editarEstado(t, r, "01", func(m map[string]any) { m["worktree"] = filepath.Join(t.TempDir(), "x") })
+	antes := EnUso
+	t.Cleanup(func() { EnUso = antes })
+	EnUso = func(dir string) []string {
+		if dir == e.Worktree {
+			return []string{"claude (pid 4242)"}
+		}
+		return nil
+	}
+	if _, err := r.Convertir("01", ratifico, codigoActual(t, r, "01"), io.Discard); err == nil || !strings.Contains(err.Error(), "4242") {
+		t.Fatalf("a process in the worktree git reports must refuse, whatever the state says: %v", err)
+	}
+	sinContrato(t, r, "01")
+}
