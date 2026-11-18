@@ -28,10 +28,15 @@ type redir struct {
 type simple struct {
 	w      []palabra
 	redirs []redir
-	stdin  string // heredoc o here-string: lo que el comando lee como entrada
-	piped  bool   // recibe la salida de otro comando por |
-	dir    string // directorio donde corre, tras los cd anteriores
-	dirDyn bool   // hubo un cd a una ruta no resuelta: lo relativo no se conoce
+	stdin  string    // heredoc o here-string: lo que el comando lee como entrada
+	piped  bool      // recibe la salida de otro comando por |
+	dir    string    // directorio donde corre, tras los cd anteriores
+	dirDyn bool      // hubo un cd a una ruta no resuelta: lo relativo no se conoce
+	asig   []palabra // VAR=valor words before the command (also after env)
+	// git only: repositories named by --git-dir, --work-tree or -c core.worktree, and why the
+	// target repository cannot be known (-c include.*, --config-env).
+	gitRepos []palabra
+	gitOpaco string
 }
 
 const meta = " \t\n;&|<>()"
@@ -474,13 +479,6 @@ func nombre(w palabra) string {
 	return s
 }
 
-func sinAsignaciones(w []palabra) []palabra {
-	for len(w) > 0 && esAsignacion(w[0].s) {
-		w = w[1:]
-	}
-	return w
-}
-
 func esAsignacion(s string) bool {
 	i := strings.IndexByte(s, '=')
 	if i <= 0 {
@@ -534,7 +532,11 @@ func (a *analizador) comando(c simple, depth int) (string, bool) {
 	w := c.w
 bucle:
 	for {
-		if w = sinAsignaciones(w); len(w) == 0 {
+		for len(w) > 0 && esAsignacion(w[0].s) {
+			c.asig = append(c.asig, w[0])
+			w = w[1:]
+		}
+		if len(w) == 0 {
 			break
 		}
 		n := nombre(w[0])
@@ -602,11 +604,30 @@ bucle:
 		case n == "git":
 			i := 1
 			for i < len(w) && strings.HasPrefix(w[i].s, "-") {
-				if gitValor[w[i].s] && i+1 < len(w) {
-					if w[i].s == "-C" {
-						c.dir, c.dirDyn = cambiarDir(c.dir, c.dirDyn, w[i+1])
-					}
+				o, val := w[i].s, palabra{}
+				if k := strings.IndexByte(o, '='); k > 0 && strings.HasPrefix(o, "--") {
+					o, val = o[:k], palabra{s: o[k+1:], dyn: w[i].dyn}
+				} else if gitValor[o] && i+1 < len(w) {
+					val = w[i+1]
 					i++
+				}
+				switch o {
+				case "-C":
+					c.dir, c.dirDyn = cambiarDir(c.dir, c.dirDyn, val)
+				case "--git-dir", "--work-tree":
+					c.gitRepos = append(c.gitRepos, val)
+				case "-c":
+					k, v, _ := strings.Cut(val.s, "=")
+					switch k = strings.ToLower(k); {
+					case val.dyn:
+						c.gitOpaco = "-c " + val.s
+					case k == "core.worktree":
+						c.gitRepos = append(c.gitRepos, palabra{s: v})
+					case strings.HasPrefix(k, "include"):
+						c.gitOpaco = "-c " + val.s
+					}
+				case "--config-env":
+					c.gitOpaco = "--config-env"
 				}
 				i++
 			}

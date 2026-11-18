@@ -17,15 +17,6 @@ import (
 	"orq/internal/orqdir"
 )
 
-// intPath is the integration worktree orq 1.0.0 used. This version integrates without one; the path
-// is only looked at to clean up what an older close left behind.
-func (r Repo) intPath(e *Estado) string {
-	if e.IntDir != "" {
-		return e.IntDir
-	}
-	return e.Worktree + "-int"
-}
-
 // quitarCopia retires a worker's working copy. It never forces: when the copy still holds work the
 // main repo does not have (commits that could not be brought in, or uncommitted files) it goes to
 // quarantine and stays on disk.
@@ -45,12 +36,6 @@ func (r Repo) quitarCopia(e *Estado, dir, rama, nombre string, now time.Time) st
 // retirable removes dir when nothing would be lost and returns "" ; otherwise it returns why not
 // and leaves dir untouched.
 func (r Repo) retirable(e *Estado, dir, rama, nombre string) string {
-	if esEnlazado(dir) { // linked worktree from orq 1.0.0: git decides whether it can go
-		if _, err := r.git("worktree", "remove", dir); err != nil {
-			return err.Error()
-		}
-		return ""
-	}
 	if !esClon(dir) {
 		return "not a worker clone made by orq"
 	}
@@ -176,11 +161,6 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time) (*R
 			return nil, nil, "", err
 		}
 	}
-	if existe(r.intPath(e)) && esEnlazado(r.intPath(e)) { // left by a close started with orq 1.0.0
-		if q := r.quitarCopia(e, r.intPath(e), "", "", now); q != "" {
-			cuarentena = append(cuarentena, q)
-		}
-	}
 	cuarentena = append(cuarentena, r.limpiarEquipo(e, aceptado, now)...)
 	if q := r.quitarCopia(e, e.Worktree, e.Rama, "slice", now); q != "" {
 		cuarentena = append(cuarentena, q)
@@ -224,7 +204,7 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time) (*R
 
 // libre comprueba que nadie trabaje en las carpetas que se van a quitar.
 func (r Repo) libre(e *Estado) error {
-	ds := []string{e.Worktree, r.intPath(e)}
+	ds := []string{e.Worktree}
 	for _, w := range e.Equipo {
 		ds = append(ds, w.Worktree)
 	}
@@ -315,7 +295,7 @@ func (r Repo) integrar(e *Estado) (string, error) {
 	if _, err := r.git("update-ref", refIntegrado(e.NN), sha); err != nil {
 		return out, err
 	}
-	e.Integrado, e.IntDir = sha, ""
+	e.Integrado = sha
 	return out, nil
 }
 
@@ -383,7 +363,7 @@ func (r Repo) Huerfanos() ([]string, error) {
 	}
 	propio := map[string]bool{r.Root: true}
 	for _, e := range ab {
-		propio[e.Worktree], propio[r.intPath(e)] = true, true
+		propio[e.Worktree] = true
 		for _, w := range e.Equipo {
 			propio[w.Worktree] = true
 		}

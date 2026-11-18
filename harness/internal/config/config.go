@@ -48,7 +48,6 @@ type Config struct {
 	Roles    map[string]Agente            `json:"roles"`
 	Workers  map[string]map[string]Agente `json:"workers"` // dificultad → agente → modelo y esfuerzo
 	Recursos Recursos                     `json:"recursos"`
-	Base     string                       `json:"base,omitempty"` // trusted base branch; empty = main, else master
 
 	origen   map[string]string // clave con puntos → de dónde salió
 	archivos []Archivo

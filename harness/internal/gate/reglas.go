@@ -160,7 +160,7 @@ func soloOrquestador(c simple) bool {
 	switch a[0] {
 	case "slice":
 		return hay(a[1:2], "abrir", "cerrar", "reintentar", "tomar", "lanzar", "juntar",
-			"examen", "alcance", "rehuella", "reabrir", "ruta", "verificar", "convertir", "soltar")
+			"examen", "alcance", "rehuella", "reabrir", "ruta", "verificar")
 	case "plan":
 		return hay(a[1:2], "cargar", "hecha", "debatido")
 	case "sesion":
@@ -215,6 +215,8 @@ func proteccionDe(p Payload, l limits.Limits, env Env, wt bool) proteccion {
 	if wt {
 		// The clone marker makes a clone a worker: moving or rewriting it would switch the gate off.
 		pr.rel = append(pr.rel, ".git/"+orqdir.MarcaClon)
+		// .git/config (core.worktree, include.path) and .git/commondir point git at another repository.
+		pr.rel = append(pr.rel, ".git/config", ".git/commondir")
 		pr.rel = append(pr.rel, l.Protected...)
 		if env.Bundle != nil {
 			pr.rel = append(pr.rel, env.Bundle(p.Cwd)...)

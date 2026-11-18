@@ -78,7 +78,7 @@ func TestCicloCompletoAceptado(t *testing.T) {
 	if got, _ := os.ReadFile(filepath.Join(r.Root, "total.txt")); string(got) != "170\n" {
 		t.Fatal("la rama principal no avanzó")
 	}
-	for _, p := range []string{e.Worktree, e.Worktree + "-int"} {
+	for _, p := range []string{e.Worktree} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
 			t.Fatalf("sigue existiendo %s", p)
 		}
@@ -237,7 +237,6 @@ func TestIntegraElSHADelRecibo(t *testing.T) {
 func TestRechazarQuitaWorktreeIntegracionYNoTrasPublicar(t *testing.T) {
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
-	os.MkdirAll(e.Worktree+"-int", 0o755)
 	Git(r.Root, "worktree", "add", "--detach", e.Worktree+"-int2", "main")
 	if _, _, _, err := r.Cerrar("", false, "no", t0); err != nil {
 		t.Fatal(err)
@@ -516,12 +515,14 @@ func TestDosCierresSimultaneosNoIntegranDosVeces(t *testing.T) {
 	}
 }
 
+// A v0.4 slice.json is moved to .orq/slices/ and then refused like any state orq 1.0.0 left: its
+// number stays taken.
 func TestMigraSliceJsonV04(t *testing.T) {
 	r := repoDeJuguete(t)
 	raw := `{"nn":"07","intento":1,"fase":"IMPLEMENTANDO","test":"tests/s01.sh","cmd":"x","rama":"slice/07","worktree":"/nada"}`
 	os.WriteFile(filepath.Join(r.OrqDir, "slice.json"), []byte(raw), 0o644)
 	e, err := r.Load()
-	if err != nil || e.NN != "07" || existe(filepath.Join(r.OrqDir, "slice.json")) || r.Siguiente() != "08" {
+	if !errors.Is(err, ErrOrq1) || e != nil || existe(filepath.Join(r.OrqDir, "slice.json")) || r.Siguiente() != "08" {
 		t.Fatalf("%+v %v", e, err)
 	}
 }

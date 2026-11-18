@@ -383,7 +383,7 @@ func (r Repo) Podar(nn string, nombres []string) (*Estado, []string, error) {
 			continue
 		}
 		w := e.Equipo[i]
-		if existe(w.Worktree) && !esEnlazado(w.Worktree) {
+		if existe(w.Worktree) {
 			// Bring in its last commits first: what is not inside the slice must not be lost.
 			in, err := r.puntaDe(e, w.Worktree, w.Rama, w.Nombre)
 			if err != nil {

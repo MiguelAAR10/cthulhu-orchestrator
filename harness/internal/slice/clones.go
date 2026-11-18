@@ -113,16 +113,10 @@ func (r Repo) identidad(clave, defecto string) string {
 	return defecto
 }
 
-// esClon dice si dir es un clon de worker hecho por orq (y no un worktree enlazado de orq 1.0.0).
+// esClon dice si dir es un clon de worker hecho por orq.
 func esClon(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".git", MarcaClon))
 	return err == nil
-}
-
-// esEnlazado dice si dir es un worktree enlazado de git (.git es un archivo): así los abría orq 1.0.0.
-func esEnlazado(dir string) bool {
-	fi, err := os.Lstat(filepath.Join(dir, ".git"))
-	return err == nil && !fi.IsDir()
 }
 
 // Ingesta es lo que salió de un clon.
@@ -218,17 +212,6 @@ func (r Repo) puntaDelSlice(e *Estado) (Ingesta, error) {
 	}
 	if len(e.Equipo) > 0 || !existe(e.Worktree) {
 		return Ingesta{Punta: actual}, nil // con equipo, la rama del slice solo la mueve juntar
-	}
-	if esEnlazado(e.Worktree) {
-		// A 1.0.0 linked worktree shares the main repo's refs: its commits are already on the branch.
-		// git is never run inside it (its filters and attributes are the worker's), so uncommitted files
-		// are not looked for: only committed work is verified, and close keeps a dirty worktree.
-		if ok, err := r.esAncestro(e.SHARojo, actual); err != nil {
-			return Ingesta{}, err
-		} else if !ok {
-			return Ingesta{}, fmt.Errorf("branch %s (%s) does not descend from the red commit %s: its history was rewritten. Not used", e.Rama, actual[:min(8, len(actual))], e.SHARojo[:min(8, len(e.SHARojo))])
-		}
-		return Ingesta{Punta: actual}, nil
 	}
 	return r.puntaDe(e, e.Worktree, e.Rama, "slice")
 }

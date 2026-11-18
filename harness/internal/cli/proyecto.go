@@ -417,7 +417,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	}
 	// Pedir ayuda nunca ejecuta: un «verificar --help» corría el examen y podía gastar un intento.
 	if slices.ContainsFunc(args, func(a string) bool { return a == "-h" || a == "--help" || a == "help" }) {
-		fmt.Fprintln(stdout, "uso: orq slice [--slice NN] abrir|tomar|alcance|verificar|juntar|podar|examen|ruta|estado|recibo|rehuella|convertir|soltar ... · guía: orq skill orquestador")
+		fmt.Fprintln(stdout, "uso: orq slice [--slice NN] abrir|tomar|alcance|verificar|juntar|podar|examen|ruta|estado|recibo|rehuella ... · guía: orq skill orquestador")
 		return 0
 	}
 	show := func(out string) {
@@ -574,36 +574,6 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		memoria.Add(p.MemPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
 			Texto: app.Recortar(e.Attempt()+" sube de fix a slice: "+motivo, memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s sube a la ruta slice (%s). Sigue el flujo completo desde el Planificador: plan, Astra, orq plan cargar, equipo. El rojo y los commits se quedan\n", e.Attempt(), motivo)
-		return 0
-	case "convertir":
-		fs := flag.NewFlagSet("slice convertir", flag.ContinueOnError)
-		fs.SetOutput(stderr)
-		ratifico := fs.String("ratifico", "", "who approved adopting this 1.0.0 slice, and why")
-		codigo := fs.String("codigo", "", "the code the dry run showed")
-		uso := "uso: orq slice convertir NN [--ratifico \"<who approved it and why>\" --codigo CODE]   (a slice opened by orq 1.0.0, with its old processes stopped. Without --ratifico it is a dry run that shows what it would seal and its code; the ratification is recorded, not authenticated, until roadmap step 3)"
-		if len(args) < 2 || strings.TrimSpace(args[1]) == "" || fs.Parse(args[2:]) != nil || fs.NArg() > 0 ||
-			(*ratifico != "" || *codigo != "") && (strings.TrimSpace(*ratifico) == "" || *codigo == "") {
-			fmt.Fprintln(stderr, uso)
-			return 1
-		}
-		e, err := r.Convertir(strings.TrimPrefix(args[1], "S-"), *ratifico, *codigo, stdout)
-		if err != nil {
-			fmt.Fprintln(stderr, "orq slice:", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "%s converted: contract written to git from the state (exam hash checked against %s), provenance %s. Verify it: `orq slice verificar --slice %s`\n", e.Attempt(), slice.Corto(e.SHARojo), e.Procedencia, e.NN)
-		return 0
-	case "soltar":
-		if len(args) != 2 || strings.TrimSpace(args[1]) == "" {
-			fmt.Fprintln(stderr, "uso: orq slice soltar NN   (clears a stale writer lease when no process works in the slice's worktree)")
-			return 1
-		}
-		e, err := r.Soltar(strings.TrimPrefix(args[1], "S-"))
-		if err != nil {
-			fmt.Fprintln(stderr, "orq slice:", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "%s: writer lease released (journaled)\n", e.Attempt())
 		return 0
 	case "rehuella":
 		if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {

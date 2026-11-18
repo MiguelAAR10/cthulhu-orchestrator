@@ -2,8 +2,8 @@
 # Prueba de punta a punta de orq con un repo de juguete:
 # rojo con conteo → trampa bloqueada → reintento → verde con recibo → cierre viejo rechazado →
 # relevo sin duplicar → cierre interrumpido de verdad en cada etapa y retomado →
-# conteo obligatorio, rutas fix/slice, runner vigilado, examen siempre en copia aislada (sin --en-sitio)
-# y el gate dentro del clon del worker.
+# conteo obligatorio, rutas fix/slice, runner vigilado, examen siempre en copia aislada (sin --en-sitio),
+# el gate dentro del clon del worker y un slice de orq 1.0.0 rechazado.
 # Uso: validacion/e2e-v05.sh [carpeta-temporal]. No toca nada fuera de esa carpeta.
 set -u
 BASE="${1:-$(mktemp -d)}"
@@ -149,6 +149,16 @@ grep -q "slices aceptados e integrados: 11" met2.txt; ok $? 0 "métricas: 11 ace
 grep -q "ruta fix: 1 aceptados" met2.txt; ok $? 0 "métricas: 1 fix aceptado"
 grep -q "ruta slice: 10 aceptados" met2.txt; ok $? 0 "métricas: 10 en la ruta slice"
 grep -q "fixes que subieron a slice: 1" met2.txt; ok $? 0 "métricas: 1 fix subió a slice"
+echo "== S-30: a slice opened by orq 1.0.0 is not inherited"
+mkdir -p .orq/slices
+printf '{"nn":"30","intento":1,"fase":"VERIFICADO","test":"tests/s30.sh","cmd":"sh tests/s30.sh","base":"main","rama":"slice/30","worktree":"%s"}' "$ORQ_WORKTREES/tienda-s30" > .orq/slices/30.json
+msg30="S-30 was opened by orq 1.0.0; close it with orq 1.0.0 before using this version"
+for sub in verificar juntar "cerrar --aceptado" "cerrar --rechazado x"; do
+  ok "$(q slice --slice 30 $sub)" 1 "1.0.0 slice: $sub refuses"
+  grep -qF "$msg30" /tmp/orq-e2e.$$; ok $? 0 "1.0.0 slice: $sub says to close it with orq 1.0.0"
+done
+ok "$(git for-each-ref refs/orq/contrato/30 | wc -l)" 0 "1.0.0 slice: no contract written"
+rm .orq/slices/30.json
 echo "== higiene"
 orq doctor >/tmp/orq-e2e.$$ 2>&1; d=$?
 if [ $d -ne 0 ]; then cat /tmp/orq-e2e.$$; fi

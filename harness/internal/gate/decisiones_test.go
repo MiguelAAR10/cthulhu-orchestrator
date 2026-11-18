@@ -23,6 +23,12 @@ func TestDecisiones(t *testing.T) {
 		IsWorktree: func(cwd string) bool { return dentro(cwd, W) },
 		LimitsPath: L,
 		MainRoot:   func(string) string { return R },
+		RepoPropio: func(cwd string) (string, string) {
+			if dentro(cwd, W) {
+				return W, "slice/01"
+			}
+			return "", ""
+		},
 	}
 	bash := func(cmd string) Payload {
 		return Payload{ToolName: "Bash", Cwd: W, ToolInput: map[string]any{"command": cmd}}
@@ -37,6 +43,8 @@ func TestDecisiones(t *testing.T) {
 		destruye  = "bloqueado"
 		soloOrq   = "un worker no abre"
 		lanza     = "un worker no lanza"
+		propio    = "only in its own repository"
+		rama      = "only its own branch"
 	)
 	cases := []struct {
 		p      Payload
@@ -120,9 +128,6 @@ func TestDecisiones(t *testing.T) {
 		{bash("orq slice reabrir 01"), soloOrq},
 		{bash("orq slice verificar"), soloOrq},
 		{bash("orq slice ruta slice \"x\""), soloOrq},
-		{bash("orq slice convertir 01"), soloOrq},
-		{bash(`orq slice convertir 01 --ratifico "Owner: ok"`), soloOrq},
-		{bash("orq slice soltar 01"), soloOrq},
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice examen tests/s01.sh --aprobado \"req ATN-1\""}}, ""},
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "cd /main && orq slice examen tests/s01.sh --aprobado x"}}, ""},
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice alcance src/ --aprobado x"}}, ""},
@@ -130,9 +135,64 @@ func TestDecisiones(t *testing.T) {
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice reabrir 01"}}, ""},
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice verificar"}}, ""},
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice ruta slice \"x\""}}, ""},
-		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice convertir 01"}}, ""},
-		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "orq slice soltar 01"}}, ""},
 		{bash(`orq halt --set "x"`), ""}, // pausing destroys nothing
+		// a worker runs git only against its own repository (review 3, finding B)
+		{bash("git -C /x/repo status"), propio},
+		{bash("git -C ../repo commit -am x"), propio},
+		{bash("git -C src -C ../../repo log"), propio},
+		{bash("git --git-dir=/x/repo/.git log"), propio},
+		{bash("git --git-dir /x/repo/.git log"), propio},
+		{bash("git --work-tree=/x/repo checkout main -- ."), propio},
+		{bash("git --work-tree /x/repo status"), propio},
+		{bash("git -c core.worktree=/x/repo status"), propio},
+		{bash("git -c include.path=/tmp/c status"), propio},
+		{bash("git --config-env=core.worktree=WT status"), propio},
+		{bash("git config core.worktree /x/repo"), propio},
+		{bash("GIT_DIR=/x/repo/.git git log"), propio},
+		{bash("env GIT_DIR=/x/repo/.git git log"), propio},
+		{bash("export GIT_DIR=/x/repo/.git"), propio},
+		{bash("GIT_WORK_TREE=/x/repo git status"), propio},
+		{bash("GIT_COMMON_DIR=/x/repo/.git git log"), propio},
+		{bash("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.worktree GIT_CONFIG_VALUE_0=/x/repo git status"), propio},
+		{bash("GIT_DIR=$D git log"), propio},
+		{bash("cd /x/repo && git commit -am x"), propio},
+		{bash("(cd /x/repo; git log)"), propio},
+		{bash("cd $D && git status"), propio},
+		{bash("git -C $D status"), propio},
+		{bash(`bash -c "git -C /x/repo log"`), propio},
+		{bash("echo x > .git/commondir"), protegido},
+		{tool("Write", "file_path", W+"/.git/config"), protegido},
+		{bash("git -C src status"), ""},
+		{bash("git -C /x/wt/sub log"), ""},
+		{bash("cd src && git diff"), ""},
+		{bash("git --git-dir=.git log"), ""},
+		{bash("GIT_DIR=.git git log"), ""},
+		{bash(`grep -rn "git -C /x/repo" docs/`), ""},
+		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "git -C /x/other log"}}, ""},
+		// ... and moves only refs under its own slice/NN branch
+		{bash("git update-ref refs/heads/main abc"), rama},
+		{bash("git update-ref -m x refs/heads/slice/02 abc"), rama},
+		{bash("git update-ref refs/heads/slice/01-x abc"), rama},
+		{bash("git update-ref -d refs/heads/main"), rama},
+		{bash("git update-ref HEAD abc"), rama},
+		{bash("git update-ref --stdin <<< 'update refs/heads/main abc'"), rama},
+		{bash("git update-ref $R abc"), rama},
+		{bash("git branch -f main abc"), rama},
+		{bash("git branch --force main abc"), rama},
+		{bash("git branch -fq main abc"), rama},
+		{bash("git branch -M main"), rama},
+		{bash("git branch -M slice/01 main"), rama},
+		{bash("git branch -C slice/01 main"), rama},
+		{bash("git branch -M main slice/01"), rama},
+		{bash("git symbolic-ref HEAD refs/heads/main"), rama},
+		{bash("git symbolic-ref -d HEAD"), rama},
+		{bash("git update-ref refs/heads/slice/01 abc"), ""},
+		{bash("git update-ref refs/heads/slice/01/tmp abc"), ""},
+		{bash("git branch -f slice/01 abc"), ""},
+		{bash("git branch -M slice/01/a slice/01/b"), ""},
+		{bash("git branch tmp abc"), ""},
+		{bash("git symbolic-ref --short HEAD"), ""},
+		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "git update-ref refs/heads/main abc"}}, ""},
 		// fuera de un worktree no cambia nada
 		{Payload{ToolName: "Bash", Cwd: R, ToolInput: map[string]any{"command": "g=git; $g status; echo x > $d/a"}}, ""},
 		{Payload{ToolName: "Edit", Cwd: R, ToolInput: map[string]any{"file_path": L}}, ""},
