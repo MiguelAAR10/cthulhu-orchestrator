@@ -30,6 +30,39 @@ Goal of Cthulhu: build software with agents without losing product intent, conte
 - **Credential.** The mechanism compatible with the existing subscription is `claude setup-token` (one-year OAuth token, model requests only, read from `CLAUDE_CODE_OAUTH_TOKEN`; not read in `--bare`). The Owner generates it and places it where orq reads it (`caja.credencial.claude`); it never goes through chat. No new subscription assumed.
 - English for new work; renaming the executable is a separate decision with compatibility. No new round chasing a numeric score.
 
+## Design (Owner approved 2026-11-18)
+Source: external Fable review in four rounds and a usage scout over ~200 real slices (`working/inspector/`). This section replaces the builder order in "Technical plan › Activities"; rows there not named below are frozen.
+
+**Product.** Cthulhu is the AI Edge Runners harness for carrying user stories with agents from several providers across the team's projects. Developers spend their judgement on details; a program enforces base correctness (lint, types, tests per stack). Real usage: 72–91 % first-attempt rate, 0 caught false "done" in ~200 slices; the pain is seeing how a story was understood before code exists, and accepting results in minutes. 12 of 13 second attempts were the Planner's exam being corrected; 75 verified slices were never closed; large work (VentIA M24) left the slice cycle.
+
+**Owner vision (his words, summarized).** (1) Correct code by stack, configurable. (2) The heavy part is inspecting results; the filter reports during work, can pause the orchestrator, and can spin independent work in parallel. (3) Several LLM providers, not only Claude. (4) Project knowledge that a newcomer or another project can reuse, with recommended skills from our base and external finders. (5) Rails against unwanted features and slop; lean; story-driven.
+
+**Approaches considered.** Pub/sub bus with a shared hive memory (rejected: N× token cost, duplicate actions, races on merge, memory drift; research in `working/research/orquestacion.md`). Orchestrator as thin coordinator plus an in-orq reactor and checkpoints for the human (chosen). Replace orq with CI + protected branches (kept as the pilot's baseline, not as replacement).
+
+**Orchestrator: keeps** one registry story → exam → receipt → acceptance across agents and providers; confirms each worker really started (within 60 s); splits large work into child slices; exposes state as data for the filter; integrates serially. **Stops** being the mandatory step for mechanical work (orq merges and verifies itself on a worker's close), counting exam corrections as worker attempts, leaving slices in VERIFICADO, growing the shell gate, needing manual limit edits, and Planner/Astra consensus without a cap.
+
+**Filter = Atena (no new role).** As a model it reports, asks, recommends and may pause (pausing destroys nothing). Only the human approves the story card, accepts or rejects, authorizes an exam change after approval, and loosens limits; those four need a passphrase typed in the Owner's own terminal, outside agent panes; orq stores only its hash and journals the signed event (limit: holds while no agent can read that terminal; a PR approval with the Owner's account can stand in on published repos). An exam correction is recorded and shown highlighted at close, not signed each time.
+
+**Checkpoints.** Before code: understanding card (story in three lines, what will not be done, the exam in plain words with its file, zones touched, estimate, risks, open questions), ≤ 3 min. During: one line per slice, alerts only on drift (out of scope, exam change requested, worker did not start, no progress), ≤ 1 min. Before close: evidence pack (receipt with tests, lint and types; planned vs touched; exam changes highlighted; three-step demo; diff of critical zones only), ≤ 10 min.
+
+**Excellent means** (measured by the Owner with `orq metricas` once step 2 lands; thresholds are starting points, tuned after the first measurement): review time from verified to decision, median ≤ 10 min · verified slices without decision after 24 h = 0 · stories with an approved card before the first worker commit = 100 % on the full lane · exams corrected after opening ≤ 5 % (to be tuned) · first attempt ≥ 85 % · receipts with counted tests, lint and types = 100 %, "skipped" never counts as pass · workers launched that never ran = 0, the same 5 stories pass with two providers · new repo to first accepted story ≤ 1 day · files touched outside the declared scope and new suppressions = 0 · integrations to base without a registry row = 0 · manual `limits.json` edits ≤ 1 per month · cost recorded for 100 % of slices.
+
+**Roadmap** (one at a time; the next starts when the previous exit test is green on the integrated revision):
+| # | Step | Exit test | Vision |
+|---|---|---|---|
+| 1 | Finish B5 + local CI (`make ci`, workflow file): gate recognizes clones; workers cannot run Owner/orchestrator-only slice commands from a clone; `cerrar` honours `ORQ_SIN_DOC`; the 7 failing slice tests fixed or rewritten for the decided behaviour | `go test -race ./...`, `e2e-v05.sh`, `aislamiento.sh --todo` green; new test: a worker in a clone tries `orq slice examen --aprobado` and is denied | 5 |
+| 2a | Measure: stamps for worker-finished, verified, accepted; cause of every attempt (worker vs exam correction); cost when known; `orq metricas` | reproduces the usage report's figures from orq data without reading the channel | 2 |
+| 2b | Remove the mechanical step: auto merge+verify on a worker's close, idempotent; start confirmation in 60 s; alert on verified-but-unclosed | a repeated close yields one receipt; a worker that never starts is flagged within 60 s | 2, 3 |
+| 3 | Understanding card + human authority (passphrase); exam reviewed before opening; its correction recorded apart | 10 real stories: exam correction ≤ 10 %, approval median ≤ 3 min; a role without the passphrase cannot accept | 2, 5 |
+| 4 | Recovery test (acceptance 7) | as defined in Acceptance | 5 |
+| 5 | Correctness by stack: `orq init` records the project's lint, types and test commands in the contract; the receipt carries that block; no new suppressions | odontoflow backend and frontend: 100 % complete receipts; a planted suppression fails | 1, 4 |
+| 6 | Measured pilot with one large story split into child slices | the "Excellent" criteria on 10 comparable tasks vs one agent + CI. **Decide here: continue, cut or stop** | 2 |
+| 7 | Several providers for real: worker inside the box (B6) and a second provider | the same 5 stories pass with two providers; 0 "done" without running | 3 |
+| 8 | Portable knowledge: project-knowledge doc reviewed once by a human; catalog open to external sources, pinned and verified, installed only with approval | a new repo reaches its first accepted story in ≤ 1 day; one project's rules apply to another of the same stack | 4 |
+Until step 7, Codex workers run with no hook and no box: the pilot says so and uses repos where a mistake is cheap.
+
+**Frozen:** pub/sub bus and hive memory, second orchestrator, U1 `orq setup`, L1 translation, Orca adapter work, C6 and W1 as separate pieces (their useful parts are in 2b), full Q1 quality profile, mutation and held-out tests (until the pilot shows wrong acceptances), model-compacted memory and injected "instincts". Not claimed: catching cheaters as the core value; being the only verifier.
+
 ## Activities
 | ID · criterion | Result and exit | Agent, model | Files | Depends · mode | Test and verifier | Worktree | State · commit |
 |---|---|---|---|---|---|---|---|
@@ -132,5 +165,6 @@ Order notes: Q1 follows B6 because it runs inside the sandboxed verification. U1
 - Review owed: independent review of B5/B6 (high risk) before acceptance.
 - Pending Owner decision: dedicated credential for launching a real agent inside the sandbox.
 - Spend: not measured by orq; the builder pane showed about USD 7.5 at its first ten minutes.
-- Next action on resume: (1) builder runs `go test -race ./...` on c592a25 and finishes B5 until `validacion/aislamiento.sh --todo` part 2 is green with the refusal reason; (2) architect writes diseno-agil-v2.md, orchestrator sends it to the builder as an addendum; (3) independent review of B5/B6; (4) orchestrator merges `v2/build` into `harness-v2` at each activity boundary and reruns gofmt, vet, race tests, e2e-v05, validar-mvp, aislamiento.
+- 2026-11-18: Owner approved the Design section and asked to build it step by step. Now: roadmap step 1.
+- Previous next action (superseded by the roadmap): (1) builder runs `go test -race ./...` on c592a25 and finishes B5 until `validacion/aislamiento.sh --todo` part 2 is green with the refusal reason; (2) architect writes diseno-agil-v2.md, orchestrator sends it to the builder as an addendum; (3) independent review of B5/B6; (4) orchestrator merges `v2/build` into `harness-v2` at each activity boundary and reruns gofmt, vet, race tests, e2e-v05, validar-mvp, aislamiento.
 - Resume orchestrator: `claude-alt --resume 97993ac3-28de-4b5f-887a-6d3b8a94f645` from the repo root, or a fresh session reading this checkpoint.
