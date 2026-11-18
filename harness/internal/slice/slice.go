@@ -23,8 +23,8 @@ import (
 
 // EsquemaActual marca los estados que abre esta versión: el worker trabaja en un clon independiente,
 // el examen corre siempre en la caja y el contrato vive también en git (refs/orq/contrato/NN).
-// Un estado con esquema menor lo abrió orq 1.0.0 (worktree enlazado, sin contrato en git): no se
-// verifica ni se cierra hasta convertirlo con `orq slice convertir`.
+// A state without a schema (0) was opened by orq 1.0.0: this version refuses it (Load), it is
+// closed with orq 1.0.0.
 const EsquemaActual = 2
 
 // Fases del slice. ACORDADO vive en el canal (historia aprobada); aquí empieza en IMPLEMENTANDO,
@@ -85,7 +85,6 @@ type Estado struct {
 	Formato     string     `json:"formato,omitempty"` // tap|junit|gotest-json
 	Omitir      bool       `json:"permite_omitir,omitempty"`
 	Esquema     int        `json:"esquema,omitempty"`    // 0 = abierto por orq 1.0.0; EsquemaActual = abierto por esta versión
-	Aislado     bool       `json:"aislado,omitempty"`    // solo cuenta en Esquema 0; desde Esquema 1 toda verificación es aislada salvo EnSitio
 	SinConteo   string     `json:"sin_conteo,omitempty"` // por qué este slice no cuenta pruebas (sin reporte del runner)
 	EnSitio     string     `json:"en_sitio,omitempty"`   // por qué el examen corre en el worktree y no en una copia aislada
 	Vigilados   []Vigilado `json:"vigilados,omitempty"`  // archivos del runner y su hash en el rojo
@@ -95,11 +94,9 @@ type Estado struct {
 	TimeoutSeg  int        `json:"timeout_seg,omitempty"`
 	Recibo      *Recibo    `json:"recibo,omitempty"`
 	Integrado   string     `json:"integrado,omitempty"` // SHA del merge revalidado
-	IntDir      string     `json:"int_dir,omitempty"`   // worktree de integración en uso
 	Equipo      []Worker   `json:"equipo,omitempty"`    // workers en paralelo dentro del slice
 	Motivo      string     `json:"motivo,omitempty"`    // por qué está bloqueado
 	Alcance     []string   `json:"alcance,omitempty"`   // rutas que la historia justifica tocar
-	Ratifico    string     `json:"ratifico,omitempty"`  // who approved adopting a 1.0.0 slice, and why
 }
 
 func (e *Estado) ID() string      { return fmt.Sprintf("S-%s", e.NN) }
@@ -275,7 +272,13 @@ func (r Repo) Load(nn ...string) (*Estado, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("S-%s no está abierto", strings.TrimPrefix(nn[0], "S-"))
 		}
-		return e, err
+		if err != nil {
+			return nil, err
+		}
+		if err := e.deEstaVersion(); err != nil {
+			return nil, err
+		}
+		return e, nil
 	}
 	ab, err := r.Abiertos()
 	switch {
@@ -290,7 +293,18 @@ func (r Repo) Load(nn ...string) (*Estado, error) {
 		}
 		return nil, fmt.Errorf("%w (%s): di cuál con --slice NN", ErrVarios, strings.Join(ids, ", "))
 	}
+	if err := ab[0].deEstaVersion(); err != nil {
+		return nil, err
+	}
 	return ab[0], nil
+}
+
+// deEstaVersion refuses a state opened by orq 1.0.0 (schema 0): v2 does not inherit those slices.
+func (e *Estado) deEstaVersion() error {
+	if e.Esquema == 0 {
+		return fmt.Errorf("%w: %s was opened by orq 1.0.0; close it with orq 1.0.0 before using this version", ErrOrq1, e.ID())
+	}
+	return nil
 }
 
 func appendJSON(path string, v any) error {
