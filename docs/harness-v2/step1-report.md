@@ -148,3 +148,18 @@ Fixes for `docs/harness-v2/reviews/step1-review-2.md` (verdict: corregir, item 3
 Still true: the ratification is recorded, not authenticated, until roadmap step 3; an exam commit added mid-slice is not on the base, so such 1.0.0 slices are refused.
 
 `make ci` (exit 0): gofmt clean, go vet clean, `go test -race` all packages ok, e2e-v05 77 pass / 0 fail, aislamiento 14 pass / 0 fail / 0 pending.
+
+## Premise change
+
+Owner decision, Acceptance 6 in `plan.md`: v2 does not inherit orq 1.0.0 slices. Legacy adoption failed three reviews, so it was removed, not patched. Every behaviour below started as a test that I saw fail.
+
+| Commit | What changed |
+|---|---|
+| c8aebfc | `Load` refuses a schema-0 state (no `esquema`) with `S-NN was opened by orq 1.0.0; close it with orq 1.0.0 before using this version` (`ErrOrq1`). So verify, merge (`juntar`) and close (accepted or rejected) all refuse it before they touch the state or refs. Tests: `TestSliceOrq1SeNiega` (all four, with and without `--slice`), and e2e case S-30 (verificar, juntar, cerrar --aceptado/--rechazado, no contract written). That case fails 5 checks on the old binary. **Removed:** `orq slice convertir` and `orq slice soltar` (CLI, usage, gate list), `Convertir`, `Soltar`, `enUsoSlice`, `baseConfiable`, `enLaBase`, `codigoConversion`, `candadoLibre`, `ErrEnSeco`, `ErrProcesosVivos`, `ProcedenciaLegado`, the `ratifico` field in state and contract, the config `base` field (added only for convertir), the unused `aislado` state field, linked-worktree handling (`esEnlazado` in close, prune and the slice tip), and the 1.0.0 integration worktree (`intPath`, `int_dir`). Also removed: `legado_test.go`'s 13 adoption tests and `convertir_test.go` (its usage test is now `uso_test.go`, which asserts that nothing mentions convertir/soltar). A v0.4 `slice.json` is still moved, and is then refused like any 1.0.0 state. |
+| 0c46b38 | Gate, review 3 finding B: a worker runs git only against its own repository, meaning the nearest marked clone upward (`gate.RepoPropio`, branch from the marker). Denied: `-C`, `--git-dir`, `--work-tree`, `-c core.worktree`/`include.*`, `--config-env`, `GIT_DIR`/`GIT_WORK_TREE`/`GIT_COMMON_DIR`/`GIT_INDEX_FILE`/object-dir variables as prefix, after `env` or in `export`, `GIT_CONFIG_*`, and a `cd` outside the clone. A path that is not literal is denied (fail closed). Also denied: `git config core.worktree|include.*`, and writes to `.git/config` and `.git/commondir`. `update-ref` (and `--stdin`), `symbolic-ref` writes and `branch -f/-M/-C` are denied on any ref that is not `refs/heads/<own branch>` or under it. `branch -D` was already denied by the destructive rule. 41 new deny rows and 14 allow rows in `TestDecisiones`, all deny rows seen failing first. `TestRepoPropio`, and `TestWorkerGitContraElRepoPrincipal` on a real clone, which fails with the rule switched off. |
+
+Line count delta (11699b0..0c46b38, `harness` + `validacion`): +464 / −863, net −399. The removal commit alone is −736 net; the gate rule adds +337.
+
+Known limits of the gate rule: it cannot see inside a script file it does not read (`sh x.sh`, `python x.py`). A symlink created in the same command line (`ln -s <main> l && git -C l …`) is resolved only once it exists, so the next call is denied but that same line is not. The rule covers the ref commands named in finding B; `fetch <src> x:refs/heads/main` and `checkout -B` act only on the clone's own refs.
+
+`make ci` (exit 0): gofmt clean, go vet clean, `go test -race` all packages ok (170 pass, 0 fail, 2 skip), e2e-v05 86 pass / 0 fail, aislamiento 14 pass / 0 fail / 0 pending.
