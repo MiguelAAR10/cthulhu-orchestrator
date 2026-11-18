@@ -72,6 +72,23 @@ func (r Repo) candado(nombre string) (func(), error) {
 	return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
 }
 
+// candadoLibre takes the lock only if nobody holds it: a lock held by another process means that
+// process is still running.
+func (r Repo) candadoLibre(nombre string) (func(), error) {
+	f, err := os.OpenFile(filepath.Join(r.OrqDir, nombre+".lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, fmt.Errorf("%w (%s): stop the old orq processes of this slice and try again", ErrProcesosVivos, nombre)
+		}
+		return nil, err
+	}
+	return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+}
+
 // candadoTras toma un candado teniendo ya otro, y se niega si eso rompe el orden.
 func (r Repo) candadoTras(tenido, nombre string) (func(), error) {
 	if rangoCandado(nombre) <= rangoCandado(tenido) {
@@ -299,7 +316,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if e.Fase != Implementando && e.Fase != Verificado {
 		return e, "", fmt.Errorf("%s está en %s; no se verifica ahora", e.ID(), e.Fase)
 	}
-	if err := r.confiable(e); err != nil {
+	if e, err = r.adoptarSiLegado(e); err != nil {
 		return e, "", err
 	}
 	in, err := r.puntaDelSlice(e)

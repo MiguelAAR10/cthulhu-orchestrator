@@ -417,7 +417,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	}
 	// Pedir ayuda nunca ejecuta: un «verificar --help» corría el examen y podía gastar un intento.
 	if slices.ContainsFunc(args, func(a string) bool { return a == "-h" || a == "--help" || a == "help" }) {
-		fmt.Fprintln(stdout, "uso: orq slice [--slice NN] abrir|tomar|alcance|verificar|juntar|podar|examen|ruta|estado|recibo|rehuella ... · guía: orq skill orquestador")
+		fmt.Fprintln(stdout, "uso: orq slice [--slice NN] abrir|tomar|alcance|verificar|juntar|podar|examen|ruta|estado|recibo|rehuella|convertir ... · guía: orq skill orquestador")
 		return 0
 	}
 	show := func(out string) {
@@ -445,11 +445,11 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		omitir := fs.Bool("permite-omitir", false, "acepta pruebas omitidas")
 		fs.Bool("aislado", false, "sin efecto: la copia limpia del commit ya es el modo por defecto")
 		sinConteo := fs.String("sin-conteo", "", "motivo para abrir sin --reporte/--formato (el runner no puede dejar un reporte)")
-		enSitio := fs.String("en-sitio", "", "motivo para correr el examen en el worktree y no en una copia limpia del commit")
+		enSitio := fs.String("en-sitio", "", "removed: the exam always runs in the box; giving it is an error")
 		ruta := fs.String("ruta", "", "fix (un worker, sin equipo ni plan) | slice (por defecto)")
 		timeout := fs.Int("timeout", 0, "segundos máximos del examen (0 = 600)")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *titulo == "" || *test == "" || *cmd == "" {
-			fmt.Fprintln(stderr, "uso: orq slice abrir NN --titulo \"...\" --test ruta --cmd \"...\" (--reporte f --formato tap|junit|gotest-json | --sin-conteo \"motivo\") [--bundle a,b] [--sano \"cmd\"] [--permite-omitir] [--en-sitio \"motivo\"] [--ruta fix|slice] [--timeout s] [--sin-scouts \"motivo\"]")
+			fmt.Fprintln(stderr, "uso: orq slice abrir NN --titulo \"...\" --test ruta --cmd \"...\" (--reporte f --formato tap|junit|gotest-json | --sin-conteo \"motivo\") [--bundle a,b] [--sano \"cmd\"] [--permite-omitir] [--ruta fix|slice] [--timeout s] [--sin-scouts \"motivo\"]")
 			return 1
 		}
 		if *sinScouts == "" && !p.HayContexto("S-"+args[1]) {
@@ -574,6 +574,18 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		memoria.Add(p.MemPath(), memoria.Item{Imp: "alta", Cat: "decision", Fuente: "orquestador", Slice: e.ID(),
 			Texto: app.Recortar(e.Attempt()+" sube de fix a slice: "+motivo, memoria.MaxTexto)}, time.Now())
 		fmt.Fprintf(stdout, "%s sube a la ruta slice (%s). Sigue el flujo completo desde el Planificador: plan, Astra, orq plan cargar, equipo. El rojo y los commits se quedan\n", e.Attempt(), motivo)
+		return 0
+	case "convertir":
+		if len(args) != 2 || strings.TrimSpace(args[1]) == "" {
+			fmt.Fprintln(stderr, "uso: orq slice convertir NN   (a slice opened by orq 1.0.0, with its old processes stopped)")
+			return 1
+		}
+		e, err := r.Convertir(strings.TrimPrefix(args[1], "S-"))
+		if err != nil {
+			fmt.Fprintln(stderr, "orq slice:", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "%s converted: contract written to git from the state (exam hash checked against %s), provenance %s. Verify it: `orq slice verificar --slice %s`\n", e.Attempt(), e.SHARojo[:7], e.Procedencia, e.NN)
 		return 0
 	case "rehuella":
 		if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {

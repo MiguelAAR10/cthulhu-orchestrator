@@ -105,7 +105,7 @@ func (r Repo) confiable(e *Estado) error {
 		return fmt.Errorf("no se pudo leer el contrato de %s: %w", e.ID(), err)
 	}
 	if !existe {
-		return fmt.Errorf("%w: %s se abrió con una versión anterior de orq. Conviértelo: `orq slice convertir --slice %s --ratifico \"quién revisó el examen\"`", ErrSinContrato, e.ID(), e.NN)
+		return fmt.Errorf("%w: %s was opened by an older orq. Stop its old processes and convert it: `orq slice convertir %s`", ErrSinContrato, e.ID(), e.NN)
 	}
 	if dif := diferencias(c, contratoDe(e)); len(dif) > 0 {
 		return fmt.Errorf("%w: %s dice otra cosa que el contrato que orq guardó en git (%s) en: %s. Alguien reescribió .orq/slices/%s.json; no se acepta nada con ese estado. El contrato vigente: cmd=%q, examen=%s",
@@ -178,4 +178,65 @@ func (r Repo) borrarRefs(e *Estado) error {
 		errs = append(errs, r.borrarRef(ref))
 	}
 	return errors.Join(errs...)
+}
+
+// ProcedenciaLegado marks a slice opened by orq 1.0.0 and adopted by this version.
+const ProcedenciaLegado = "legado"
+
+// ErrProcesosVivos: another process holds the slice lock, so the 1.0.0 processes are still running.
+var ErrProcesosVivos = errors.New("the slice lock is held by another process")
+
+// Convertir adopts a slice opened by orq 1.0.0 (schema 0, no contract in git): it checks that the
+// exam hash in the state is the hash of the exam at the red commit, writes the contract from the
+// state and records the provenance «legado». It refuses while another process holds the slice lock.
+func (r Repo) Convertir(nn string) (*Estado, error) {
+	e, err := r.Load(nn)
+	if err != nil || e == nil {
+		return nil, errors.Join(err, errors.New("no hay slice abierto"))
+	}
+	soltar, err := r.candadoLibre("slice-" + e.NN)
+	if err != nil {
+		return e, err
+	}
+	defer soltar()
+	if e, err = r.Load(e.NN); err != nil || e == nil {
+		return nil, errors.Join(err, errors.New("no hay slice abierto"))
+	}
+	if hay, err := r.leerBlob(refContrato(e.NN), &Contrato{}); err != nil {
+		return e, err
+	} else if hay {
+		return e, fmt.Errorf("%s already has a contract in git (%s): nothing to convert", e.ID(), refContrato(e.NN))
+	}
+	if e.Esquema >= EsquemaActual {
+		return e, fmt.Errorf("%s was opened by this version and its contract is missing from git: it is not converted, close it as rejected", e.ID())
+	}
+	h, err := HuellaEnCommit(r.Root, e.baseExamen(), e.Bundle, e.Cmd)
+	if err != nil {
+		return e, err
+	}
+	if h != e.Huella {
+		return e, fmt.Errorf("%s is not converted: the exam hash in the state does not match the exam at the red commit %s. Someone changed the state or the exam", e.ID(), e.SHARojo[:min(8, len(e.SHARojo))])
+	}
+	e.Procedencia = ProcedenciaLegado
+	if err := r.sellar(e); err != nil {
+		return e, err
+	}
+	return e, errors.Join(r.save(e), r.marcarSiClon(e))
+}
+
+// marcarSiClon is a no-op for a linked worktree: there is no clone to mark.
+func (r Repo) marcarSiClon(e *Estado) error {
+	if esClon(e.Worktree) {
+		return r.marcar(e, e.Worktree, e.Rama)
+	}
+	return nil
+}
+
+// adoptarSiLegado converts a 1.0.0 slice on its first verification; any other state is left as is.
+func (r Repo) adoptarSiLegado(e *Estado) (*Estado, error) {
+	err := r.confiable(e)
+	if !errors.Is(err, ErrSinContrato) || e.Esquema >= EsquemaActual {
+		return e, err
+	}
+	return r.Convertir(e.NN)
 }

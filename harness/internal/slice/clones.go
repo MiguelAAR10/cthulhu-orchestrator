@@ -217,6 +217,12 @@ func (r Repo) puntaDelSlice(e *Estado) (Ingesta, error) {
 	if len(e.Equipo) > 0 || !existe(e.Worktree) {
 		return Ingesta{Punta: actual}, nil // con equipo, la rama del slice solo la mueve juntar
 	}
+	if esEnlazado(e.Worktree) {
+		// A 1.0.0 linked worktree shares the main repo's refs: its commits are already on the branch.
+		// Uncommitted files are asked to git as the owner's checkout would be; it only warns.
+		sucio, err := gitDueno(e.Worktree, "status", "--porcelain")
+		return Ingesta{Punta: actual, Sucio: strings.TrimSpace(sucio)}, err
+	}
 	return r.puntaDe(e, e.Worktree, e.Rama, "slice")
 }
 
