@@ -668,7 +668,9 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stdout, "paneles cerrados: %s\n", strings.Join(c, ", "))
 			}
 		}
-		if err := p.EscribirFicha(); err != nil {
+		if os.Getenv("ORQ_SIN_DOC") != "" {
+			fmt.Fprintln(stdout, "project card not updated (ORQ_SIN_DOC set)")
+		} else if err := p.EscribirFicha(); err != nil {
 			fmt.Fprintf(stdout, "aviso: la ficha del proyecto no se actualizó (%v)\n", err)
 		} else {
 			fmt.Fprintf(stdout, "ficha del proyecto actualizada: %s\n", p.FichaPath())
