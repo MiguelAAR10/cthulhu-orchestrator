@@ -81,3 +81,7 @@ func Candado(path string) (func(), error) {
 	}
 	return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
 }
+
+// MarcaClon is the file orq leaves in the .git directory of every worker clone.
+// The gate treats any repository that carries it as a worker, whatever its content.
+const MarcaClon = "orq-clon"

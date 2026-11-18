@@ -20,8 +20,8 @@ import (
 	"orq/internal/sandbox"
 )
 
-// MarcaClon es el archivo que orq deja en el .git de cada clon de worker.
-const MarcaClon = "orq-clon"
+// MarcaClon es el archivo que orq deja en el .git de cada clon de worker (el nombre vive en orqdir).
+const MarcaClon = orqdir.MarcaClon
 
 // Marca es lo que el gate necesita saber dentro de un clon, sin ver el .orq del repo principal.
 type Marca struct {

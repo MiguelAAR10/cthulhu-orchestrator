@@ -172,15 +172,27 @@ func realEnv() gate.Env {
 		DiskFreeGB: sysinfo.FreeGB,
 		Now:        time.Now,
 		StateDir:   state.Dir(),
-		IsWorktree: gate.IsLinkedWorktree,
+		IsWorktree: gate.IsWorker,
 		Bundle:     bundleAbierto,
 		LimitsPath: limits.DefaultPath(),
-		MainRoot:   gate.CheckoutPrincipal,
+		MainRoot:   checkoutPrincipal,
 	}
+}
+
+// checkoutPrincipal is the main checkout whose .orq a worker must not touch. A clone has its
+// own .git, so the main checkout comes from the clone marker.
+func checkoutPrincipal(cwd string) string {
+	if m, ok := slice.LeerMarca(cwd); ok && m.Root != "" {
+		return m.Root
+	}
+	return gate.CheckoutPrincipal(cwd)
 }
 
 // bundleAbierto lee el paquete del examen del slice abierto del repo de cwd.
 func bundleAbierto(cwd string) []string {
+	if m, ok := slice.LeerMarca(cwd); ok { // a clone has no .orq: its marker carries the bundle
+		return m.Bundle
+	}
 	out, err := exec.Command("git", "-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
 	if err != nil {
 		return nil
