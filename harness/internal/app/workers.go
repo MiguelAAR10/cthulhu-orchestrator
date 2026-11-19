@@ -62,6 +62,9 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	if err != nil || e == nil {
 		return "", false, errors.Join(err, errors.New("no hay slice abierto"))
 	}
+	if err := e.PuedeLanzar(); err != nil {
+		return "", false, err
+	}
 	// Con plan, la tarea manda: zona, rutas y dificultad salen de ella, y queda en curso.
 	var pl *plan.Plan
 	var tareaPl *plan.Tarea

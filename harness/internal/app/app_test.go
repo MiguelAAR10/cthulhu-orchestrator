@@ -79,7 +79,61 @@ func proyectoDePrueba(t *testing.T, cfgJSON string) (Proyecto, *fake.Driver, *sl
 	if err != nil {
 		t.Fatalf("abrir: %v\n%s", err, out)
 	}
-	return p, term, e
+	return p, term, aprobarTarjeta(t, p, e.NN)
+}
+
+const tarjetaDePrueba = "## Historia\nuno\n## Fuera\nnada más\n## Examen\ntests/s01.sh pasa\n## Zonas\nv01.txt\n## Preguntas\nninguna\n"
+
+// aprobarTarjeta deja el slice listo para lanzar en la ruta completa: tarjeta puesta y aprobada.
+func aprobarTarjeta(t *testing.T, p Proyecto, nn string) *slice.Estado {
+	t.Helper()
+	tj, err := slice.LeerTarjeta(tarjetaDePrueba)
+	if err == nil {
+		_, err = p.Slices().PonerTarjeta(nn, tj, time.Now())
+	}
+	e, _, errA := p.Slices().AprobarTarjeta(nn, time.Now())
+	if err = errors.Join(err, errA); err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+func TestLanzarSinTarjetaAprobadaSeNiega(t *testing.T) {
+	p, term, _ := proyectoDePrueba(t, "")
+	ctx := context.Background()
+	if _, _, err := p.Slices().Abrir("02", "dos", "tests/s01.sh", "sh tests/s01.sh", slice.Opciones{SinConteo: "prueba"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	ped := PedidoWorker{Slice: "02", Agente: "claude", Alcance: "x", Presupuesto: "10 min"}
+	if _, _, err := p.LanzarWorker(ctx, ped); err == nil || !strings.Contains(err.Error(), "orq slice tarjeta 02") {
+		t.Fatalf("sin tarjeta: %v", err)
+	}
+	tj, _ := slice.LeerTarjeta(tarjetaDePrueba)
+	if _, err := p.Slices().PonerTarjeta("02", tj, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := p.LanzarWorker(ctx, ped); err == nil || !strings.Contains(err.Error(), "orq slice aprobar 02") {
+		t.Fatalf("tarjeta sin aprobar: %v", err)
+	}
+	if n := len(term.Ops("crear")); n != 0 {
+		t.Fatalf("no se abre ningún panel sin aprobación: %d", n)
+	}
+	if _, _, err := p.Slices().AprobarTarjeta("02", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := p.LanzarWorker(ctx, ped); err != nil {
+		t.Fatalf("aprobada se lanza: %v", err)
+	}
+}
+
+func TestLanzarFixSinTarjeta(t *testing.T) {
+	p, term, _ := proyectoDePrueba(t, "")
+	if _, _, err := p.Slices().Abrir("02", "dos", "tests/s01.sh", "sh tests/s01.sh", slice.Opciones{SinConteo: "prueba", Ruta: slice.RutaFix}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := p.LanzarWorker(context.Background(), PedidoWorker{Slice: "02", Agente: "claude", Alcance: "x", Presupuesto: "10 min"}); err != nil || len(term.Ops("crear")) != 1 {
+		t.Fatalf("un fix se lanza sin tarjeta: %v", err)
+	}
 }
 
 // maquinaDe fija la medición: las pruebas no dependen de la RAM ni de la carga de quien las corre.
