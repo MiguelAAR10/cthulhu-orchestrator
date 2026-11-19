@@ -140,6 +140,14 @@ func conPrefijo(a []string, ps ...string) bool {
 
 // ---------- transiciones que solo pide el orquestador ----------
 
+// sliceOrquestador are the `orq slice` subcommands only the orchestrator runs.
+var sliceOrquestador = conjunto("abrir", "cerrar", "reintentar", "tomar", "lanzar", "juntar",
+	"examen", "alcance", "rehuella", "reabrir", "ruta", "verificar", "podar")
+
+// SliceSoloOrquestador says whether `orq slice sub` belongs to the orchestrator. The CLI refuses
+// these inside a worker too, so a copied or renamed binary, an alias or a script cannot run them.
+func SliceSoloOrquestador(sub string) bool { return sliceOrquestador[sub] }
+
 func soloOrquestador(c simple) bool {
 	if len(c.w) == 0 || nombre(c.w[0]) != "orq" {
 		return false
@@ -159,8 +167,7 @@ func soloOrquestador(c simple) bool {
 	}
 	switch a[0] {
 	case "slice":
-		return hay(a[1:2], "abrir", "cerrar", "reintentar", "tomar", "lanzar", "juntar",
-			"examen", "alcance", "rehuella", "reabrir", "ruta", "verificar")
+		return SliceSoloOrquestador(a[1])
 	case "plan":
 		return hay(a[1:2], "cargar", "hecha", "debatido")
 	case "sesion":
@@ -208,11 +215,18 @@ type proteccion struct {
 	rel []string // relativas a la raíz del worktree: examen y paquete del slice
 	abs []string // rutas absolutas del harness
 	cwd string
+	wt  bool   // a worker: it creates no .git but its clone's own
+	git string // the clone's own .git, resolved ("" if the clone cannot be placed)
 }
 
 func proteccionDe(p Payload, l limits.Limits, env Env, wt bool) proteccion {
-	pr := proteccion{cwd: resolver("/", p.Cwd)}
+	pr := proteccion{cwd: resolver("/", p.Cwd), wt: wt}
 	if wt {
+		if env.RepoPropio != nil {
+			if raiz, _ := env.RepoPropio(p.Cwd); raiz != "" {
+				pr.git = resolver("/", filepath.Join(raiz, ".git"))
+			}
+		}
 		// The clone marker makes a clone a worker: moving or rewriting it would switch the gate off.
 		pr.rel = append(pr.rel, ".git/"+orqdir.MarcaClon)
 		// .git/config (core.worktree, include.path) and .git/commondir point git at another repository.
@@ -267,6 +281,35 @@ func (pr proteccion) cubre(ruta string, bajo bool) bool {
 	return false
 }
 
+// puntoGit says whether a worker's write reaches a .git other than its clone's own: creating,
+// writing, moving or linking one (a gitfile, a symlink, a directory with a commondir) points git
+// at another repository, even the main one. rutas are the literal and the resolved path.
+func (pr proteccion) puntoGit(rutas ...string) bool {
+	if !pr.wt {
+		return false
+	}
+	for _, r := range rutas {
+		for d := filepath.Clean(r); filepath.Dir(d) != d; d = filepath.Dir(d) {
+			if filepath.Base(d) == ".git" && d != pr.git {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func gitNuevo(ruta string) Decision {
+	return deny("orq: a worker creates, writes, moves or links no .git but its clone's own (%q): any other .git can point git at another repository, even the main one.", ruta)
+}
+
+// literal joins a relative path to dir without resolving links.
+func literal(dir, p string) string {
+	if p = strings.Trim(p, `'"`); filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
+	return filepath.Join(dir, p)
+}
+
 // nombra dice si un texto (código en línea) menciona algo protegido.
 func (pr proteccion) nombra(code string) bool {
 	if strings.Contains(code, ".claude/settings") || strings.Contains(code, ".orq/") {
@@ -288,7 +331,11 @@ func escrituraProhibida(p Payload, cmds []simple, pr proteccion, wt bool) (Decis
 	switch {
 	case p.ToolName == "Edit" || p.ToolName == "Write" || p.ToolName == "MultiEdit" || p.ToolName == "NotebookEdit":
 		for _, k := range []string{"file_path", "notebook_path"} {
-			if fp, _ := p.ToolInput[k].(string); fp != "" && pr.cubre(resolver(p.Cwd, fp), false) {
+			fp, _ := p.ToolInput[k].(string)
+			if fp != "" && pr.puntoGit(literal(p.Cwd, fp), resolver(p.Cwd, fp)) {
+				return gitNuevo(fp), true
+			}
+			if fp != "" && pr.cubre(resolver(p.Cwd, fp), false) {
 				return protegido(fp), true
 			}
 		}
@@ -301,7 +348,7 @@ func escrituraProhibida(p Payload, cmds []simple, pr proteccion, wt bool) (Decis
 	case strings.HasPrefix(p.ToolName, "mcp__") && wt:
 		var hallada string
 		recorrer(p.ToolInput, func(s string) bool {
-			if strings.TrimSpace(s) != "" && pr.cubre(resolver(p.Cwd, s), false) {
+			if strings.TrimSpace(s) != "" && (pr.puntoGit(literal(p.Cwd, s), resolver(p.Cwd, s)) || pr.cubre(resolver(p.Cwd, s), false)) {
 				hallada = s
 			}
 			return hallada != ""
@@ -341,12 +388,22 @@ func escrituraDeShell(c simple, pr proteccion, wt bool) (Decision, bool) {
 	if wt && len(pr.rel) > 0 && opaco(c) {
 		return deny("orq: %q escribe archivos que no se saben de antemano y el examen del slice está protegido. Haz el cambio con Edit o Write.", strings.Join(textos(c.w), " ")), true
 	}
+	if pr.wt && len(c.w) > 0 && conjunto("cp", "rsync", "install")[nombre(c.w[0])] {
+		for _, x := range sueltos(c.w[1:]) {
+			if filepath.Base(filepath.Clean(x.s)) == ".git" {
+				return gitNuevo(x.s), true // copying a .git into a directory creates one there
+			}
+		}
+	}
 	for _, o := range objetivos(c) {
 		if o.dyn || c.dirDyn && !filepath.IsAbs(o.s) {
 			if wt {
 				return deny("orq: no sé adónde escribe %q: lleva una expansión ($var, ${...}, $(...) o `...`) o llega por stdin. Escribe la ruta literal.", o.s), true
 			}
 			continue
+		}
+		if pr.puntoGit(literal(c.dir, o.s), resolver(c.dir, o.s)) {
+			return gitNuevo(o.s), true
 		}
 		rutas := []string{resolver(c.dir, o.s)}
 		if o.glob {

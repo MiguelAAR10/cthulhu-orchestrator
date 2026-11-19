@@ -17,6 +17,7 @@ import (
 	"orq/internal/app"
 	"orq/internal/canal"
 	"orq/internal/config"
+	"orq/internal/gate"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
 	"orq/internal/slice"
@@ -397,7 +398,29 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 
 // ---------- slice ----------
 
+// subcomando is the first argument of `orq slice` that is not --slice NN.
+func subcomando(args []string) string {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--slice":
+			i++
+		case strings.HasPrefix(a, "--slice="):
+		default:
+			return a
+		}
+	}
+	return ""
+}
+
 func runSlice(args []string, stdout, stderr io.Writer) int {
+	if sub := subcomando(args); gate.SliceSoloOrquestador(sub) {
+		// The gate matches orq by name; a copied or renamed binary, an alias or a script escapes
+		// it. The binary itself refuses inside a worker, so none of them changes a slice.
+		if wd, err := os.Getwd(); err != nil || gate.IsWorker(wd) {
+			fmt.Fprintf(stderr, "orq: `orq slice %s` belongs to the orchestrator and does not run inside a worker clone or worktree. Send your result to the orchestrator.\n", sub)
+			return 1
+		}
+	}
 	p, err := abrirProyecto()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
