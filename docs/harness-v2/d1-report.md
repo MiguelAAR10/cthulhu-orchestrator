@@ -108,3 +108,9 @@ Fixes for `reviews/d1-review.md`, each repro a test seen failing first:
 6. Hints in `slice/slice.go` and `app/relevo.go` include `--causa worker|examen`.
 
 `gofmt -l harness` empty, `go vet ./...`, `go test -race ./...` and `make ci` (exit 0) pass. `internal/gate` and `internal/sandbox` untouched.
+
+## Close (orchestrator, 2026-11-19)
+Integrated as 2d4f5b8 after 2 review rounds (budget reached; `reviews/d1-review.md`, `reviews/d1-review-2.md`). Last fix checked by the orchestrator: `TestPaginaFueraEsDelCommitVerificado` fails on the pre-fix `pagina.go`/`equipo.go` and passes on 2d4f5b8. `make ci` on 2d4f5b8 with the candidate binary (`modified=false`): exit 0, e2e 86/0, aislamiento 14/0.
+Known limit: the text notice built by `Alinear` ("N file(s) outside…") still counts on the clone tip, not on `rec.Head`; the page's own `!!` list is computed on `rec.Head`.
+Owner check still pending: decide 5 real slices from the page alone with `~/bin/orq2`.
+Defaults taken (Owner may change): retry cause value `examen`; story becomes its own field in D3; team "worker finished" = merge time until D4.
