@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"orq/internal/config"
 	"orq/internal/gitx"
 	"orq/internal/sysinfo"
 )
@@ -132,6 +133,8 @@ type Recibo struct {
 	Fallidos   int       `json:"fallidos"`
 	Artefacto  string    `json:"artefacto,omitempty"` // salida completa
 	Nota       string    `json:"nota,omitempty"`
+	// Checks son lint, tipos, pruebas y guardias del proyecto, corridos sobre el mismo commit.
+	Checks []ResultadoCheck `json:"checks,omitempty"`
 }
 
 // Huella une el contenido de cada archivo del paquete del examen y el comando.
@@ -183,9 +186,10 @@ func cola(s string, n int) string {
 type Repo struct {
 	Root      string // checkout principal (del dueño)
 	OrqDir    string
-	Worktree  string // carpeta base de las copias de trabajo de los workers
-	MaxSlices int    // abiertos a la vez; 0 = MaxSlicesDefecto
-	Caja      Caja   // sandbox donde corre todo lo que escribió un worker; nil = bubblewrap
+	Worktree  string         // carpeta base de las copias de trabajo de los workers
+	MaxSlices int            // abiertos a la vez; 0 = MaxSlicesDefecto
+	Caja      Caja           // sandbox donde corre todo lo que escribió un worker; nil = bubblewrap
+	Checks    []config.Check // del proyecto, en orden; vacío = no se corre ninguno
 }
 
 func (r Repo) dirSlices() string           { return filepath.Join(r.OrqDir, "slices") }

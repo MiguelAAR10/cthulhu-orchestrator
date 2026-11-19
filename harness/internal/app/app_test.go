@@ -353,3 +353,11 @@ func TestCodexNoSeLanza(t *testing.T) {
 		t.Fatalf("opened a pane: %+v", term.Llamadas)
 	}
 }
+
+func TestSlicesLlevaLosChecksDelProyecto(t *testing.T) {
+	p, _, _ := proyectoDePrueba(t, `{"checks":{"lint":{"cmd":"true"},"types":{"omitir":"sin tipos"},"tests":{"cmd":"go test ./..."}}}`)
+	cs := p.Slices().Checks
+	if len(cs) != 3 || cs[0].Nombre != "lint" || cs[1].Omitir != "sin tipos" || cs[2].Cmd != "go test ./..." {
+		t.Fatalf("checks = %+v", cs)
+	}
+}

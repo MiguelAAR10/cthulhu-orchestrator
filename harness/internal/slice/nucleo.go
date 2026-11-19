@@ -351,10 +351,20 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if !intacto {
 		return e, out, r.bloquear(e, "el examen se modificó mientras corría: trampa")
 	}
+	checks, err := r.checksEn(e, head)
+	if err != nil {
+		return e, out, err
+	}
 	rec := &Recibo{Attempt: e.Attempt(), Head: head, Bundle: e.Huella, Runner: Version, Cmd: e.Cmd,
-		Exit: code, Salida: cola(out, 20), TS: now.UTC().Truncate(time.Second), Resultado: "paso", Aislado: true}
+		Exit: code, Salida: cola(out, 20), TS: now.UTC().Truncate(time.Second), Resultado: "paso", Aislado: true, Checks: checks}
 	var vnota string
 	ok, vnota = veredicto(ok, cnt, e.Omitir)
+	if falla := FalloDeChecks(checks); falla != "" {
+		if !ok && vnota == "" {
+			vnota = "el examen no pasa"
+		}
+		ok, vnota = false, strings.TrimPrefix(vnota+"; "+falla, "; ")
+	}
 	if cnt != nil {
 		rec.Contado, rec.Ejecutados, rec.Omitidos, rec.Fallidos = true, cnt.Ejecutados, cnt.Omitidos, cnt.Fallidos
 		if vnota != "" {
@@ -417,7 +427,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if vnota != "" {
 		motivo = vnota
 	}
-	firma := firmaDe(out)
+	firma := firmaDe(out + FalloDeChecks(checks))
 	sinProgreso := e.HeadFallo == head
 	if !sinProgreso && e.HeadFallo != "" && firma == e.FirmaFallo {
 		_, cod, errDiff := r.gitCodigo("diff", "-w", "--quiet", e.HeadFallo, head)
