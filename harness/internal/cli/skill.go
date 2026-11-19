@@ -44,6 +44,12 @@ func runSkill(args []string, stdout, stderr io.Writer) int {
 	rol := os.Getenv("ORQ_ROL")
 	if len(args) > 0 {
 		rol = args[0]
+		switch rol {
+		case "eval":
+			return runSkillEval(args[1:], stdout, stderr)
+		case "notas":
+			return runSkillNotas(args[1:], stdout, stderr)
+		}
 	}
 	if !slices.Contains(perfil.Roles, rol) {
 		fmt.Fprintf(stderr, "uso: orq skill %s\n", strings.Join(perfil.Roles, "|"))

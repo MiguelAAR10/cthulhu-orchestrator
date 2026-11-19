@@ -108,3 +108,12 @@ func TestVerificarDetectaFaltaDepCambioYNunca(t *testing.T) {
 		t.Fatalf("%+v", ps)
 	}
 }
+
+func TestTipoDelPerfil(t *testing.T) {
+	if got := (Perfil{Senales: []string{"go", "web"}}).Tipo(); got != "go+web" {
+		t.Fatalf("%q", got)
+	}
+	if got := (Perfil{}).Tipo(); got != "general" {
+		t.Fatalf("%q", got)
+	}
+}

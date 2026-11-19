@@ -262,3 +262,11 @@ func ComandoInstalar(repo string, skills []string) []string {
 	}
 	return append(args, "-a", "claude-code", "-y")
 }
+
+// Tipo es el tipo de tarea por defecto de un proyecto: su stack ("go+web"), o "general" sin señales.
+func (p Perfil) Tipo() string {
+	if len(p.Senales) == 0 {
+		return "general"
+	}
+	return strings.Join(p.Senales, "+")
+}
