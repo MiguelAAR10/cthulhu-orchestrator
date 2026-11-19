@@ -393,8 +393,13 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if err := appendJSON(r.recibosPath(), rec); err != nil {
 		return e, out, err
 	}
-	if err := diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{Tipo: "verificacion", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
-		Resultado: rec.Resultado, Datos: map[string]any{"head": head, "ejecutados": rec.Ejecutados, "fallidos": rec.Fallidos}}); err != nil {
+	// terminado: cuándo el worker dejó la punta que se verificó, su último commit.
+	terminado, err := r.git("log", "-1", "--format=%cI", head)
+	if err != nil {
+		return e, out, err
+	}
+	if err := diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{TS: now, Tipo: "verificacion", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
+		Resultado: rec.Resultado, Datos: map[string]any{"head": head, "ejecutados": rec.Ejecutados, "fallidos": rec.Fallidos, "terminado": terminado}}); err != nil {
 		return e, out, err
 	}
 	if ok {
@@ -427,8 +432,15 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	return e, out, errors.Join(r.save(e), fmt.Errorf("%s (reparación %d de %d)", motivo, e.Fallos, MaxFallos-1))
 }
 
-// Reintentar abre un intento nuevo en la misma copia. Recibos viejos ya no valen.
-func (r Repo) Reintentar(nn, cambio string, decisionOwner bool) (*Estado, error) {
+// Causas de un intento nuevo: el worker falló, o el examen estaba mal y se corrigió.
+const (
+	CausaWorker = "worker"
+	CausaExamen = "examen"
+)
+
+// Reintentar abre un intento nuevo en la misma copia. Recibos viejos ya no valen. El diario anota
+// la causa: un examen corregido no cuenta como fallo del worker.
+func (r Repo) Reintentar(nn, cambio, causa string, decisionOwner bool) (*Estado, error) {
 	soltar, err := r.bloqueo(nn)
 	if err != nil {
 		return nil, err
@@ -444,6 +456,9 @@ func (r Repo) Reintentar(nn, cambio string, decisionOwner bool) (*Estado, error)
 	if strings.TrimSpace(cambio) == "" {
 		return e, errors.New("di qué cambia en este intento; repetir lo mismo no es reintentar")
 	}
+	if causa != CausaWorker && causa != CausaExamen {
+		return e, fmt.Errorf("di la causa del intento nuevo: %s|%s", CausaWorker, CausaExamen)
+	}
 	if e.Intento >= MaxIntentos && !decisionOwner {
 		return e, fmt.Errorf("%s ya lleva %d intentos: el siguiente lo decide el Owner (el Atena pregunta y luego --decision-owner), o se parte la historia", e.ID(), e.Intento)
 	}
@@ -451,6 +466,10 @@ func (r Repo) Reintentar(nn, cambio string, decisionOwner bool) (*Estado, error)
 		return e, err
 	}
 	e.Intento++
+	if err := diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{Tipo: "intento", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
+		Detalle: cambio, Datos: map[string]any{"causa": causa}}); err != nil {
+		return e, err
+	}
 	e.FirmaFallo = ""
 	e.Fase, e.Fallos, e.HeadFallo, e.Recibo, e.Motivo, e.Escritor = Implementando, 0, "", nil, "", ""
 	return e, r.save(e)
@@ -578,6 +597,10 @@ func (r Repo) SumarExamen(nn string, nuevos []string, cmd, aprobado string) (*Es
 	}
 	e.Bundle, e.Huella, e.SHAExamen, e.Motivo = bundle, h, head, "examen sumado o corregido: "+aprobado
 	if err := r.sellar(e); err != nil {
+		return e, err
+	}
+	if err := diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{Tipo: "examen", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
+		Detalle: aprobado, Datos: map[string]any{"archivos": nuevos, "base": head}}); err != nil {
 		return e, err
 	}
 	// Los clones saben qué examen no se toca: su marca se actualiza con el paquete nuevo.

@@ -629,21 +629,25 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s reabierto en el mismo worktree, con su trabajo. El recibo ya no vale: lanza la reparación y vuelve a verificar\n", e.Attempt())
 		return 0
 	case "reintentar":
-		owner := false
+		owner, causa := false, ""
 		var resto []string
-		for _, a := range args[1:] {
-			if a == "--decision-owner" {
+		for i := 1; i < len(args); i++ {
+			switch {
+			case args[i] == "--decision-owner":
 				owner = true
-			} else {
-				resto = append(resto, a)
+			case args[i] == "--causa" && i+1 < len(args):
+				causa = args[i+1]
+				i++
+			default:
+				resto = append(resto, args[i])
 			}
 		}
 		if len(resto) == 0 {
-			fmt.Fprintln(stderr, "uso: orq slice reintentar \"qué cambia en este intento\" [--decision-owner]")
+			fmt.Fprintln(stderr, "uso: orq slice reintentar \"qué cambia en este intento\" --causa worker|examen [--decision-owner]")
 			return 1
 		}
 		args = append(args[:1], resto...)
-		e, err := r.Reintentar(nn, strings.Join(resto, " "), owner)
+		e, err := r.Reintentar(nn, strings.Join(resto, " "), causa, owner)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1

@@ -44,7 +44,7 @@ W="$ORQ_WORKTREES/tienda-s01"
 (cd "$W" && echo ok > v01.txt && echo trampa > tests/d01.txt && git add -A && git commit -qm trampa)
 ok "$(q slice verificar)" 1 "la trampa en el fixture se detecta"
 grep -q BLOQUEADO <(orq slice estado) ; ok $? 0 "queda BLOQUEADO"
-ok "$(q slice reintentar 'sin tocar el fixture')" 0 "reintento con motivo → a2"
+ok "$(q slice reintentar 'sin tocar el fixture' --causa worker)" 0 "reintento con motivo → a2"
 (cd "$W" && git checkout -q HEAD~1 -- tests/d01.txt && git commit -qam "restaura fixture")
 orq slice tomar w1 >/dev/null
 ok "$(q slice verificar)" 0 "verifica en verde"

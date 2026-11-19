@@ -89,7 +89,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
                                  lecciones con confianza; se aprenden solas (reintentos, rechazos,
                                  desvíos) y las ≥0.7 entran al arrancar cada sesión (máx. 6)
   orq alinear [--slice NN]       ¿lo cambiado sigue sirviendo a la historia? exit 3 = pregunta al Atena
-  orq slice reintentar "qué cambia" [--decision-owner]   intento nuevo desde BLOQUEADO (máx. 3)
+  orq slice reintentar "qué cambia" --causa worker|examen [--decision-owner]   intento nuevo desde BLOQUEADO (máx. 3)
   orq slice cerrar --aceptado | --rechazado "motivo"   integra aparte, revalida, publica y limpia;
                                  si se interrumpe, repetirlo continúa donde quedó
   orq slice estado               fase, intento, escritor, recibo y sobrantes
