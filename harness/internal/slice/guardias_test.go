@@ -148,3 +148,27 @@ func TestSupresionesApagadaOExtendida(t *testing.T) {
 		t.Fatalf("turned off: %v %+v", err, e.Recibo)
 	}
 }
+
+// Review item 5: a check whose tool lives under $HOME runs in the box: verificar binds its toolchain.
+func TestCheckVeLaToolchainDelHome(t *testing.T) {
+	r := repoDeJuguete(t)
+	home := filepath.Join(t.TempDir(), "home")
+	real := filepath.Join(home, ".local", "lib", "fake", "bin", "faketool")
+	os.MkdirAll(filepath.Dir(real), 0o755)
+	os.WriteFile(filepath.Join(home, ".local", "lib", "fake", "version"), []byte("fake 1.0\n"), 0o644)
+	// The tool reads a file of its own toolchain root, as go reads GOROOT.
+	os.WriteFile(real, []byte("#!/bin/sh\ncat \"$(dirname \"$(readlink -f \"$0\")\")/../version\"\n"), 0o755)
+	os.MkdirAll(filepath.Join(home, ".local", "bin"), 0o755)
+	if err := os.Symlink(real, filepath.Join(home, ".local", "bin", "faketool")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", filepath.Join(home, ".local", "bin")+":"+os.Getenv("PATH"))
+	r.Checks = []config.Check{{Nombre: "lint", Cmd: "faketool"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"}}
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	e, _, err := r.Verificar("", t0)
+	if err != nil || e.Fase != Verificado || e.Recibo.Checks[0].Salida != "fake 1.0" {
+		t.Fatalf("%v %+v", err, e.Recibo)
+	}
+}

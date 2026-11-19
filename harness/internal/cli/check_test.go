@@ -130,3 +130,26 @@ func TestGuiaWorkerPideOrqCheck(t *testing.T) {
 	}
 	contiene(t, string(raw), "`orq check`", "until it passes", "Before REQUEST VERIFICATION")
 }
+
+// orq check --caja says per check whether the box can run it, with what it binds; nothing runs.
+func TestCheckCajaInforma(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	home := filepath.Join(t.TempDir(), "home")
+	real := filepath.Join(home, ".local", "lib", "fake", "bin", "faketool")
+	os.MkdirAll(filepath.Dir(real), 0o755)
+	os.WriteFile(real, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	os.MkdirAll(filepath.Join(home, ".config", "x"), 0o755)
+	os.WriteFile(filepath.Join(home, ".config", "x", "cfgtool"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", filepath.Dir(real)+":"+filepath.Join(home, ".config", "x")+":"+os.Getenv("PATH"))
+	escribirEn(t, root, ".orq/config.json", `{"checks": {"lint": {"cmd": "faketool -l ."}, "types": {"cmd": "cfgtool"}, "tests": {"cmd": "nosuchtool run"}}}`)
+	t.Chdir(root)
+	out, _, code := run(t, "check", "--caja")
+	if code != 1 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	contiene(t, out, "lint  corre en la caja · monta "+filepath.Join(home, ".local", "lib", "fake"),
+		"types  no corre en la caja: cfgtool está en "+filepath.Join(home, ".config", "x")+", que nunca entra en la caja",
+		"tests  no corre en la caja: nosuchtool no está en el PATH del host")
+}

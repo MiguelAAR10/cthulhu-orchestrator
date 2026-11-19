@@ -38,6 +38,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
                       ~/.config/orq/config.json o <raíz>/.orq/config.json
   orq init [--modo=mejora|nuevo] detecta modo y stack, escribe los checks, instala hooks y lista skills
   orq check                     corre lint, tipos, pruebas y guardias del proyecto aquí (el worker, antes de pedir verificación)
+  orq check --caja              dice por check si la caja de orq slice verificar ve sus herramientas y qué monta; no corre nada
   orq skills [instalar [NOMBRE...]|fijar|verificar]   skills del proyecto por rol, solo en su .claude/skills;
                                  fijar guarda su huella; verificar avisa FALTA/DEP/CAMBIO/NUNCA
   orq skill ROL                  guía del rol (atena|orquestador|scout|worker|verificador) y sus skills
@@ -131,6 +132,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	case "skills":
 		return runSkills(args[1:], stdout, stderr)
 	case "check":
+		if len(args) == 2 && args[1] == "--caja" {
+			return runCheckCaja(stdout, stderr)
+		}
 		return runCheck(stdout, stderr)
 	case "fase":
 		return runFase(stdout, stderr)

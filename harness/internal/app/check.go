@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"orq/internal/config"
+	"orq/internal/sandbox"
 	"orq/internal/slice"
 )
 
@@ -19,25 +20,9 @@ var ErrSinChecks = errors.New("sin checks en .orq/config.json: corre `orq init` 
 // Check corre los checks del proyecto en el clon o checkout de cwd, sin caja: es el lazo del worker
 // antes de pedir verificación. Un clon no tiene .orq: los checks salen del checkout principal.
 func Check(cwd string) ([]slice.ResultadoCheck, error) {
-	out, err := exec.Command("git", "-C", cwd, "rev-parse", "--show-toplevel").Output()
+	dir, rojo, cs, err := checksDe(cwd)
 	if err != nil {
-		return nil, errors.New("orq check: no estás dentro de un repositorio git")
-	}
-	dir := filepath.Clean(strings.TrimSpace(string(out)))
-	root, rojo := dir, ""
-	if m, ok := slice.LeerMarca(dir); ok && m.Root != "" {
-		root = m.Root
-		if e, err := (slice.Repo{Root: root, OrqDir: filepath.Join(root, ".orq")}).Load(m.Slice); err == nil && e != nil {
-			rojo = e.SHARojo
-		}
-	}
-	cfg, err := config.Cargar(root)
-	if err != nil {
-		return nil, fmt.Errorf("orq check: %w", err)
-	}
-	cs := cfg.ChecksEnOrden()
-	if len(cs) == 0 {
-		return nil, ErrSinChecks
+		return nil, err
 	}
 	rs, err := slice.CorrerChecks(cs, func(cmd string) (string, int, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), slice.TimeoutDefecto)
@@ -66,4 +51,51 @@ func Check(cwd string) ([]slice.ResultadoCheck, error) {
 		}
 	}
 	return rs, nil
+}
+
+// CheckCaja es un check del proyecto y lo que la caja de orq slice verificar ve de sus herramientas.
+type CheckCaja struct {
+	config.Check
+	Herramientas []sandbox.Herramienta
+}
+
+// ChecksCaja dice, sin correr nada, si cada check del proyecto puede correr en la caja.
+func ChecksCaja(cwd string) ([]CheckCaja, error) {
+	_, _, cs, err := checksDe(cwd)
+	if err != nil {
+		return nil, err
+	}
+	var out []CheckCaja
+	for _, c := range cs {
+		if c.Interno() || c.Cmd == "" {
+			continue
+		}
+		out = append(out, CheckCaja{Check: c, Herramientas: sandbox.Herramientas(c.Cmd)})
+	}
+	return out, nil
+}
+
+// checksDe ubica el repo de cwd, el rojo si es el clon de un slice abierto, y los checks del proyecto.
+func checksDe(cwd string) (dir, rojo string, cs []config.Check, err error) {
+	out, err := exec.Command("git", "-C", cwd, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", "", nil, errors.New("orq check: no estás dentro de un repositorio git")
+	}
+	dir = filepath.Clean(strings.TrimSpace(string(out)))
+	root := dir
+	if m, ok := slice.LeerMarca(dir); ok && m.Root != "" {
+		root = m.Root
+		if e, err := (slice.Repo{Root: root, OrqDir: filepath.Join(root, ".orq")}).Load(m.Slice); err == nil && e != nil {
+			rojo = e.SHARojo
+		}
+	}
+	cfg, err := config.Cargar(root)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("orq check: %w", err)
+	}
+	cs = cfg.ChecksEnOrden()
+	if len(cs) == 0 {
+		return "", "", nil, ErrSinChecks
+	}
+	return dir, rojo, cs, nil
 }

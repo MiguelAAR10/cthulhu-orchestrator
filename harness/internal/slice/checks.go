@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"orq/internal/config"
+	"orq/internal/sandbox"
 )
 
 // Resultados de un check en el recibo. Omitido no es pasado: el proyecto no tiene ese comando.
@@ -63,7 +64,7 @@ func FalloDeChecks(rs []ResultadoCheck) string {
 		if r.Resultado == CheckFallo {
 			x := fmt.Sprintf("check %s falla (exit %d): %s", r.Nombre, r.Exit, r.Salida)
 			if r.Exit == 127 {
-				x += " [infraestructura: la caja no ve el comando; suma su toolchain a sandbox.ro en limits.json]"
+				x += " [infraestructura: la caja no ve el comando; `orq check --caja` dice por qué (o suma su toolchain a sandbox.ro en limits.json)]"
 			}
 			xs = append(xs, x)
 		}
@@ -91,7 +92,8 @@ func (r Repo) checksEn(e *Estado, sha string) ([]ResultadoCheck, error) {
 	}
 	defer limpiar()
 	rs, err := CorrerChecks(r.Checks, func(cmd string) (string, int, error) {
-		out, code, _, err := r.correrEn(dir, cmd, e.limite())
+		// La caja no ve $HOME: la toolchain de cada herramienta del check se monta de solo lectura.
+		out, code, _, err := r.correrEn(dir, cmd, e.limite(), sandbox.RODe(sandbox.Herramientas(cmd))...)
 		return out, code, err
 	})
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"orq/internal/app"
+	"orq/internal/sandbox"
 	"orq/internal/slice"
 )
 
@@ -45,4 +46,32 @@ func runCheck(stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// runCheckCaja informa, por check, si la caja de la verificación ve sus herramientas. Sale 1 si alguno no.
+func runCheckCaja(stdout, stderr io.Writer) int {
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	cs, err := app.ChecksCaja(cwd)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	code := 0
+	for _, c := range cs {
+		if no := sandbox.NoCorren(c.Herramientas); no != "" {
+			code = 1
+			fmt.Fprintf(stdout, "%s  no corre en la caja: %s\n", c.Nombre, no)
+			continue
+		}
+		monta := "nada fuera del sistema"
+		if ro := sandbox.RODe(c.Herramientas); len(ro) > 0 {
+			monta = strings.Join(ro, ", ")
+		}
+		fmt.Fprintf(stdout, "%s  corre en la caja · monta %s\n", c.Nombre, monta)
+	}
+	return code
 }
