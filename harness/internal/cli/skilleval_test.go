@@ -114,3 +114,15 @@ func TestSliceAbrirGuardaElTipo(t *testing.T) {
 		t.Fatalf("%s", raw)
 	}
 }
+
+func TestSkillEvalPuntoUsaElNombreDeLaCarpeta(t *testing.T) {
+	claudeDeMentira(t, resultadoStub)
+	dir := skillDePrueba(t, "v1")
+	cwd, _ := os.Getwd()
+	defer os.Chdir(cwd)
+	os.Chdir(dir)
+	out, errs, code := run(t, "skill", "eval", ".", "--tipo", "go", "--max-usd", "2")
+	if code != 0 || !strings.HasPrefix(out, "mi-skill ") {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+}

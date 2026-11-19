@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -229,11 +230,22 @@ func (p Proyecto) skillsDelWorker(e *slice.Estado) (string, error) {
 	for _, s := range perfil.ParaRol(perfil.Lista(pf), "worker") {
 		nombres = append(nombres, s.Nombre)
 	}
-	ns, err := skilleval.Notas(state.Dir())
+	// La lista de notas es un consejo: un archivo roto no frena el lanzamiento.
+	ns, malas, err := skilleval.LeerNotas(state.Dir())
 	if err != nil {
-		return "", fmt.Errorf("notas de skills: %w", err)
+		fmt.Fprintf(os.Stderr, "orq: aviso: notas de skills ilegibles, se lanza sin notas: %v\n", err)
+		ns = nil
 	}
-	elegidas, fuera := skilleval.Ordenar(nombres, ns, tipo, p.Cfg.Skills.Minimo)
+	for _, m := range malas {
+		fmt.Fprintf(os.Stderr, "orq: aviso: línea de notas ignorada: %v\n", m)
+	}
+	hashes := map[string]string{}
+	for _, n := range nombres {
+		if h, err := skilleval.Hash(filepath.Join(p.Root, ".claude", "skills", n)); err == nil {
+			hashes[n] = h
+		}
+	}
+	elegidas, fuera := skilleval.Ordenar(nombres, ns, hashes, tipo, p.Cfg.Skills.Minimo)
 	lista := func(es []skilleval.Eleccion) string {
 		var ps []string
 		for _, el := range es {

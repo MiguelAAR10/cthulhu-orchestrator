@@ -46,26 +46,36 @@ func Guardar(dir string, n Nota) error {
 	return errors.Join(err, f.Close())
 }
 
-// Notas lee el registro en orden de escritura; sin archivo no hay notas.
+// Notas lee el registro en orden de escritura; sin archivo no hay notas. Una línea rota es un error.
 func Notas(dir string) ([]Nota, error) {
+	ns, malas, err := LeerNotas(dir)
+	if err == nil && len(malas) > 0 {
+		err = malas[0]
+	}
+	return ns, err
+}
+
+// LeerNotas lee las filas buenas y devuelve aparte los errores de las líneas que no se pudieron leer
+// (una escritura cortada deja una); err es solo un fallo de abrir o leer el archivo.
+func LeerNotas(dir string) (ns []Nota, malas []error, err error) {
 	f, err := os.Open(RutaNotas(dir))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer f.Close()
-	var ns []Nota
 	sc := bufio.NewScanner(f)
 	for i := 1; sc.Scan(); i++ {
 		var n Nota
 		if err := json.Unmarshal(sc.Bytes(), &n); err != nil {
-			return nil, fmt.Errorf("%s:%d: %w", RutaNotas(dir), i, err)
+			malas = append(malas, fmt.Errorf("%s:%d: %w", RutaNotas(dir), i, err))
+			continue
 		}
 		ns = append(ns, n)
 	}
-	return ns, sc.Err()
+	return ns, malas, sc.Err()
 }
 
 // Listar ordena por skill; dentro de cada skill, primero el hash con la corrida más nueva, y

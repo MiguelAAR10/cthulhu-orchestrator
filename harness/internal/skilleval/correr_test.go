@@ -13,7 +13,7 @@ import (
 const resultadoDePrueba = `{"schemaVersion":1,"claudeVersion":"2.1.328","costUsd":0.41,"partial":false,
 "aggregates":{"overallScore":0.75,"casesPassed":1,"casesTotal":2},
 "cases":[{"name":"c1","aggregates":{"score":1.0},"arms":{"with":[{},{},{}]}},
-{"name":"c2","aggregates":{"score":0.5},"arms":{"with":[{},{},{"error":"timeout"}]}}]}`
+{"name":"c2","aggregates":{"score":0.5},"arms":{"with":[{},{},{}]}}]}`
 
 // stubClaude pone en PATH un `claude` de mentira con el cuerpo dado; nunca corre el real.
 func stubClaude(t *testing.T, cuerpo string) {
@@ -99,5 +99,26 @@ func TestCorrerNoDisponible(t *testing.T) {
 func TestLeerExigeEsquema1(t *testing.T) {
 	if _, err := Leer([]byte(`{"schemaVersion":2}`)); err == nil {
 		t.Fatal("esquema 2 aceptado")
+	}
+}
+
+// todasFallaron es el JSON real de una corrida con timeout_seconds: 1: parcial false, nota 0, error.
+const todasFallaron = `{"schemaVersion":1,"claudeVersion":"2.1.328","costUsd":0,"partial":false,
+"aggregates":{"overallScore":0},
+"cases":[{"name":"d1","aggregates":{"score":0},"arms":{"with":[{"error":"timed out after 1s"}]}}]}`
+
+func TestCorrerNoGuardaSiTodasFallaron(t *testing.T) {
+	stubClaude(t, stubEvalJSON(todasFallaron, "1"))
+	_, err := Correr(context.Background(), plugin(t), filepath.Join(t.TempDir(), "r.json"), 2.5)
+	if err == nil || !strings.Contains(err.Error(), "timed out after 1s") {
+		t.Fatalf("debía rechazar y decir por qué: %v", err)
+	}
+}
+
+func TestCorridaConErrorOAbortadaEsParcial(t *testing.T) {
+	r, err := Leer([]byte(`{"schemaVersion":1,"partial":false,"aggregates":{"overallScore":0.5},
+"cases":[{"name":"c","aggregates":{"score":0.5},"arms":{"with":[{},{"aborted":true}]}}]}`))
+	if err != nil || !r.Parcial || r.Fallidas != 1 {
+		t.Fatalf("%+v %v", r, err)
 	}
 }

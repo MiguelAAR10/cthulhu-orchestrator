@@ -485,16 +485,17 @@ func TestSubirRutaSigueSiendoValida(t *testing.T) {
 func TestLanzarOrdenaSkillsPorNota(t *testing.T) {
 	estado := t.TempDir()
 	t.Setenv("ORQ_STATE", estado)
+	p, term, _ := proyectoDePrueba(t, `{"skills":{"minimo":0.5}}`)
 	for _, n := range []skilleval.Nota{
-		{Skill: "systematic-debugging", Hash: "h1", Tipo: "general", Nota: 0.9},
-		{Skill: "receiving-code-review", Hash: "h2", Tipo: "general", Nota: 0.2},
-		{Skill: "test-driven-development", Hash: "h3", Tipo: "go", Nota: 0.1},
+		{Skill: "systematic-debugging", Tipo: "general", Nota: 0.9},
+		{Skill: "receiving-code-review", Tipo: "general", Nota: 0.2},
+		{Skill: "test-driven-development", Tipo: "go", Nota: 0.1},
 	} {
+		n.Hash = instalarSkill(t, p, n.Skill, "v1")
 		if err := skilleval.Guardar(estado, n); err != nil {
 			t.Fatal(err)
 		}
 	}
-	p, term, _ := proyectoDePrueba(t, `{"skills":{"minimo":0.5}}`)
 	if _, _, err := p.LanzarWorker(context.Background(), PedidoWorker{Agente: "claude", Alcance: "x", Presupuesto: "10 min"}); err != nil {
 		t.Fatal(err)
 	}
@@ -516,5 +517,61 @@ func TestLanzarUsaElTipoDelSlice(t *testing.T) {
 	}
 	if txt := term.Ops("avisar")[0].Texto; !strings.Contains(txt, "Skills para el tipo go,") {
 		t.Fatalf("contrato: %s", txt)
+	}
+}
+
+func instalarSkill(t *testing.T, p Proyecto, nombre, cuerpo string) string {
+	t.Helper()
+	dir := filepath.Join(p.Root, ".claude", "skills", nombre)
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(cuerpo), 0o644)
+	h, err := skilleval.Hash(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
+}
+
+func contratoLanzado(t *testing.T, p Proyecto, term *fake.Driver) string {
+	t.Helper()
+	if _, _, err := p.LanzarWorker(context.Background(), PedidoWorker{Agente: "claude", Alcance: "x", Presupuesto: "10 min"}); err != nil {
+		t.Fatal(err)
+	}
+	ops := term.Ops("avisar")
+	return ops[len(ops)-1].Texto
+}
+
+func TestLanzarUsaLaNotaDelHashInstalado(t *testing.T) {
+	estado := t.TempDir()
+	t.Setenv("ORQ_STATE", estado)
+	p, term, _ := proyectoDePrueba(t, "")
+	h1 := instalarSkill(t, p, "systematic-debugging", "v1")
+	d0 := time.Date(2026, 11, 19, 1, 0, 0, 0, time.UTC)
+	skilleval.Guardar(estado, skilleval.Nota{Skill: "systematic-debugging", Hash: h1, Tipo: "general", Nota: 0.9, Fecha: d0})
+	h2 := instalarSkill(t, p, "systematic-debugging", "v2")
+	skilleval.Guardar(estado, skilleval.Nota{Skill: "systematic-debugging", Hash: h2, Tipo: "general", Nota: 0.2, Fecha: d0.Add(time.Hour)})
+	instalarSkill(t, p, "systematic-debugging", "v1") // vuelve a v1
+	if txt := contratoLanzado(t, p, term); !strings.Contains(txt, "systematic-debugging 0.90") {
+		t.Fatalf("v1 tiene su propia nota: %s", txt)
+	}
+	instalarSkill(t, p, "systematic-debugging", "v3") // editada y sin evaluar
+	p, term, _ = proyectoDePrueba(t, "")              // otro lanzamiento: el worker anterior ya tenía su contrato
+	instalarSkill(t, p, "systematic-debugging", "v3")
+	if txt := contratoLanzado(t, p, term); !strings.Contains(txt, "systematic-debugging sin nota") {
+		t.Fatalf("v3 no se evaluó: %s", txt)
+	}
+}
+
+func TestLanzarSigueConUnaLineaRotaEnLasNotas(t *testing.T) {
+	estado := t.TempDir()
+	t.Setenv("ORQ_STATE", estado)
+	p, term, _ := proyectoDePrueba(t, "")
+	h := instalarSkill(t, p, "systematic-debugging", "v1")
+	skilleval.Guardar(estado, skilleval.Nota{Skill: "systematic-debugging", Hash: h, Tipo: "general", Nota: 0.9})
+	f, _ := os.OpenFile(skilleval.RutaNotas(estado), os.O_APPEND|os.O_WRONLY, 0o644)
+	f.WriteString("{\n")
+	f.Close()
+	if txt := contratoLanzado(t, p, term); !strings.Contains(txt, "systematic-debugging 0.90") {
+		t.Fatalf("la fila buena se conserva: %s", txt)
 	}
 }
