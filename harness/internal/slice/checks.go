@@ -58,7 +58,11 @@ func FalloDeChecks(rs []ResultadoCheck) string {
 	var xs []string
 	for _, r := range rs {
 		if r.Resultado == CheckFallo {
-			xs = append(xs, fmt.Sprintf("check %s falla (exit %d): %s", r.Nombre, r.Exit, r.Salida))
+			x := fmt.Sprintf("check %s falla (exit %d): %s", r.Nombre, r.Exit, r.Salida)
+			if r.Exit == 127 {
+				x += " [infraestructura: la caja no ve el comando; suma su toolchain a sandbox.ro en limits.json]"
+			}
+			xs = append(xs, x)
 		}
 	}
 	return strings.Join(xs, "; ")

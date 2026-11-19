@@ -103,3 +103,11 @@ func TestVerificarSinChecksComoAntes(t *testing.T) {
 		t.Fatalf("%v %+v", err, e)
 	}
 }
+
+// A tool the box cannot see is an infrastructure failure: it still blocks, and says so.
+func TestCheckSinHerramientaEsInfraestructura(t *testing.T) {
+	got := FalloDeChecks([]ResultadoCheck{{Nombre: "types", Cmd: "tsc", Exit: 127, Resultado: CheckFallo, Salida: "sh: 1: tsc: not found"}})
+	if !strings.Contains(got, "check types falla (exit 127)") || !strings.Contains(got, "infraestructura") || !strings.Contains(got, "sandbox.ro") {
+		t.Fatalf("got %q", got)
+	}
+}
