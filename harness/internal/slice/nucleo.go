@@ -357,6 +357,18 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	}
 	rec := &Recibo{Attempt: e.Attempt(), Head: head, Bundle: e.Huella, Runner: Version, Cmd: e.Cmd,
 		Exit: code, Salida: cola(out, 20), TS: now.UTC().Truncate(time.Second), Resultado: "paso", Aislado: true, Checks: checks}
+	if rec.DefinicionesChecks, err = r.definicionesCambiadas(e.SHARojo, head); err != nil {
+		return e, out, err
+	}
+	if rec.TestsBorrados, err = r.testsBorrados(e.SHARojo, head); err != nil {
+		return e, out, err
+	}
+	if len(rec.DefinicionesChecks) > 0 {
+		notas = append(notas, "check definitions changed: "+strings.Join(rec.DefinicionesChecks, ", "))
+	}
+	if len(rec.TestsBorrados) > 0 {
+		notas = append(notas, "tests deleted: "+strings.Join(rec.TestsBorrados, ", "))
+	}
 	var vnota string
 	ok, vnota = veredicto(ok, cnt, e.Omitir)
 	if falla := FalloDeChecks(checks); falla != "" {

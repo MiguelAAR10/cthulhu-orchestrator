@@ -24,9 +24,12 @@ func Check(cwd string) ([]slice.ResultadoCheck, error) {
 		return nil, errors.New("orq check: no estás dentro de un repositorio git")
 	}
 	dir := filepath.Clean(strings.TrimSpace(string(out)))
-	root := dir
+	root, rojo := dir, ""
 	if m, ok := slice.LeerMarca(dir); ok && m.Root != "" {
 		root = m.Root
+		if e, err := (slice.Repo{Root: root, OrqDir: filepath.Join(root, ".orq")}).Load(m.Slice); err == nil && e != nil {
+			rojo = e.SHARojo
+		}
 	}
 	cfg, err := config.Cargar(root)
 	if err != nil {
@@ -36,7 +39,7 @@ func Check(cwd string) ([]slice.ResultadoCheck, error) {
 	if len(cs) == 0 {
 		return nil, ErrSinChecks
 	}
-	return slice.CorrerChecks(cs, func(cmd string) (string, int, error) {
+	rs, err := slice.CorrerChecks(cs, func(cmd string) (string, int, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), slice.TimeoutDefecto)
 		defer cancel()
 		c := exec.CommandContext(ctx, "sh", "-c", cmd)
@@ -53,4 +56,14 @@ func Check(cwd string) ([]slice.ResultadoCheck, error) {
 		}
 		return buf.String(), -1, err
 	})
+	if err != nil {
+		return rs, err
+	}
+	for _, c := range cs {
+		// Fuera de un clon de slice no hay rojo contra el que comparar: la guardia corre al verificar.
+		if c.Interno() && rojo != "" {
+			rs = append(rs, slice.SupresionesEnCopia(dir, rojo, c))
+		}
+	}
+	return rs, nil
 }

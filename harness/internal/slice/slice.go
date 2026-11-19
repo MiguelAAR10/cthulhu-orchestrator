@@ -135,6 +135,11 @@ type Recibo struct {
 	Nota       string    `json:"nota,omitempty"`
 	// Checks son lint, tipos, pruebas y guardias del proyecto, corridos sobre el mismo commit.
 	Checks []ResultadoCheck `json:"checks,omitempty"`
+	// DefinicionesChecks: archivos que definen lo que corre un check y que el slice cambió. El cierre
+	// aceptado pide --acepto-checks.
+	DefinicionesChecks []string `json:"definiciones_checks,omitempty"`
+	// TestsBorrados: archivos de prueba que el slice borró o renombró.
+	TestsBorrados []string `json:"tests_borrados,omitempty"`
 }
 
 // Huella une el contenido de cada archivo del paquete del examen y el comando.
@@ -190,6 +195,8 @@ type Repo struct {
 	MaxSlices int            // abiertos a la vez; 0 = MaxSlicesDefecto
 	Caja      Caja           // sandbox donde corre todo lo que escribió un worker; nil = bubblewrap
 	Checks    []config.Check // del proyecto, en orden; vacío = no se corre ninguno
+	// Definiciones son archivos que el proyecto suma a los que definen lo que corre un check.
+	Definiciones []string
 }
 
 func (r Repo) dirSlices() string           { return filepath.Join(r.OrqDir, "slices") }

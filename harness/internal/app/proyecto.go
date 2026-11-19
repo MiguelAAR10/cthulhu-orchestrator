@@ -95,7 +95,7 @@ func (p Proyecto) Slices() slice.Repo {
 	if base == "" {
 		base = filepath.Join(home, "worktrees")
 	}
-	r := slice.Repo{Root: p.Root, OrqDir: p.Dir, Worktree: base, Checks: p.Cfg.ChecksEnOrden()}
+	r := slice.Repo{Root: p.Root, OrqDir: p.Dir, Worktree: base, Checks: p.Cfg.ChecksEnOrden(), Definiciones: p.Cfg.ArchivosDefinicion()}
 	if l, err := limits.Load(limits.DefaultPath()); err == nil {
 		r.MaxSlices = l.MaxSlices
 	}

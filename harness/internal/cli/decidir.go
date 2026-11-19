@@ -40,6 +40,9 @@ func edad(d time.Duration) string {
 	return fmt.Sprintf("%dm", int(d.Minutes()))
 }
 
+// maxDiffDefiniciones acota cuántas líneas del diff de definiciones muestra la página.
+const maxDiffDefiniciones = 80
+
 func cabeceraDecision(pd *app.PaginaDecision, now time.Time) string {
 	e := pd.Estado
 	return fmt.Sprintf("%s «%s» · %s hace %s · decide el Owner", e.Attempt(), e.Titulo, e.Fase, edad(now.Sub(e.Recibo.TS)))
@@ -86,6 +89,16 @@ func seccionesDecision(pd *app.PaginaDecision) []seccion {
 	if len(rec.Checks) == 0 {
 		checks.Lineas = append(checks.Lineas, alerta("sin checks en el recibo: corre orq init y vuelve a verificar"))
 	}
+	if len(rec.DefinicionesChecks) > 0 {
+		checks.Lineas = append(checks.Lineas, alerta("check definitions changed: %s · el slice cambió lo que corre un check; aceptar pide --acepto-checks", strings.Join(rec.DefinicionesChecks, ", ")))
+		lineas := strings.Split(pd.DiffDefiniciones, "\n")
+		if len(lineas) > maxDiffDefiniciones {
+			lineas = append(lineas[:maxDiffDefiniciones], fmt.Sprintf("… diff recortado: git diff %s %s -- %s", slice.Corto(e.SHARojo), slice.Corto(rec.Head), strings.Join(rec.DefinicionesChecks, " ")))
+		}
+		for _, l := range lineas {
+			checks.Lineas = append(checks.Lineas, alerta("%s", l))
+		}
+	}
 	out = append(out, checks)
 
 	archivos := seccion{Titulo: "Archivos", Fuente: "alcance de orq slice abrir y zonas, contra git diff del rojo a la punta"}
@@ -107,6 +120,9 @@ func seccionesDecision(pd *app.PaginaDecision) []seccion {
 	}
 	if len(pd.Alineacion.Cambiados) > slice.MaxArchivos {
 		archivos.Lineas = append(archivos.Lineas, alerta("%d archivos cambiados: ya no es un slice delgado", len(pd.Alineacion.Cambiados)))
+	}
+	for _, f := range rec.TestsBorrados {
+		archivos.Lineas = append(archivos.Lineas, alerta("test borrado por el slice: %s", f))
 	}
 	for _, av := range pd.Avisos {
 		archivos.Lineas = append(archivos.Lineas, alerta("%s", av))
@@ -155,8 +171,12 @@ func seccionesDecision(pd *app.PaginaDecision) []seccion {
 	}
 	out = append(out, demo)
 
+	aceptar := normal("aceptar:  orq slice cerrar --slice %s --aceptado", e.NN)
+	if len(rec.DefinicionesChecks) > 0 {
+		aceptar = alerta("aceptar:  orq slice cerrar --slice %s --aceptado --acepto-checks (tras leer el diff de Checks)", e.NN)
+	}
 	out = append(out, seccion{Titulo: "Decide", Fuente: "orq slice cerrar", Lineas: []linea{
-		normal("aceptar:  orq slice cerrar --slice %s --aceptado", e.NN),
+		aceptar,
 		normal(`rechazar: orq slice cerrar --slice %s --rechazado "motivo"`, e.NN),
 	}})
 	return out

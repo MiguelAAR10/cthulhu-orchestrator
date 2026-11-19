@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"orq/internal/config"
+	"orq/internal/slice"
 )
 
 func escribirEn(t *testing.T, root, rel, body string) {
@@ -33,10 +34,10 @@ func TestInitEscribeChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	cs := c.ChecksEnOrden()
-	if len(cs) != 3 || !strings.HasPrefix(cs[0].Cmd, "out=$(gofmt -l . 2>&1)") || cs[1].Cmd != "go vet ./..." || cs[2].Cmd != "go test ./..." {
+	if len(cs) != 4 || cs[3].Nombre != "supresiones" || !strings.HasPrefix(cs[0].Cmd, "out=$(gofmt -l . 2>&1)") || cs[1].Cmd != "go vet ./..." || cs[2].Cmd != "go test ./..." {
 		t.Fatalf("checks = %+v", cs)
 	}
-	contiene(t, out, "check lint: out=$(gofmt -l . 2>&1)", "check types: go vet ./...", "check tests: go test ./...")
+	contiene(t, out, "check lint: out=$(gofmt -l . 2>&1)", "check types: go vet ./...", "check tests: go test ./...", "check supresiones: "+slice.CmdSupresiones)
 }
 
 func TestInitNoPisaChecksDelOwner(t *testing.T) {
@@ -112,7 +113,14 @@ func TestCheckEnClonLeeConfigDelProyecto(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s%s", code, out, errs)
 	}
-	contiene(t, out, "lint  paso", "3 pasan · 0 fallan · 0 omitidos")
+	contiene(t, out, "lint  paso", "4 pasan · 0 fallan · 0 omitidos")
+	// The suppressions guardrail runs in the worker's loop too, on what the clone adds since the red.
+	escribirEn(t, wt, "a.ts", "let a = 1\n// @ts-ignore\n")
+	out, _, code = run(t, "check")
+	if code == 0 {
+		t.Fatalf("suppression passed:\n%s", out)
+	}
+	contiene(t, out, "supresiones  fallo", "a.ts:2: // @ts-ignore")
 }
 
 func TestGuiaWorkerPideOrqCheck(t *testing.T) {

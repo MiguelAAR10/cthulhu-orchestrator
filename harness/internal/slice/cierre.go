@@ -52,9 +52,14 @@ func (r Repo) retirable(e *Estado, dir, rama, nombre string) string {
 	return ""
 }
 
+// CerrarOpc son las opciones de un cierre.
+type CerrarOpc struct {
+	AceptoChecks bool // el Owner vio el diff de los archivos que definen los checks y lo acepta
+}
+
 // Cerrar con aceptado integra, revalida, publica la rama base y limpia.
 // Cada paso queda guardado: si se interrumpe, volver a correrlo continúa donde quedó.
-func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time) (*Registro, []string, string, error) {
+func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc ...CerrarOpc) (*Registro, []string, string, error) {
 	soltar, err := r.bloqueo(nn)
 	if err != nil {
 		return nil, nil, "", err
@@ -94,6 +99,10 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time) (*R
 			}
 			if in.Punta != rec.Head || in.Sucio != "" {
 				return nil, nil, "", errors.New("el recibo no es de este intento o de este commit: corre `orq slice verificar`")
+			}
+			if len(rec.DefinicionesChecks) > 0 && !(len(opc) > 0 && opc[0].AceptoChecks) {
+				return nil, nil, "", fmt.Errorf("%s cambió lo que corre un check (%s): mira el diff en `orq slice decidir`; si el Owner lo acepta, `orq slice cerrar --aceptado --acepto-checks`",
+					e.Attempt(), strings.Join(rec.DefinicionesChecks, ", "))
 			}
 			if err := r.anotarDecision(e, "aceptado", "", now); err != nil {
 				return nil, nil, "", err

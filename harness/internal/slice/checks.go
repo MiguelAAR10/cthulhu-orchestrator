@@ -36,6 +36,9 @@ type Correr func(cmd string) (out string, code int, err error)
 func CorrerChecks(cs []config.Check, correr Correr) ([]ResultadoCheck, error) {
 	var out []ResultadoCheck
 	for _, c := range cs {
+		if c.Interno() {
+			continue // lo corre orq sobre el diff del slice, no un comando
+		}
 		if c.Cmd == "" {
 			out = append(out, ResultadoCheck{Nombre: c.Nombre, Resultado: CheckOmitido, Motivo: c.Omitir})
 			continue
@@ -76,7 +79,8 @@ func primeras(s string, n int) string {
 	return strings.Join(l, "\n")
 }
 
-// checksEn corre los checks del proyecto sobre una copia limpia de sha, en la caja.
+// checksEn corre los checks del proyecto sobre una copia limpia de sha, en la caja, y las guardias
+// de orq sobre el diff del rojo a sha.
 func (r Repo) checksEn(e *Estado, sha string) ([]ResultadoCheck, error) {
 	if len(r.Checks) == 0 {
 		return nil, nil
@@ -86,8 +90,21 @@ func (r Repo) checksEn(e *Estado, sha string) ([]ResultadoCheck, error) {
 		return nil, err
 	}
 	defer limpiar()
-	return CorrerChecks(r.Checks, func(cmd string) (string, int, error) {
+	rs, err := CorrerChecks(r.Checks, func(cmd string) (string, int, error) {
 		out, code, _, err := r.correrEn(dir, cmd, e.limite())
 		return out, code, err
 	})
+	if err != nil {
+		return rs, err
+	}
+	for _, c := range r.Checks {
+		if c.Interno() {
+			res, err := r.supresiones(c, e.SHARojo, sha)
+			if err != nil {
+				return rs, fmt.Errorf("check %s: %w", c.Nombre, err)
+			}
+			rs = append(rs, res)
+		}
+	}
+	return rs, nil
 }

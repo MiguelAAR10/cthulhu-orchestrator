@@ -48,25 +48,52 @@ type Check struct {
 	Nombre string `json:"-"`
 	Cmd    string `json:"cmd,omitempty"`
 	Omitir string `json:"omitir,omitempty"`
+	// Patrones solo en checks.supresiones: marcas de supresión que se suman a las de SupresionesBase.
+	Patrones []string `json:"patrones,omitempty"`
+	// Archivos solo en checks.definiciones: más archivos que definen lo que corre un check.
+	Archivos []string `json:"archivos,omitempty"`
 }
+
+// Nombres reservados del bloque checks. supresiones es una guardia de orq, encendida siempre que hay
+// bloque checks; se apaga con omitir. definiciones no corre: lista archivos que deciden qué corre un check.
+const (
+	Supresiones  = "supresiones"
+	Definiciones = "definiciones"
+)
+
+// SupresionesBase son las marcas que la guardia supresiones busca en las líneas que suma un slice.
+var SupresionesBase = []string{"//nolint", "eslint-disable", "@ts-ignore", "@ts-expect-error", "# type: ignore", "# noqa", "#[allow("}
+
+// Interno dice si el check lo corre orq y no un comando del proyecto.
+func (ch Check) Interno() bool { return ch.Nombre == Supresiones }
+
+// Marcas son las marcas de supresión que busca la guardia: las de base y las del proyecto.
+func (ch Check) Marcas() []string { return append(slices.Clone(SupresionesBase), ch.Patrones...) }
+
+// ArchivosDefinicion son los archivos que el proyecto suma a los que definen sus checks.
+func (c Config) ArchivosDefinicion() []string { return c.Checks[Definiciones].Archivos }
 
 // ChecksBase son los que todo bloque checks declara; cualquier otro nombre es una guardia extra.
 var ChecksBase = []string{"lint", "types", "tests"}
 
 var nombreCheck = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
-// ChecksEnOrden devuelve lint, types y tests, y después las guardias extra por nombre.
+// ChecksEnOrden devuelve lint, types y tests, y después las guardias extra por nombre, supresiones
+// incluida aunque el bloque no la nombre. Sin bloque checks no devuelve ninguno.
 func (c Config) ChecksEnOrden() []Check {
 	var extra []string
 	for n := range c.Checks {
-		if !slices.Contains(ChecksBase, n) {
+		if !slices.Contains(ChecksBase, n) && n != Definiciones {
 			extra = append(extra, n)
 		}
+	}
+	if _, ok := c.Checks[Supresiones]; len(c.Checks) > 0 && !ok {
+		extra = append(extra, Supresiones)
 	}
 	sort.Strings(extra)
 	var out []Check
 	for _, n := range append(slices.Clone(ChecksBase), extra...) {
-		if ch, ok := c.Checks[n]; ok {
+		if ch, ok := c.Checks[n]; ok || n == Supresiones {
 			ch.Nombre = n
 			out = append(out, ch)
 		}
@@ -385,7 +412,19 @@ func (c Config) validarChecks() error {
 		if !nombreCheck.MatchString(n) {
 			return fmt.Errorf("checks.%s: nombre inválido; usa minúsculas, cifras y guiones", n)
 		}
-		if (strings.TrimSpace(ch.Cmd) == "") == (strings.TrimSpace(ch.Omitir) == "") {
+		sinCmd, sinOmitir := strings.TrimSpace(ch.Cmd) == "", strings.TrimSpace(ch.Omitir) == ""
+		switch {
+		case n == Definiciones:
+			if !sinCmd || !sinOmitir || len(ch.Patrones) > 0 || len(ch.Archivos) == 0 {
+				return errors.New("checks.definiciones: lleva solo archivos, la lista de los que definen lo que corre un check")
+			}
+		case n == Supresiones:
+			if !sinCmd || len(ch.Archivos) > 0 || (!sinOmitir && len(ch.Patrones) > 0) {
+				return errors.New("checks.supresiones: la corre orq; lleva patrones para sumar marcas u omitir (el motivo) para apagarla")
+			}
+		case len(ch.Patrones) > 0 || len(ch.Archivos) > 0:
+			return fmt.Errorf("checks.%s: patrones va solo en checks.supresiones y archivos solo en checks.definiciones", n)
+		case sinCmd == sinOmitir:
 			return fmt.Errorf("checks.%s: lleva cmd u omitir (el motivo), uno de los dos", n)
 		}
 	}

@@ -119,7 +119,9 @@ func escribirChecks(root string, stdout io.Writer) error {
 		return err
 	}
 	for _, ch := range (config.Config{Checks: cs}).ChecksEnOrden() {
-		if ch.Cmd != "" {
+		if ch.Interno() {
+			fmt.Fprintf(stdout, "check %s: %s\n", ch.Nombre, slice.CmdSupresiones)
+		} else if ch.Cmd != "" {
 			fmt.Fprintf(stdout, "check %s: %s\n", ch.Nombre, ch.Cmd)
 		} else {
 			fmt.Fprintf(stdout, "check %s omitido: %s\n", ch.Nombre, ch.Omitir)

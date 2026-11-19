@@ -670,11 +670,12 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fs.SetOutput(stderr)
 		ok := fs.Bool("aceptado", false, "el Owner aceptó la demo")
 		motivo := fs.String("rechazado", "", "motivo del rechazo en una línea")
-		if fs.Parse(args[1:]) != nil || *ok == (*motivo != "") {
-			fmt.Fprintln(stderr, "uso: orq slice cerrar --aceptado | --rechazado \"motivo\"")
+		aceptoChecks := fs.Bool("acepto-checks", false, "el Owner leyó el diff de los archivos que definen los checks y lo acepta")
+		if fs.Parse(args[1:]) != nil || *ok == (*motivo != "") || *aceptoChecks && !*ok {
+			fmt.Fprintln(stderr, "uso: orq slice cerrar --aceptado [--acepto-checks] | --rechazado \"motivo\"")
 			return 1
 		}
-		reg, cuarentena, out, err := r.Cerrar(nn, *ok, *motivo, time.Now())
+		reg, cuarentena, out, err := r.Cerrar(nn, *ok, *motivo, time.Now(), slice.CerrarOpc{AceptoChecks: *aceptoChecks})
 		show(out)
 		if errors.Is(err, slice.ErrYaCerrado) {
 			fmt.Fprintf(stdout, "S-%s ya estaba cerrado como %s; no se repite nada\n", reg.NN, reg.Result)

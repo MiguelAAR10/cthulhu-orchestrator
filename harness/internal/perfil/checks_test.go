@@ -29,7 +29,7 @@ func TestChecksGo(t *testing.T) {
 		"types": {Cmd: "go vet ./..."},
 		"tests": {Cmd: "go test ./..."},
 	}
-	if len(got) != 3 || got["lint"] != want["lint"] || got["types"] != want["types"] || got["tests"] != want["tests"] {
+	if len(got) != 3 || got["lint"].Cmd != want["lint"].Cmd || got["types"].Cmd != want["types"].Cmd || got["tests"].Cmd != want["tests"].Cmd {
 		t.Fatalf("got %+v", got)
 	}
 }

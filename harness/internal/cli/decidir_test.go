@@ -332,3 +332,30 @@ func TestDecidirExit127EsInfraestructura(t *testing.T) {
 		t.Fatalf("exit 127 shown as fallo:\n%s", b.String())
 	}
 }
+
+// A slice that changes what a check runs is flagged with the diff, and the close asks the Owner for it.
+func TestDecidirDefinicionesDeChecks(t *testing.T) {
+	sliceVerdeCon(t, nil, func(wt string) {
+		commitClon(t, wt, "package.json", `{"scripts":{"test":"exit 0"}}`+"\n")
+	})
+	out, _, code := run(t, "slice", "decidir")
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	contiene(t, out, "!! check definitions changed: package.json", `!! +{"scripts":{"test":"exit 0"}}`, "--acepto-checks")
+	if _, errs, code := run(t, "slice", "cerrar", "--aceptado"); code == 0 || !strings.Contains(errs, "--acepto-checks") {
+		t.Fatalf("closed without --acepto-checks: %d %s", code, errs)
+	}
+	if out, errs, code := run(t, "slice", "cerrar", "--aceptado", "--acepto-checks"); code != 0 {
+		t.Fatalf("with --acepto-checks: %d %s %s", code, out, errs)
+	}
+}
+
+// Every test file the slice removed or renamed is flagged on the page.
+func TestDecidirTestsBorrados(t *testing.T) {
+	pd := &app.PaginaDecision{Pagina: &slice.Pagina{Alineacion: &slice.Alineacion{}, Estado: &slice.Estado{NN: "01",
+		Recibo: &slice.Recibo{TestsBorrados: []string{"x_test.go", "a.spec.ts → a.ts"}}}}}
+	var b strings.Builder
+	textoDecision(&b, "", seccionesDecision(pd))
+	contiene(t, b.String(), "!! test borrado por el slice: x_test.go", "!! test borrado por el slice: a.spec.ts → a.ts")
+}

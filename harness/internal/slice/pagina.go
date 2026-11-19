@@ -16,6 +16,8 @@ type Pagina struct {
 	Alineacion *Alineacion
 	Examen     []diario.Evento // exámenes sumados o corregidos desde que se abrió
 	Avisos     []string        // desvíos de la página misma, p. ej. la punta ya no es el commit verificado
+	// DiffDefiniciones es el diff, del rojo al verificado, de los archivos que definen lo que corre un check.
+	DiffDefiniciones string
 }
 
 // Pagina arma la página de decisión del slice nn; solo existe para un slice VERIFICADO.
@@ -61,7 +63,11 @@ func (r Repo) Pagina(nn string) (*Pagina, error) {
 	if err != nil {
 		return nil, err
 	}
-	pg := &Pagina{Estado: e, Alineacion: a, Avisos: avisos}
+	diffDefs, err := r.DiffDefiniciones(e.SHARojo, rec.Head, rec.DefinicionesChecks)
+	if err != nil {
+		return nil, err
+	}
+	pg := &Pagina{Estado: e, Alineacion: a, Avisos: avisos, DiffDefiniciones: diffDefs}
 	for _, ev := range evs {
 		if ev.Tipo == "examen" && ev.Slice == e.NN && !ev.TS.Before(e.Abierto) {
 			pg.Examen = append(pg.Examen, ev)

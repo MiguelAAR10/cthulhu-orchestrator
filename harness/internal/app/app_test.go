@@ -354,10 +354,17 @@ func TestCodexNoSeLanza(t *testing.T) {
 	}
 }
 
+func TestSlicesLlevaLasDefiniciones(t *testing.T) {
+	p, _, _ := proyectoDePrueba(t, `{"checks":{"lint":{"cmd":"true"},"types":{"omitir":"sin tipos"},"tests":{"cmd":"true"},"definiciones":{"archivos":["Makefile"]}}}`)
+	if got := p.Slices().Definiciones; len(got) != 1 || got[0] != "Makefile" {
+		t.Fatalf("definiciones = %v", got)
+	}
+}
+
 func TestSlicesLlevaLosChecksDelProyecto(t *testing.T) {
 	p, _, _ := proyectoDePrueba(t, `{"checks":{"lint":{"cmd":"true"},"types":{"omitir":"sin tipos"},"tests":{"cmd":"go test ./..."}}}`)
 	cs := p.Slices().Checks
-	if len(cs) != 3 || cs[0].Nombre != "lint" || cs[1].Omitir != "sin tipos" || cs[2].Cmd != "go test ./..." {
+	if len(cs) != 4 || cs[3].Nombre != config.Supresiones || cs[0].Nombre != "lint" || cs[1].Omitir != "sin tipos" || cs[2].Cmd != "go test ./..." {
 		t.Fatalf("checks = %+v", cs)
 	}
 }
