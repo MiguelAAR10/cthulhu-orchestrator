@@ -112,3 +112,12 @@ Every test above was seen failing before its code existed: a build failure for a
 
 - `orq skill eval` could pass `--model`/`--judge-model` from config, so that scores taken on different days stay comparable.
 - staticcheck reports three pre-existing ST1005 capitalized error strings in `app/workers.go:85,88` and `cli/plan.go:21`. They are outside the lint target and untouched.
+
+## Review fixes, round 1
+
+Fixes for `reviews/d3b-review.md`. Each has a test that failed before the fix.
+
+1. **Failed runs.** `skilleval.Leer` now reads `arms.with[].error` and `.aborted`. Any failed run makes the result partial (`Fallidas`, `Error`). If every run failed, `Correr` returns an error with the first error text (e.g. `timed out after 1s`) and nothing is stored. Ranking and `comparar` already skip partial rows. Test: the review's JSON, exit 1 (`TestCorrerNoGuardaSiTodasFallaron`). The shared fixture no longer carries an errored run.
+2. **Hash at launch.** `Ordenar` takes the hash of each skill as installed (`skilleval.Hash` of `.claude/skills/<name>`, the same function `skill eval` uses) and counts only rows with that hash; otherwise "sin nota". Test: eval v1, eval v2, revert to v1 gives v1's own score; an edited, unevaluated v3 is "sin nota" (`TestLanzarUsaLaNotaDelHashInstalado`, `TestOrdenarSoloCuentaElHashInstalado`).
+3. **Bad notes line.** New `LeerNotas` returns good rows plus the bad lines. Launch warns on stderr and goes on, even if the file cannot be read. `Notas` (used by `orq skill notas`/`comparar`) still fails on a bad line. Test: `TestLanzarSigueConUnaLineaRotaEnLasNotas`.
+4. **`orq skill eval .`** resolves the directory with `filepath.Abs` before taking the name. Test: `TestSkillEvalPuntoUsaElNombreDeLaCarpeta`.

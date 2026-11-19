@@ -27,6 +27,8 @@ type Resultado struct {
 	CostoUSD float64
 	Claude   string
 	Parcial  bool
+	Fallidas int    // corridas con error o abortadas
+	Error    string // el primer error de una corrida
 }
 
 // Leer interpreta aggregate-result.json (schemaVersion 1).
@@ -45,7 +47,10 @@ func Leer(raw []byte) (Resultado, error) {
 				Score float64 `json:"score"`
 			} `json:"aggregates"`
 			Arms struct {
-				With []json.RawMessage `json:"with"`
+				With []struct {
+					Error   string `json:"error"`
+					Aborted bool   `json:"aborted"`
+				} `json:"with"`
 			} `json:"arms"`
 		} `json:"cases"`
 	}
@@ -59,7 +64,21 @@ func Leer(raw []byte) (Resultado, error) {
 	for _, c := range a.Cases {
 		r.Casos = append(r.Casos, Caso{Nombre: c.Name, Nota: c.Aggregates.Score})
 		r.Corridas += len(c.Arms.With)
+		for _, w := range c.Arms.With {
+			if w.Error == "" && !w.Aborted {
+				continue
+			}
+			r.Fallidas++
+			if r.Error == "" {
+				r.Error = w.Error
+				if r.Error == "" {
+					r.Error = "corrida abortada"
+				}
+			}
+		}
 	}
+	// Una corrida con error o abortada no puntuó: la nota no cubre todo lo pedido.
+	r.Parcial = r.Parcial || r.Fallidas > 0
 	return r, nil
 }
 
@@ -86,6 +105,9 @@ func Correr(ctx context.Context, plugin, jsonPath string, maxUSD float64) (Resul
 	if raw, err := os.ReadFile(jsonPath); err == nil && salida >= 0 && salida <= 2 {
 		r, err := Leer(raw)
 		r.Parcial = r.Parcial || salida == 2
+		if err == nil && r.Corridas > 0 && r.Fallidas == r.Corridas {
+			return Resultado{}, fmt.Errorf("las %d corridas fallaron, no se guarda nota: %s", r.Corridas, r.Error)
+		}
 		return r, err
 	}
 	msg := strings.TrimSpace(errb.String())

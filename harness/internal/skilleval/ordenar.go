@@ -20,11 +20,12 @@ func (e Eleccion) String() string {
 
 // Ordenar pone primero las skills con nota para el tipo, de mayor a menor, y después las que no
 // tienen nota en el orden dado. Una nota parcial no cuenta. Con minimo, las que quedan por debajo
-// van a fuera.
-func Ordenar(nombres []string, ns []Nota, tipo string, minimo *float64) (elegidas, fuera []Eleccion) {
+// van a fuera. hashes es el hash de cada skill tal como está instalada: solo cuentan las notas de ese
+// hash; una skill sin hash o sin notas de él queda sin nota.
+func Ordenar(nombres []string, ns []Nota, hashes map[string]string, tipo string, minimo *float64) (elegidas, fuera []Eleccion) {
 	ultima := map[string]Nota{}
 	for _, n := range ns {
-		if n.Tipo != tipo || n.Parcial {
+		if n.Tipo != tipo || n.Parcial || n.Hash == "" || n.Hash != hashes[n.Skill] {
 			continue
 		}
 		if u, ok := ultima[n.Skill]; !ok || !n.Fecha.Before(u.Fecha) {

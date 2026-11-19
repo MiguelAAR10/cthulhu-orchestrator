@@ -39,7 +39,11 @@ func runSkillEval(args []string, stdout, stderr io.Writer) int {
 	if *tipo == "" {
 		*tipo = tipoDefecto()
 	}
-	dir := args[0]
+	dir, err := filepath.Abs(args[0]) // `.` no es un nombre de skill
+	if err != nil {
+		fmt.Fprintln(stderr, "orq skill eval:", err)
+		return 1
+	}
 	hash, err := skilleval.Hash(dir)
 	if err != nil {
 		fmt.Fprintln(stderr, "orq skill eval:", err)
