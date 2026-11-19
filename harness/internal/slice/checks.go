@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"orq/internal/config"
-	"orq/internal/sandbox"
 )
 
 // Resultados de un check en el recibo. Omitido no es pasado: el proyecto no tiene ese comando.
@@ -92,8 +91,7 @@ func (r Repo) checksEn(e *Estado, sha string) ([]ResultadoCheck, error) {
 	}
 	defer limpiar()
 	rs, err := CorrerChecks(r.Checks, func(cmd string) (string, int, error) {
-		// La caja no ve $HOME: la toolchain de cada herramienta del check se monta de solo lectura.
-		out, code, _, err := r.correrEn(dir, cmd, e.limite(), sandbox.RODe(sandbox.Herramientas(cmd))...)
+		out, code, _, err := r.correrEn(dir, cmd, e.limite())
 		return out, code, err
 	})
 	if err != nil {

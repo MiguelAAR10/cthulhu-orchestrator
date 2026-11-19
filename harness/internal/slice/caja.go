@@ -154,10 +154,11 @@ func (r Repo) copiaDe(sha string) (string, func(), error) {
 }
 
 // correrEn corre cmd con sh dentro de la caja, en la copia dir, sin red.
-// extraRO suma montajes de solo lectura: la toolchain de un check.
-func (r Repo) correrEn(dir, cmd string, limite time.Duration, extraRO ...string) (string, int, bool, error) {
+// La caja no ve $HOME: la toolchain de cada herramienta que nombra cmd (examen, --sano o check)
+// se monta de solo lectura.
+func (r Repo) correrEn(dir, cmd string, limite time.Duration) (string, int, bool, error) {
 	ro, vinc := r.depsEn(dir)
-	ro = append(ro, extraRO...)
+	ro = append(ro, sandbox.RODe(sandbox.Herramientas(cmd))...)
 	return r.enCaja(sandbox.Spec{RW: []string{dir}, RO: ro, Vinculos: vinc, Cwd: dir, Env: entornoExamen()}, limite, nil, "sh", "-c", cmd)
 }
 
