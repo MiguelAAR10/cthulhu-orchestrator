@@ -38,9 +38,9 @@ type ResultadoCheck struct {
 // Correr corre un comando de shell y devuelve su salida y su código; err solo si no pudo arrancar.
 type Correr func(cmd string) (out string, code int, err error)
 
-// CorrerChecks corre cada check en orden con correr. Un error de arranque corta: es de la
+// CorrerChecks corre cada check en orden con correr, en el proyecto de dir. Un error de arranque corta: es de la
 // infraestructura, no un defecto del código.
-func CorrerChecks(cs []config.Check, correr Correr) ([]ResultadoCheck, error) {
+func CorrerChecks(cs []config.Check, dir string, correr Correr) ([]ResultadoCheck, error) {
 	var out []ResultadoCheck
 	for _, c := range cs {
 		if c.Interno() {
@@ -50,7 +50,7 @@ func CorrerChecks(cs []config.Check, correr Correr) ([]ResultadoCheck, error) {
 			out = append(out, ResultadoCheck{Nombre: c.Nombre, Resultado: CheckOmitido, Motivo: c.Omitir})
 			continue
 		}
-		salida, code, err := correr(c.Ejecutable())
+		salida, code, err := correr(c.EjecutableEn(dir))
 		if err != nil {
 			return out, fmt.Errorf("check %s no arrancó: %w", c.Nombre, err)
 		}
@@ -97,7 +97,7 @@ func (r Repo) checksEn(e *Estado, sha string) ([]ResultadoCheck, error) {
 		return nil, err
 	}
 	defer limpiar()
-	rs, err := CorrerChecks(r.Checks, func(cmd string) (string, int, error) {
+	rs, err := CorrerChecks(r.Checks, dir, func(cmd string) (string, int, error) {
 		out, code, _, err := r.correrEn(dir, cmd, e.limite())
 		return out, code, err
 	})

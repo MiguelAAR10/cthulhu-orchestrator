@@ -299,6 +299,9 @@ func (r Repo) integrar(e *Estado) (string, error) {
 		return out, errExamen
 	}
 	ok, nota := veredicto(ok && errExamen == nil && intacto, cnt, e.Omitir)
+	if falta := notaFaltan(e.PruebasExamen, cnt); ok && falta != "" {
+		ok, nota = false, falta
+	}
 	if !ok {
 		if nota != "" {
 			nota = " (" + nota + ")"

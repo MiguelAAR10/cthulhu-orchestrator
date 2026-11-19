@@ -204,3 +204,42 @@ Still open:
   - The mark sees only lines the slice adds. A `.only` already in the red commit is not flagged.
   - Possible next step: resolve `npm run X` from `package.json` and append `-- --forbid-only` when the script is a bare `playwright test`.
 - The rejected `test.only` attempt used one of the two repairs. That is correct (the commit did not pass), but the Orchestrator should know it.
+
+## Review fixes, round 2
+
+Fixes for `reviews/d2b-review-2.md`. The strongest layer comes first.
+
+1. **The exam's own tests must pass by name.** When `abrir` has a counted report (junit, tap or gotest-json), it records the names of the tests that fail in the red. They go in `pruebas_examen`, in the estado and in the contract in git.
+   - `verificar` and the revalidation after the merge require every one of those names to appear in the report as passed. If one is missing, the slice is not verified, and the message names the missing test.
+   - A focused test cannot drop the exam this way, whatever its spelling: `test.only (`, `test['only']`, an alias, `--grep`, `describe.only`.
+   - Names: junit is `classname › name`. TAP is the description without its number, since the number shifts when fewer tests run. gotest-json is `Package Test`.
+   - `orq slice examen` clears the list when it changes the command or corrects an exam file that is already protected, because the names may change. Adding a new exam file keeps the list.
+   - Evidence: `TestFocoNoSaltaElExamen` is the reviewer's repro under `npm run test:e2e` with a JUnit report and no `package.json` script. It covers three spellings. It was seen failing with the check disabled. `TestContarNombres` also covers this.
+2. **`--forbid-only` reaches Playwright through package scripts.** `config.SinOnlyEn(dir, cmd)` reads `package.json` in the clean copy. It resolves `npm run X`, `npm run-script X`, `npm test`, `pnpm [run] X` and `yarn [run] X`.
+   - When the script is a bare `playwright test` (flags allowed), it appends `-- --forbid-only` for npm. If a `--` is already there, it appends only `--forbid-only`. For pnpm and yarn, it appends `--forbid-only`.
+   - A compound script (`playwright test && …`) is left alone, because the flag would reach the last command. Layer 1 covers it.
+   - This applies to the exam and to every check (`Check.EjecutableEn`).
+   - Evidence: `TestSinOnlyEnScripts` and `TestForbidOnlyPorScriptNpm`. The second has no report, so only this layer can stop it. It was seen failing with the old call.
+
+### Real run (reviewer's repro)
+
+- Setup: a static app with `@playwright/test` 1.65.1 and a config with no `forbidOnly`. The script is `"test:e2e": "playwright test"`, so `orq init` wrote `checks.e2e.cmd = npm run test:e2e`.
+- `servidor` is `python3 -m http.server 4173 --bind 127.0.0.1`. The `ORQ_*` variables were temporary, and the binary came from this tree.
+- `abrir 01 --cmd "npm run test:e2e" --bundle playwright.config.ts --reporte results.xml --formato junit` opened red on the assertion and recorded `"pruebas_examen": ["total.spec.ts › cart shows the total"]`.
+- The worker committed `e2e/smoke.spec.ts` with `test.only ('page loads', …)` (with a space), and `index.html` still showed `0`. `orq slice verificar 01` exited 1:
+
+```
+> webapp@1.0.0 test:e2e
+> playwright test --forbid-only
+Error: item focused with '.only' is not allowed due to the '--forbid-only' CLI flag: "smoke.spec.ts page loads"
+   at smoke.spec.ts:2
+orq slice: 1 prueba(s) del examen no aparecen como pasadas en el reporte (¿un test enfocado, --grep o un alias de .only?): total.spec.ts › cart shows the total; check e2e falla (exit 1): 
+(reparación 1 de 2)
+```
+
+Both layers fired: the exam got `--forbid-only` through the npm script, and the report lacked the exam's test by name.
+
+- The worker removed `.only` and set `170`. `verificar` exited 0: `playwright test --forbid-only`, `2 passed`, `S-01/a1 verificado`, 2 run and 0 failed. No `http.server` was left running.
+
+Still open:
+- When the exam runs without a report (`--sin-conteo`), there are no names to require. A compound npm script then relies on the `.only(` mark alone.

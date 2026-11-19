@@ -90,7 +90,7 @@ func (r Repo) examen(e *Estado, sha string) (out string, code int, ok bool, cnt 
 	}
 	defer limpiar()
 	// El reporte anterior se borra dentro de la caja: la ruta la eligió quien escribió el examen.
-	cmd := config.SinOnly(e.Cmd)
+	cmd := config.SinOnlyEn(dir, e.Cmd)
 	if e.Reporte != "" {
 		cmd = "rm -f -- " + comillaSh(e.Reporte) + " 2>/dev/null\n" + cmd
 	}
@@ -236,7 +236,7 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 		Sano: o.Sano, Alcance: o.Alcance, Demo: o.Demo, Base: base, SHARojo: sha, Rama: rama, Worktree: wt, Procedencia: "clon", Host: host,
 		Abierto: now.UTC().Truncate(time.Second), Huella: huella, SalidaRojo: cola(out, 20),
 		Reporte: o.Reporte, Formato: o.Formato, Omitir: o.PermiteOmitir, TimeoutSeg: o.Timeout,
-		SinConteo: o.SinConteo, Vigilados: r.vigiladosEn(sha, cmd, bundle)}
+		SinConteo: o.SinConteo, Vigilados: r.vigiladosEn(sha, cmd, bundle), PruebasExamen: pruebasDelRojo(cnt)}
 	if o.Ruta == RutaFix {
 		e.Ruta = RutaFix
 	}
@@ -387,6 +387,9 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	}
 	var vnota string
 	ok, vnota = veredicto(ok, cnt, e.Omitir)
+	if falta := notaFaltan(e.PruebasExamen, cnt); falta != "" {
+		ok, vnota = false, strings.TrimPrefix(vnota+"; "+falta, "; ")
+	}
 	if falla := FalloDeChecks(checks); falla != "" {
 		if !ok && vnota == "" {
 			vnota = "el examen no pasa"
@@ -640,6 +643,10 @@ func (r Repo) SumarExamen(nn string, nuevos []string, cmd, aprobado string) (*Es
 		if !slices.Contains(bundle, f) {
 			bundle = append(bundle, f)
 		}
+	}
+	// Corregir un examen o cambiar su comando puede renombrar sus pruebas: la lista del rojo deja de valer.
+	if strings.TrimSpace(cmd) != "" || slices.ContainsFunc(nuevos, func(f string) bool { return slices.Contains(e.Bundle, f) }) {
+		e.PruebasExamen = nil
 	}
 	if strings.TrimSpace(cmd) != "" {
 		e.Cmd = cmd

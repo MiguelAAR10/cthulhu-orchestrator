@@ -256,3 +256,87 @@ func TestServidorVigilado(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 }
+
+// pwFocoStub is Playwright with a JUnit report: any focused spec (any spelling: `test.only (`,
+// `test['only']`, an alias) runs alone and passes; otherwise the exam's assertion runs.
+const pwFocoStub = `[ "$1 $2" = "playwright test" ] || exit 64
+if grep -Eqs "only|grep" e2e/*.spec.ts; then
+	printf '<testsuites><testsuite><testcase name="page loads" classname="smoke.spec.ts"></testcase></testsuite></testsuites>' > results.xml
+	echo "1 passed (focused)"; exit 0
+fi
+f=''
+cmp -s total.txt tests/datos.txt || f='<failure message="expected 170"/>'
+printf '<testsuites><testsuite><testcase name="cart shows the total" classname="total.spec.ts">%s</testcase></testsuite></testsuites>' "$f" > results.xml
+[ -z "$f" ]`
+
+// Review 2 repro: `test.only (` (with a space) through `npm run test:e2e` slips past the .only( mark
+// and past --forbid-only. The exam's own failing tests are in the contract: they must pass in the report.
+func TestFocoNoSaltaElExamen(t *testing.T) {
+	for _, spec := range []string{
+		"test.only ('page loads', async ({ page }) => {})\n",
+		"test['only']('page loads', async ({ page }) => {})\n",
+		"const t = test.only; t('page loads', async () => {})\n",
+	} {
+		t.Run(spec[:12], func(t *testing.T) {
+			homeWeb(t, npmStub, pwFocoStub)
+			r := repoDeJuguete(t)
+			r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"},
+				{Nombre: config.E2E, Cmd: "npm run test:e2e", Servidor: e2eStub.Servidor, Puerto: e2eStub.Puerto}, {Nombre: config.Supresiones}}
+			e, out, err := r.Abrir("01", "total", "tests/s01.sh", "npm run test:e2e", Opciones{Reporte: "results.xml", Formato: "junit", Bundle: []string{"tests/datos.txt"}}, t0)
+			if err != nil {
+				t.Fatalf("%v\n%s", err, out)
+			}
+			if !slices.Equal(e.PruebasExamen, []string{"total.spec.ts › cart shows the total"}) {
+				t.Fatalf("contract exam tests = %q", e.PruebasExamen)
+			}
+			os.MkdirAll(filepath.Join(e.Worktree, "e2e"), 0o755)
+			commitEn(t, e.Worktree, "e2e/smoke.spec.ts", spec)
+			e, out, err = r.Verificar("", t0)
+			if err == nil || e.Fase == Verificado {
+				t.Fatalf("verified with a focused test and no feature:\n%s", out)
+			}
+			if !strings.Contains(err.Error(), "total.spec.ts › cart shows the total") {
+				t.Fatalf("err does not name the missing exam test: %v", err)
+			}
+			commitEn(t, e.Worktree, "e2e/smoke.spec.ts", "test('page loads', async () => {})\n")
+			commitEn(t, e.Worktree, "total.txt", "170\n")
+			if e, out, err = r.Verificar("", t0); err != nil || e.Fase != Verificado {
+				t.Fatalf("%v %s\n%s", err, e.Fase, out)
+			}
+		})
+	}
+}
+
+// pwForbidStub honors --forbid-only like Playwright: a focused spec (any spelling) fails with it, runs alone without it.
+const pwForbidStub = `[ "$1 $2" = "playwright test" ] || exit 64
+if grep -Eqs "only" e2e/*.spec.ts; then
+	case " $* " in *" --forbid-only "*) echo "Error: focused item found in the --forbid-only mode"; exit 1;; esac
+	echo "1 passed (focused)"; exit 0
+fi
+cmp -s total.txt tests/datos.txt`
+
+// Review 2, second layer: through `npm run test:e2e` (the init default) whose script is `playwright test`,
+// the exam and checks.e2e get `-- --forbid-only`. No report here, so only this layer can stop it.
+func TestForbidOnlyPorScriptNpm(t *testing.T) {
+	homeWeb(t, npmStub, pwForbidStub)
+	r := repoDeJuguete(t)
+	os.WriteFile(filepath.Join(r.Root, "package.json"), []byte(`{"scripts":{"test:e2e":"playwright test"}}`), 0o644)
+	Git(r.Root, "add", "-A")
+	Git(r.Root, "commit", "-qm", "package.json")
+	sup := config.Check{Nombre: config.Supresiones, Omitir: "only the flag layer"}
+	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"},
+		{Nombre: config.E2E, Cmd: "npm run test:e2e", Servidor: e2eStub.Servidor, Puerto: e2eStub.Puerto}, sup}
+	e, out, err := r.Abrir("01", "total", "tests/s01.sh", "npm run test:e2e", Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	os.MkdirAll(filepath.Join(e.Worktree, "e2e"), 0o755)
+	commitEn(t, e.Worktree, "e2e/smoke.spec.ts", "test.only ('page loads', async ({ page }) => {})\n")
+	e, out, err = r.Verificar("", t0)
+	if err == nil || e.Fase == Verificado {
+		t.Fatalf("verified with test.only through an npm script:\n%s", out)
+	}
+	if !strings.Contains(out, "focused item") {
+		t.Fatalf("the exam did not get --forbid-only:\n%s", out)
+	}
+}

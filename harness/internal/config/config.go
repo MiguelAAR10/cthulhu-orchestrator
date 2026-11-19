@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -598,10 +599,75 @@ done
 // Ejecutable es el script que corre el check: Cmd, o Cmd con el servidor de la app arrancado antes.
 func (ch Check) Ejecutable() string { return ch.ConServidor(SinOnly(ch.Cmd)) }
 
+// EjecutableEn es Ejecutable para el proyecto de dir: un script de npm/pnpm/yarn que es `playwright test`
+// también recibe --forbid-only.
+func (ch Check) EjecutableEn(dir string) string { return ch.ConServidor(SinOnlyEn(dir, ch.Cmd)) }
+
+// pmScript es `npm run X`, `npm test`, `pnpm [run] X` o `yarn [run] X` con sus argumentos hasta el
+// siguiente separador de shell.
+var pmScript = regexp.MustCompile(`\b(npm|pnpm|yarn)(\s+(?:run|run-script))?\s+([A-Za-z0-9_:.@/-]+)([^;&|\n]*)`)
+
+// scriptPlaywright es un script que es solo `playwright test` con flags: lo que se le sume llega a playwright.
+var scriptPlaywright = regexp.MustCompile("^(?:npx\\s+)?playwright\\s+test\\b[^;&|<>`$()\\n]*$")
+
+var separadorArgs = regexp.MustCompile(`(^|\s)--(\s|$)`)
+
+// MaxPackageJSON acota lo que se lee de package.json al resolver scripts.
+const MaxPackageJSON = 1 << 20
+
+// SinOnlyEn es SinOnly más los scripts: `npm run test:e2e` cuyo script es `playwright test` pasa a
+// `npm run test:e2e -- --forbid-only` (pnpm y yarn sin el `--`). Un script compuesto no se toca.
+func SinOnlyEn(dir, cmd string) string {
+	cmd = SinOnly(cmd)
+	scripts := scriptsEn(dir)
+	if len(scripts) == 0 {
+		return cmd
+	}
+	return pmScript.ReplaceAllStringFunc(cmd, func(m string) string {
+		g := pmScript.FindStringSubmatch(m)
+		pm, run, nombre, resto := g[1], g[2], g[3], g[4]
+		if pm == "npm" && run == "" && nombre != "test" && nombre != "t" {
+			return m
+		}
+		if nombre == "t" {
+			nombre = "test"
+		}
+		sc := strings.TrimSpace(scripts[nombre])
+		if !scriptPlaywright.MatchString(sc) || strings.Contains(sc+resto, "--forbid-only") {
+			return m
+		}
+		cuerpo := strings.TrimRight(m, " \t")
+		cola := m[len(cuerpo):]
+		if pm == "npm" && !separadorArgs.MatchString(resto) {
+			return cuerpo + " -- --forbid-only" + cola
+		}
+		return cuerpo + " --forbid-only" + cola
+	})
+}
+
+func scriptsEn(dir string) map[string]string {
+	f, err := os.Open(filepath.Join(dir, "package.json"))
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	raw, err := io.ReadAll(io.LimitReader(f, MaxPackageJSON))
+	if err != nil {
+		return nil
+	}
+	var pj struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if json.Unmarshal(raw, &pj) != nil {
+		return nil
+	}
+	return pj.Scripts
+}
+
 var playwrightTest = regexp.MustCompile(`\bplaywright\s+test\b`)
 
 // SinOnly suma --forbid-only a cada `playwright test` de cmd: un test.only nuevo haría que Playwright
-// corriera solo ese y dejara fuera el examen. Un script de npm no se ve aquí; lo cubre la marca .only( de supresiones.
+// corriera solo ese y dejara fuera el examen. Los scripts de npm/pnpm/yarn los resuelve SinOnlyEn.
 func SinOnly(cmd string) string {
 	if strings.Contains(cmd, "--forbid-only") {
 		return cmd
