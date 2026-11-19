@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"orq/internal/identidad"
 	"strings"
 )
 
@@ -43,8 +45,7 @@ func DefaultPath() string {
 	if p := os.Getenv("ORQ_LIMITS"); p != "" {
 		return p
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "orq", "limits.json")
+	return filepath.Join(identidad.ConfigDir(), "limits.json")
 }
 
 // Load lee y valida. Devuelve error ante cualquier campo obligatorio ausente.

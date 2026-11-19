@@ -18,6 +18,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"orq/internal/identidad"
 	"regexp"
 	"slices"
 	"sort"
@@ -201,8 +203,7 @@ func RutaUsuario() string {
 	if p := os.Getenv("ORQ_CONFIG"); p != "" {
 		return p
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "orq", "config.json")
+	return filepath.Join(identidad.ConfigDir(), "config.json")
 }
 
 // RutaProyecto es el archivo del proyecto; vive en .orq, que un worker no escribe.

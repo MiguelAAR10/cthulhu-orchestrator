@@ -553,3 +553,21 @@ func cabeza(l []string, n int) []string {
 	}
 	return l
 }
+
+// AbiertosOrq1 lists, without migrating or writing anything, the slices in orqDir that orq 1.0.0
+// opened (schema 0), including a v0.4 slice.json not yet moved to slices/.
+func AbiertosOrq1(orqDir string) []string {
+	r := Repo{OrqDir: orqDir}
+	m, _ := filepath.Glob(filepath.Join(r.dirSlices(), "*.json"))
+	slices.Sort(m)
+	if existe(r.viejoPath()) {
+		m = append(m, r.viejoPath())
+	}
+	var ids []string
+	for _, f := range m {
+		if e, err := leerEstado(f); err == nil && e.Esquema == 0 && !slices.Contains(ids, e.ID()) {
+			ids = append(ids, e.ID())
+		}
+	}
+	return ids
+}

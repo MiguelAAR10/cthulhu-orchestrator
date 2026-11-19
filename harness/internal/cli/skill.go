@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"orq/internal/config"
+	"orq/internal/identidad"
 	"orq/internal/perfil"
 )
 
@@ -24,6 +25,7 @@ func instalarSkillsOrq(root string) (nuevas, distintas []string) {
 	ents, _ := orqSkills.ReadDir("orqskills")
 	for _, d := range ents {
 		raw, _ := orqSkills.ReadFile("orqskills/" + d.Name() + "/SKILL.md")
+		raw = []byte(identidad.Texto(string(raw)))
 		dst := filepath.Join(root, ".claude", "skills", d.Name(), "SKILL.md")
 		actual, err := os.ReadFile(dst)
 		switch {
@@ -37,6 +39,16 @@ func instalarSkillsOrq(root string) (nuevas, distintas []string) {
 		}
 	}
 	return
+}
+
+// nombresSkillsOrq son las skills propias de orq que init deja en el repo.
+func nombresSkillsOrq() []string {
+	ents, _ := orqSkills.ReadDir("orqskills")
+	var ns []string
+	for _, d := range ents {
+		ns = append(ns, d.Name())
+	}
+	return ns
 }
 
 // runSkill imprime la guía del rol y las skills que ese rol carga en este proyecto.

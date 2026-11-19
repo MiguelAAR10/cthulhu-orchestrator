@@ -6,7 +6,7 @@ STATE   ?= $(HOME)/.local/state/orq
 STATICCHECK_VERSION := 2025.1.1
 STATICCHECK ?= $(HOME)/go/bin/staticcheck
 
-.PHONY: build test lint mutation ci install limits status
+.PHONY: build build2 test lint mutation ci install install2 limits status
 
 build:
 	cd harness && $(GO) build -trimpath -o ../dist/orq ./cmd/orq
@@ -55,6 +55,17 @@ install: build
 	cp dist/orq $(BIN)/.orq.new && mv -f $(BIN)/.orq.new $(BIN)/orq
 	@test -f $(CFG)/limits.json || (mkdir -p $(CFG) && cp templates/limits.json $(CFG)/limits.json && echo "límites por defecto en $(CFG)/limits.json")
 	@echo "instalado: $(BIN)/orq $$($(BIN)/orq version)"
+
+# install2 puts v2 side by side as $(BIN)/orq2, the only file it writes: never $(BIN)/orq, never
+# ~/.config/orq or ~/.local/state/orq. Named orq2, the binary keeps its own ~/.config/orq2 and
+# ~/.local/state/orq2 (created on first use) and hooks itself by absolute path.
+build2:
+	cd harness && $(GO) build -trimpath -o ../dist/orq2 ./cmd/orq
+
+install2: build2
+	mkdir -p $(BIN)
+	cp dist/orq2 $(BIN)/.orq2.new && mv -f $(BIN)/.orq2.new $(BIN)/orq2
+	@echo "instalado: $(BIN)/orq2 $$($(BIN)/orq2 version)"
 
 status:
 	$(BIN)/orq status

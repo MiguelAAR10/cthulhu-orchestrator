@@ -7,6 +7,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+
+	"orq/internal/identidad"
 	"strings"
 	"time"
 )
@@ -23,8 +25,7 @@ func Dir() string {
 	if p := os.Getenv("ORQ_STATE"); p != "" {
 		return p
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "state", "orq")
+	return identidad.StateDir()
 }
 
 func snapshotPath(dir string) string { return filepath.Join(dir, "state.json") }

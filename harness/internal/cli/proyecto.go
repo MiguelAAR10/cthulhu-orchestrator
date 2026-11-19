@@ -18,6 +18,7 @@ import (
 	"orq/internal/canal"
 	"orq/internal/config"
 	"orq/internal/gate"
+	"orq/internal/identidad"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
 	"orq/internal/slice"
@@ -369,7 +370,7 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 		ahora = ""
 		fmt.Fprintf(stderr, "aviso: sin resumen del escriba (%v); el relevo lleva solo datos comprobados\n", err)
 	}
-	md := rv.Markdown(time.Now().Format("2006-01-02 15:04"), ahora)
+	md := identidad.Texto(rv.Markdown(time.Now().Format("2006-01-02 15:04"), ahora))
 	if err := orqdir.WriteAtomic(p.RelevoPath(rol), []byte(md)); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

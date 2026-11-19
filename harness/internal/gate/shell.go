@@ -478,6 +478,8 @@ func nombre(w palabra) string {
 		return "claude"
 	case "orca-ide":
 		return "orca"
+	case "orq2": // the side-by-side v2 is orq for every rule
+		return "orq"
 	}
 	return s
 }

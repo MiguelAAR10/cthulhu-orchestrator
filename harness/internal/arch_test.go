@@ -21,7 +21,7 @@ var capa = map[string]int{
 	"config": 1, "diario": 1, "skilleval": 1, "recursos": 1, "watch": 1, "escriba": 1, "calidad": 1, "tui": 1,
 	// adaptadores y base: todo lo que ejecuta un proceso o lee el sistema
 	"terminal": 0, "terminal/herdr": 0, "terminal/orca": 0, "terminal/fake": 0, "agente": 0,
-	"sandbox": 0, "gitx": 0, "sysinfo": 0, "orqdir": 0, "limits": 0, "state": 0,
+	"sandbox": 0, "gitx": 0, "sysinfo": 0, "orqdir": 0, "identidad": 0, "limits": 0, "state": 0,
 }
 
 func TestLosImportsSoloBajan(t *testing.T) {

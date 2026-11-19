@@ -16,6 +16,7 @@ import (
 	"orq/internal/config"
 	"orq/internal/diario"
 	"orq/internal/escriba"
+	"orq/internal/identidad"
 	"orq/internal/instinto"
 	"orq/internal/limits"
 	"orq/internal/memoria"
@@ -52,6 +53,29 @@ var NuevoDriver = func(nombre string) terminal.Driver {
 	return herdr.Nuevo()
 }
 
+// conNombre makes every line and launch prompt orq2 hands an agent say orq2; orq gets d itself.
+func conNombre(d terminal.Driver) terminal.Driver {
+	if !identidad.EsOrq2() {
+		return d
+	}
+	return driverNombrado{d}
+}
+
+type driverNombrado struct{ terminal.Driver }
+
+func (d driverNombrado) Avisar(ctx context.Context, destino, texto string) error {
+	return d.Driver.Avisar(ctx, destino, identidad.Texto(texto))
+}
+
+func (d driverNombrado) Arrancar(ctx context.Context, a terminal.Arranque) error {
+	args := make([]string, len(a.Args))
+	for i, s := range a.Args {
+		args[i] = identidad.Texto(s)
+	}
+	a.Args = args
+	return d.Driver.Arrancar(ctx, a)
+}
+
 // Abrir ubica el proyecto del directorio actual y carga su configuración.
 func Abrir() (Proyecto, error) {
 	root, err := orqdir.Root()
@@ -67,7 +91,7 @@ func Abrir() (Proyecto, error) {
 	if err != nil {
 		return Proyecto{}, fmt.Errorf("orq: %w. Revísala con `orq config ver`", err)
 	}
-	return Proyecto{Root: root, Dir: dir, Cfg: cfg, Term: NuevoDriver(cfg.Terminal), Ahora: time.Now}, nil
+	return Proyecto{Root: root, Dir: dir, Cfg: cfg, Term: conNombre(NuevoDriver(cfg.Terminal)), Ahora: time.Now}, nil
 }
 
 func (p Proyecto) ahora() time.Time {

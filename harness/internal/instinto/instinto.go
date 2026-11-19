@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"orq/internal/identidad"
 	"sort"
 	"strings"
 	"time"
@@ -43,8 +45,7 @@ func Global() string {
 	if d := os.Getenv("ORQ_CONFIG"); d != "" {
 		return filepath.Join(d, "instintos.json")
 	}
-	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".config", "orq", "instintos.json")
+	return filepath.Join(identidad.ConfigDir(), "instintos.json")
 }
 
 func clave(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }

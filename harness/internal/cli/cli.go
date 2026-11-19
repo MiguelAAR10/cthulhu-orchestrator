@@ -15,6 +15,7 @@ import (
 	"orq/internal/app"
 	"orq/internal/config"
 	"orq/internal/gate"
+	"orq/internal/identidad"
 	"orq/internal/limits"
 	"orq/internal/orqdir"
 	"orq/internal/state"
@@ -116,7 +117,8 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
 
 // Run devuelve el código de salida. En `gate`, cualquier pánico termina en 2 (bloquear).
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
-	slice.Version = "orq " + Version
+	slice.Version = identidad.Nombre() + " " + Version
+	stdout, stderr = identidad.Escritor(stdout), identidad.Escritor(stderr)
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 1

@@ -14,6 +14,7 @@ import (
 
 	"orq/internal/canal"
 	"orq/internal/config"
+	"orq/internal/identidad"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
 	"orq/internal/perfil"
@@ -38,11 +39,63 @@ const hookSettings = `{
 }
 `
 
+// hooks is the hooks block init writes: orq keeps hookSettings byte for byte; orq2 calls
+// itself by its absolute path.
+func hooks() string {
+	if !identidad.EsOrq2() {
+		return hookSettings
+	}
+	bin, _ := json.Marshal(identidad.Binario() + " ")
+	return strings.ReplaceAll(hookSettings, "$HOME/bin/orq ", strings.Trim(string(bin), `"`))
+}
+
+// hooksOrq1 are the commands orq 1.0.0 puts in a project's .claude/settings (orq2's never match).
+var hooksOrq1 = []string{"orq gate", "orq contexto", "orq relevo"}
+
+// gestionadoPorOrq1 says why orq 1.0.0 manages the project at root ("" if it does not): its hooks
+// in .claude/settings.json or settings.local.json, or slices it opened. It writes nothing.
+func gestionadoPorOrq1(root string) []string {
+	var por []string
+	for _, f := range []string{"settings.json", "settings.local.json"} {
+		ruta := filepath.Join(root, ".claude", f)
+		raw, err := os.ReadFile(ruta)
+		if err != nil {
+			continue
+		}
+		for _, h := range hooksOrq1 {
+			if strings.Contains(string(raw), h) {
+				por = append(por, fmt.Sprintf("%s tiene los hooks de orq 1.0.0 (%q)", ruta, h))
+				break
+			}
+		}
+	}
+	if ids := slice.AbiertosOrq1(filepath.Join(root, ".orq")); len(ids) > 0 {
+		por = append(por, "slices abiertos por orq 1.0.0: "+strings.Join(ids, ", "))
+	}
+	return por
+}
+
 func runInit(args []string, stdout, stderr io.Writer) int {
 	for _, a := range args {
 		if a == "--help" || a == "-h" {
+			if identidad.EsOrq2() {
+				fmt.Fprintln(stdout, "uso: orq init [--modo=mejora|--modo=nuevo] [--convivir]\nDetecta el perfil del proyecto, escribe .orq/ y los checks. --help no cambia nada.\n--convivir: en un proyecto que maneja orq 1.0.0 no escribe nada en .claude y dice qué añadir a mano.")
+				return 0
+			}
 			fmt.Fprintln(stdout, "uso: orq init [--modo=mejora|--modo=nuevo]\nDetecta el perfil del proyecto, escribe .orq/ y los checks. --help no cambia nada.")
 			return 0
+		}
+	}
+	convivir := false
+	if identidad.EsOrq2() {
+		convivir = slices.Contains(args, "--convivir")
+		if root, err := orqdir.Root(); err == nil {
+			if por := gestionadoPorOrq1(root); len(por) > 0 && !convivir {
+				fmt.Fprintf(stderr, "orq init: este proyecto lo maneja orq 1.0.0 y no se toca:\n  - %s\n"+
+					"Cierra sus slices con orq 1.0.0 y quita sus hooks, o corre `orq init --convivir`: no escribe nada en .claude y dice qué añadir a mano.\n",
+					strings.Join(por, "\n  - "))
+				return 1
+			}
 		}
 	}
 	p, err := abrirProyecto()
@@ -61,7 +114,9 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	raw, _ := json.MarshalIndent(pf, "", "  ")
-	if err := orqdir.WriteAtomic(p.PerfilPath(), raw); err != nil {
+	if _, err := os.Stat(p.PerfilPath()); convivir && err == nil {
+		fmt.Fprintf(stdout, "perfil ya existe en %s: no se tocó (--convivir)\n", p.PerfilPath())
+	} else if err := orqdir.WriteAtomic(p.PerfilPath(), raw); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -77,6 +132,13 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	if convivir {
+		fmt.Fprintf(stdout, "--convivir: no se escribió nada en %s. Para usar orq en este proyecto añade a mano:\n"+
+			"  - en .claude/settings.local.json, junto a los hooks de orq 1.0.0, este bloque hooks:\n%s"+
+			"  - las skills de orq (%s) no se instalaron en .claude/skills: las guías de cada rol salen de `orq skill ROL`\n",
+			filepath.Join(p.Root, ".claude"), hooks(), strings.Join(nombresSkillsOrq(), ", "))
+		return runSkills(nil, stdout, stderr)
+	}
 	if nuevas, distintas := instalarSkillsOrq(p.Root); len(nuevas)+len(distintas) > 0 {
 		if len(nuevas) > 0 {
 			fmt.Fprintf(stdout, "skills de orq en el repo: %s\n", strings.Join(nuevas, ", "))
@@ -88,16 +150,16 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	set := filepath.Join(p.Root, ".claude", "settings.json")
 	if _, err := os.Stat(set); os.IsNotExist(err) {
 		os.MkdirAll(filepath.Dir(set), 0o755)
-		os.WriteFile(set, []byte(hookSettings), 0o644)
+		os.WriteFile(set, []byte(hooks()), 0o644)
 		fmt.Fprintf(stdout, "hooks instalados en %s: guardia, contexto al arrancar y relevo antes de compactar\n", set)
 	} else {
 		raw, _ := os.ReadFile(set)
-		if !strings.Contains(string(raw), "orq contexto") {
+		if !strings.Contains(string(raw), identidad.Texto("orq contexto")) {
 			fmt.Fprintf(stdout, "ya existe %s: une a mano el bloque hooks de `orq init --hooks`\n", set)
 		}
 	}
 	if len(args) > 0 && args[0] == "--hooks" {
-		fmt.Fprint(stdout, hookSettings)
+		fmt.Fprint(stdout, hooks())
 	}
 	return runSkills(nil, stdout, stderr)
 }
