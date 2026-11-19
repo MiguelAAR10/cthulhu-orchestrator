@@ -132,8 +132,8 @@ func gitAjeno(c simple, raiz, rama string) (Decision, bool) {
 		return deny("orq: a worker runs only these git commands: %s (not %q). Ask the orchestrator for anything else.", listaGit, sub), true
 	case saleArchivo(t):
 		return deny("orq: git --output writes a file the gate cannot check. Use `git %s > file` instead; the gate checks the redirect.", sub), true
-	case dinamicaAntes(r) != "":
-		return deny("orq: `git %s` has a word before `--` that is not written literally (%q); it could become an option such as --output. Write it literally or put it after `--`.", sub, dinamicaAntes(r)), true
+	case dinamicaAntes(sub, r) != "":
+		return deny("orq: `git %s` has a word before `--` that is not written literally (%q); it could become an option such as --output. Write it literally or put it after `--`.", sub, dinamicaAntes(sub, r)), true
 	case sub == "reflog" && len(p) > 0 && !reflogLeer(p[0].s):
 		return deny("orq: a worker runs only `git reflog` with no subcommand, show, list, exists or a ref name such as HEAD or refs/heads/x (not %q).", p[0].s), true
 	case hay(t, "--ext-diff", "--textconv"):
@@ -280,41 +280,53 @@ func saleArchivo(t []string) bool {
 // dinamicaAntes returns the first word before `--` that could become an option or subcommand: one
 // whose value the gate cannot read (a variable, $(...), backticks, arithmetic) or a glob that
 // starts with a glob character or `-`. After `--` git takes every word as a path, so those are
-// not checked. A dynamic word that is the value of a value-taking option (-m "$x", --format="$f")
-// is data, not an option, and is allowed.
-func dinamicaAntes(w []palabra) string {
-	for i, x := range w {
+// not checked. Only `git commit` has an exception: a literal option that takes a value consumes the
+// next word, which may be dynamic (-m "$msg", -am "$m"); attached forms (--author="$a", -m"$m")
+// may have a dynamic suffix. Any other dynamic word is denied, in every subcommand.
+func dinamicaAntes(sub string, w []palabra) string {
+	for i := 0; i < len(w); i++ {
+		x := w[i]
 		if x.s == "--" {
 			return ""
+		}
+		if sub == "commit" && !x.dyn {
+			if consume, _ := opcionValor(x.s); consume {
+				i++
+				continue
+			}
 		}
 		if !(x.dyn || x.glob && (strings.HasPrefix(x.s, "-") || strings.ContainsAny(x.s[:1], "*?["))) {
 			continue
 		}
-		if i > 0 && !w[i-1].dyn && valorGit[w[i-1].s] || valorAdjunto(x.s) {
-			continue
+		if sub == "commit" {
+			if _, adjunto := opcionValor(x.s); adjunto {
+				continue
+			}
 		}
 		return x.s
 	}
 	return ""
 }
 
-// valorGit are the options whose next word is their value.
-var valorGit = conjunto("-m", "--message", "-F", "--file", "--author", "--format", "-S", "-G", "--grep")
-
-// valorAdjunto says whether a word starts with a literal value-taking option joined to its value
-// (--message=..., -S...), so the dynamic part that follows is only that option's value.
-func valorAdjunto(s string) bool {
-	for _, p := range []string{"--message=", "--file=", "--author=", "--format=", "--grep="} {
-		if strings.HasPrefix(s, p) {
-			return true
+// opcionValor classifies a `git commit` word that starts with a literal value-taking option:
+// consume when the next word is its value, adjunto when the value is joined to it.
+func opcionValor(s string) (consume, adjunto bool) {
+	if strings.HasPrefix(s, "--") {
+		o, _, junto := strings.Cut(s, "=")
+		if !conjunto("--message", "--file", "--author", "--date")[o] {
+			return false, false
+		}
+		return !junto, junto
+	}
+	if len(s) < 2 || s[0] != '-' {
+		return false, false
+	}
+	for i := 1; i < len(s); i++ {
+		if strings.IndexByte("mFCc", s[i]) >= 0 {
+			return i == len(s)-1, i < len(s)-1
 		}
 	}
-	for _, p := range []string{"-m", "-F", "-S", "-G"} {
-		if strings.HasPrefix(s, p) && len(s) > 2 && s[2] != '-' {
-			return true
-		}
-	}
-	return false
+	return false, false
 }
 
 // reflogLeer says whether the first positional of `git reflog` only reads: show, list, exists or a
