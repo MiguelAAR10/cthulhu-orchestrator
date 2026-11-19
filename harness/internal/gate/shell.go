@@ -33,9 +33,12 @@ type simple struct {
 	dir    string    // directorio donde corre, tras los cd anteriores
 	dirDyn bool      // hubo un cd a una ruta no resuelta: lo relativo no se conoce
 	asig   []palabra // VAR=valor words before the command (also after env)
-	// git only: repositories named by --git-dir, --work-tree or -c core.worktree, and why the
-	// target repository cannot be known (-c include.*, --config-env).
+	// git only: the work trees named by --work-tree, the repositories named by --git-dir, the
+	// values of every -c, and an option that changes git in a way the gate does not read
+	// (--config-env, --exec-path=dir).
 	gitRepos []palabra
+	gitDirs  []palabra
+	gitC     []palabra
 	gitOpaco string
 }
 
@@ -614,20 +617,18 @@ bucle:
 				switch o {
 				case "-C":
 					c.dir, c.dirDyn = cambiarDir(c.dir, c.dirDyn, val)
-				case "--git-dir", "--work-tree":
+				case "--git-dir":
+					c.gitDirs = append(c.gitDirs, val)
+				case "--work-tree":
 					c.gitRepos = append(c.gitRepos, val)
 				case "-c":
-					k, v, _ := strings.Cut(val.s, "=")
-					switch k = strings.ToLower(k); {
-					case val.dyn:
-						c.gitOpaco = "-c " + val.s
-					case k == "core.worktree":
-						c.gitRepos = append(c.gitRepos, palabra{s: v})
-					case strings.HasPrefix(k, "include"):
-						c.gitOpaco = "-c " + val.s
-					}
+					c.gitC = append(c.gitC, val)
 				case "--config-env":
 					c.gitOpaco = "--config-env"
+				case "--exec-path":
+					if strings.Contains(w[i].s, "=") {
+						c.gitOpaco = "--exec-path=" + val.s
+					}
 				}
 				i++
 			}

@@ -163,3 +163,29 @@ Line count delta (11699b0..0c46b38, `harness` + `validacion`): +464 / −863, ne
 Known limits of the gate rule: it cannot see inside a script file it does not read (`sh x.sh`, `python x.py`). A symlink created in the same command line (`ln -s <main> l && git -C l …`) is resolved only once it exists, so the next call is denied but that same line is not. The rule covers the ref commands named in finding B; `fetch <src> x:refs/heads/main` and `checkout -B` act only on the clone's own refs.
 
 `make ci` (exit 0): gofmt clean, go vet clean, `go test -race` all packages ok (170 pass, 0 fail, 2 skip), e2e-v05 86 pass / 0 fail, aislamiento 14 pass / 0 fail / 0 pending.
+
+## Review fixes 4
+
+Fixes for `docs/harness-v2/reviews/step1-review-4.md` (verdict: fix), in commit ee1b552. The approach denies whole classes, and the strongest layer comes first. Every bypass in the review is now a row that I saw fail before the fix.
+
+| Finding | What changed |
+|---|---|
+| 4 · copied or renamed binary (structural) | `orq slice` refuses every orchestrator-only subcommand when `gate.IsWorker(os.Getwd())` is true, or when the cwd cannot be read. The list is `gate.SliceSoloOrquestador`, shared with the gate. A copy, a rename, an alias or a script that runs the real binary from a worker clone is refused by the binary itself. The gate rule stays as a second layer. Test: `TestSliceDelOrquestadorSeNiegaEnUnWorker` (verificar, podar, cerrar, `--slice 01 tomar`, abrir and examen are refused from a marked clone; `estado` is not). The cli `TestMain` now runs from a temp dir outside any repository, because the suite itself may run from a linked worktree. |
+| 3 · podar | `podar` is in the orchestrator-only slice list (gate and CLI). |
+| 1 · nested `.git` | Git from a worker is denied when any `.git` (directory, gitfile or symlink) lies between the command's dir and the clone root (`gitEntre`, on disk). `--git-dir`, `GIT_DIR` and `GIT_COMMON_DIR` must resolve to exactly `<clone>/.git`, because any other directory can carry a `commondir` that names main. A worker cannot create, write, move or link a path with a `.git` component, except its clone's own `.git`, through Edit, Write, MCP or the shell (literal and resolved path). It also cannot copy a source named `.git` (`cp`, `rsync`, `install`). Real-clone rows: a gitfile `sub/.git` (`git -C sub commit`, `cd sub && git update-ref refs/heads/slice/01 HEAD`, a deeper `cd sub/a/b`), a symlink `enlace/.git`, a `hondo/.git` with a `commondir`, and `--git-dir`/`GIT_DIR` at each one. |
+| 2 · `-c`, `git config`, aliases | For workers, `-c` is allowed only for `user.name`, `user.email` and `color.*`. `git config` reads anything but writes only those keys. `-e`/`edit` and `rename-section`/`remove-section` are denied as whole forms. Also denied: any `GIT_CONFIG*` variable, the `GIT_*` variables git runs as a command (`GIT_EXTERNAL_DIFF`, `GIT_SSH[_COMMAND]`, `GIT_PAGER`, `GIT_EDITOR`, `GIT_SEQUENCE_EDITOR`, `GIT_ASKPASS`, `GIT_PROXY_COMMAND`, `GIT_EXEC_PATH`, `GIT_TEMPLATE_DIR`) unless the value is empty, `cat`, `true` or `:`, plus `--config-env` and `--exec-path=<dir>`. A subcommand that is not a git builtin (from `git --list-cmds=main`, minus the ones that serve or run a command: `daemon`, `shell`, `instaweb`, `remote-ext`, `remote-fd`, `filter-branch`…) is denied, which covers aliases and `git-*` programs on PATH. Commands that git runs from the line are denied too: `rebase --exec/-x`, `submodule foreach`, `bisect run`, `difftool/mergetool --extcmd`. |
+
+Rows: 43 new deny and 13 allow rows in `TestDecisiones`. Five existing rows now expect the config reason. The new real-clone rows are in `TestWorkerGitContraElRepoPrincipal`, which now reports every row instead of stopping at the first.
+
+Still allowed on purpose: reading config, `git -c user.*/color.*`, `GIT_PAGER=cat`, `git rebase -i` (the editor is the worker's own session), `git submodule update`, and writes inside the clone's own `.git` other than the marker, `config` and `commondir` (for example `.git/info/exclude`).
+
+`make ci` (exit 0): gofmt clean, go vet clean, `go test -race` all packages ok, e2e-v05 ok, aislamiento 14 pass / 0 fail / 0 pending.
+
+## Known gaps until step 7
+
+The gate reads only the command line it is given. These stay open until the worker box of roadmap step 7:
+
+- **Scripts the gate does not read.** `sh x.sh`, `bash x.sh`, `make`, `npm run`, a `Makefile`/`package.json` target, a test runner, or a git hook in the clone. Whatever they run is invisible.
+- **Interpreters.** `python x.py`, `node x.js`, `go run`, and also inline code (`python -c`, `node -e`). For inline code the gate checks only that it does not name a protected path. It does not stop the code from running git, `orq` or `os.symlink`.
+- **Anything run outside the parsed command line.** Values read at run time (`$(cat f)`, files, stdin) are denied when they are the command word or a path, but not when they are data a program acts on. Programs that run other programs from their own config (an editor, a pager or a tool configured in a file the gate does not see) are also missed. So is a `.git` created by a program the gate does not model (`tar x`, `unzip`, `git init/clone` into a subdirectory). After creation, git is still denied there by `gitEntre`, but a program that talks to the main repository directly is not stopped.
+- **The binary refusal relies on cwd.** A program that `chdir`s out of the clone before it execs `orq` (for example `python -c 'os.chdir("/main"); os.execv(...)'`) is not refused. That is the interpreter gap again.

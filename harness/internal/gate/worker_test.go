@@ -254,15 +254,44 @@ func TestWorkerGitContraElRepoPrincipal(t *testing.T) {
 	principal := filepath.Join(t.TempDir(), "repo")
 	gitInit(t, principal)
 	clon := clonMarcado(t, `{"root":"`+principal+`","slice":"01","rama":"slice/01"}`)
+	// Review 4, finding 1: a .git planted by an earlier call below the clone root sends git to the
+	// main repo: a gitfile, a symlink, or a directory whose commondir names main's .git.
+	planta := func(rel, contenido string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(clon, filepath.Dir(rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(clon, rel), []byte(contenido), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	planta("sub/.git", "gitdir: "+filepath.Join(principal, ".git")+"\n")
+	planta("hondo/.git/commondir", filepath.Join(principal, ".git")+"\n")
+	planta("hondo/.git/HEAD", "ref: refs/heads/main\n")
+	if err := os.MkdirAll(filepath.Join(clon, "enlace"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(principal, ".git"), filepath.Join(clon, "enlace", ".git")); err != nil {
+		t.Fatal(err)
+	}
 	env := Env{Now: time.Now, IsWorktree: IsWorker, RepoPropio: RepoPropio}
 	for cmd, permite := range map[string]bool{
 		"git -C " + principal + " update-ref refs/heads/main HEAD": false,
 		"cd " + principal + " && git commit --allow-empty -m x":    false,
+		"git -C sub commit --allow-empty -m pwned":                 false,
+		"cd sub && git update-ref refs/heads/slice/01 HEAD":        false,
+		"cd sub/a/b && git log":                                    false,
+		"git -C enlace log":                                        false,
+		"git -C hondo update-ref refs/heads/main HEAD":             false,
+		"git --git-dir=sub/.git log":                               false,
+		"git --git-dir=hondo/.git log":                             false,
+		"GIT_DIR=enlace/.git git log":                              false,
 		"git status && git -C . log":                               true,
+		"git -C src log":                                           true,
 	} {
 		d := Evaluate(Payload{ToolName: "Bash", Cwd: clon, ToolInput: map[string]any{"command": cmd}}, baseLimits(), env)
 		if d.Allow != permite {
-			t.Fatalf("%s: allow=%v (%s)", cmd, d.Allow, d.Reason)
+			t.Errorf("%s: allow=%v (%s)", cmd, d.Allow, d.Reason)
 		}
 	}
 }
