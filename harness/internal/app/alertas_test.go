@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"orq/internal/canal"
 	"orq/internal/diario"
 	"orq/internal/slice"
 	"orq/internal/terminal"
@@ -125,5 +126,20 @@ func TestAlertasFueraDeAlcanceYExamen(t *testing.T) {
 	got := strings.Join(tipos, " | ")
 	if !strings.Contains(got, "02 fuera_de_alcance:otro.txt") || !strings.Contains(got, "02 examen_tras_aprobar:") || strings.Contains(got, "01 ") {
 		t.Fatalf("alerts: %s", got)
+	}
+}
+
+func TestWorkerCerradoNoAlertaSinProgreso(t *testing.T) {
+	p, _, _ := proyectoDePrueba(t, "")
+	rl := &reloj{time.Now()}
+	p.Ahora = rl.ahora
+	lanzar(t, p)
+	ses, _ := canal.LoadSesiones(p.SesPath())
+	if _, err := p.CerrarSesiones(context.Background(), ses, func(k string) bool { return k == "worker-claude-s01" }); err != nil {
+		t.Fatal(err)
+	}
+	rl.t = rl.t.Add(time.Hour)
+	if as := alertasEn(t, p); len(as) != 0 {
+		t.Fatalf("a closed worker makes no progress by design: %+v", as)
 	}
 }

@@ -140,8 +140,9 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 			}
 		}
 		if e.Fase == Integrando {
-			if out, err = r.integrar(e); err != nil {
-				return nil, nil, out, err
+			out, err = r.integrar(e)
+			if errL := r.anotarIntegracion(e, err, now); err != nil || errL != nil {
+				return nil, nil, out, errors.Join(err, errL)
 			}
 			fallaEn("integrado")
 			e.Fase = Cerrando
@@ -222,6 +223,16 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 func (r Repo) anotarDecision(e *Estado, resultado, motivo string, now time.Time) error {
 	return diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{TS: now, Tipo: "decision", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
 		Resultado: resultado, Detalle: motivo})
+}
+
+// anotarIntegracion is the ledger row of one integration into the base: SHA and result.
+func (r Repo) anotarIntegracion(e *Estado, fallo error, now time.Time) error {
+	ev := diario.Evento{TS: now, Tipo: "integracion", Paso: "base", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
+		Resultado: "ok", Datos: map[string]any{"sha": e.Integrado, "base": e.Base}}
+	if fallo != nil {
+		ev.Resultado, ev.Detalle = "fallo", fallo.Error()
+	}
+	return diario.Anotar(diario.Ruta(r.OrqDir), ev)
 }
 
 // libre comprueba que nadie trabaje en las carpetas que se van a quitar.

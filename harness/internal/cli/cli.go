@@ -93,6 +93,8 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq sesion ver | abrir planificador|astra | cerrar NOMBRE | reenviar NOMBRE
                                  paneles con nombre: "orq · P", "plan · P" (planificador | astra),
                                  "S-NN · P" (workers). Al cerrar un slice se cierran sus paneles
+                                 cerrar worker-…-sNN junta y verifica antes (una fila integracion en el diario);
+                                 si falla, el panel sigue abierto y se dice por qué
   orq plan [--slice NN] cargar ARCHIVO.json | ver | hecha ID | debatido   (cargar no va en un fix)
                                  grafo de tareas del slice: {id, zona, rutas, depende_de, dificultad, que}.
                                  Valida ids, dependencias, ciclos y alcance; una tarea está lista cuando

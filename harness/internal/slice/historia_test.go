@@ -94,3 +94,26 @@ func TestPausaHistoriaYGlobal(t *testing.T) {
 		t.Fatal("pausing an unknown story must fail")
 	}
 }
+
+func TestIntegracionBaseAnota(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if _, _, err := r.Verificar("", t0); err != nil {
+		t.Fatal(err)
+	}
+	reg, _, _, err := r.Cerrar("", true, "", t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs, _ := diario.Leer(diario.Ruta(r.OrqDir))
+	var filas []diario.Evento
+	for _, ev := range evs {
+		if ev.Tipo == "integracion" {
+			filas = append(filas, ev)
+		}
+	}
+	if len(filas) != 1 || filas[0].Paso != "base" || filas[0].Resultado != "ok" || filas[0].Datos["sha"] != reg.SHA || reg.SHA == "" {
+		t.Fatalf("one ledger row with the integrated SHA %s: %+v", reg.SHA, filas)
+	}
+}

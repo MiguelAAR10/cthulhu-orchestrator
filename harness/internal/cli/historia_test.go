@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"orq/internal/app"
+	"orq/internal/canal"
 )
 
 func abrirHijo(t *testing.T, nn string) {
@@ -84,5 +88,33 @@ func TestStatusAlertasArriba(t *testing.T) {
 	l := strings.Split(out, "\n")
 	if !strings.HasPrefix(l[0], "ALERTAS") || !strings.Contains(l[1], "S-01 examen_tras_aprobar") || !strings.Contains(l[1], "req ATN-9") {
 		t.Fatalf("alerts first:\n%s", out)
+	}
+}
+
+func TestSesionCerrarWorkerFalloMantienePanel(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	conTerminalFalso(t)
+	if _, errs, code := run(t, append(abrirBase, "--sin-conteo", "prueba")...); code != 0 {
+		t.Fatalf("abrir: %s", errs)
+	}
+	p, err := app.Abrir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := "worker-claude-s01"
+	if err := canal.SaveSesiones(p.SesPath(), map[string]canal.Sesion{w: {Agente: w, Pane: "p1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, errs, code := run(t, "sesion", "cerrar", w); code == 0 || !strings.Contains(errs, "no se cierra") {
+		t.Fatalf("a failing exam must keep the pane: %d %s", code, errs)
+	}
+	if ses, _ := canal.LoadSesiones(p.SesPath()); ses[w].Pane != "p1" {
+		t.Fatalf("session dropped: %+v", ses)
+	}
+	commitClon(t, filepath.Join(filepath.Dir(root), "wt", "tienda-s01"), "total.txt", "170\n")
+	out, errs, code := run(t, "sesion", "cerrar", w)
+	if code != 0 || !strings.Contains(out, "S-01/a1 verificado") || !strings.Contains(out, "cerrada: "+w) {
+		t.Fatalf("%d %s %s", code, out, errs)
 	}
 }

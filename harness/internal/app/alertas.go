@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"orq/internal/canal"
 	"orq/internal/diario"
 	"orq/internal/gitx"
 	"orq/internal/slice"
@@ -47,7 +48,11 @@ func (p Proyecto) Alertas(ctx context.Context) ([]Alerta, error) {
 		if e.Esquema == 0 {
 			continue // an orq 1.0.0 slice: this version does not read it
 		}
-		out = append(out, p.alertasDeWorkers(ctx, e, evs, now)...)
+		ws, err := p.alertasDeWorkers(ctx, e, evs, now)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ws...)
 		_, al, err := r.Alinear(e.NN)
 		if err != nil {
 			return nil, err
@@ -82,8 +87,8 @@ func (p Proyecto) Alertas(ctx context.Context) ([]Alerta, error) {
 }
 
 // alertasDeWorkers flags a worker that did not start within PlazoArranque of its launch, and a
-// started one with no commit and no journal event for alertas.sin_progreso_min.
-func (p Proyecto) alertasDeWorkers(ctx context.Context, e *slice.Estado, evs []diario.Evento, now time.Time) []Alerta {
+// started one, still registered, with no commit and no journal event for alertas.sin_progreso_min.
+func (p Proyecto) alertasDeWorkers(ctx context.Context, e *slice.Estado, evs []diario.Evento, now time.Time) ([]Alerta, error) {
 	type lanzado struct {
 		intento, arranque time.Time
 		contrato          bool
@@ -115,6 +120,10 @@ func (p Proyecto) alertasDeWorkers(ctx context.Context, e *slice.Estado, evs []d
 			w.ultimo = ev.TS
 		}
 	}
+	ses, err := canal.LoadSesiones(p.SesPath())
+	if err != nil {
+		return nil, err
+	}
 	plazo := time.Duration(p.Cfg.Alertas.SinProgresoMin) * time.Minute
 	var out []Alerta
 	for _, nombre := range orden {
@@ -126,8 +135,8 @@ func (p Proyecto) alertasDeWorkers(ctx context.Context, e *slice.Estado, evs []d
 			}
 			continue
 		}
-		if e.Fase != slice.Implementando {
-			continue
+		if _, vive := ses[nombre]; !vive || e.Fase != slice.Implementando {
+			continue // a closed worker makes no more progress by design
 		}
 		ultimo := w.ultimo
 		if c := ultimoCommit(ctx, clonDe(e, nombre)); c.After(ultimo) {
@@ -138,7 +147,7 @@ func (p Proyecto) alertasDeWorkers(ctx context.Context, e *slice.Estado, evs []d
 				Detalle: fmt.Sprintf("sin commit ni evento desde %s", ultimo.Local().Format("2006-01-02 15:04"))})
 		}
 	}
-	return out
+	return out, nil
 }
 
 // clonDe is the copy a worker writes in: its team clone, or the slice's own.
