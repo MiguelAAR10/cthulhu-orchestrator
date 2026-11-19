@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"orq/internal/config"
 	"orq/internal/diario"
 	"orq/internal/gitx"
 	"orq/internal/orqdir"
@@ -89,7 +90,7 @@ func (r Repo) examen(e *Estado, sha string) (out string, code int, ok bool, cnt 
 	}
 	defer limpiar()
 	// El reporte anterior se borra dentro de la caja: la ruta la eligió quien escribió el examen.
-	cmd := e.Cmd
+	cmd := config.SinOnly(e.Cmd)
 	if e.Reporte != "" {
 		cmd = "rm -f -- " + comillaSh(e.Reporte) + " 2>/dev/null\n" + cmd
 	}

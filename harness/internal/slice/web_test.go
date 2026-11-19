@@ -156,3 +156,45 @@ func TestExamenPlaywrightConReporteArrancaServidor(t *testing.T) {
 		t.Fatalf("%v %s\n%s", err, e.Fase, out)
 	}
 }
+
+// pwOnlyStub is Playwright honoring .only: a spec with test.only( runs alone (and passes) unless
+// --forbid-only is given; otherwise the exam's own assertion runs.
+const pwOnlyStub = `[ "$1 $2" = "playwright test" ] || exit 64
+if grep -qs 'test.only(' e2e/*.spec.ts; then
+	case " $* " in *" --forbid-only "*) echo "Error: focused item found in the --forbid-only mode"; exit 1;; esac
+	echo "1 passed (only)"; exit 0
+fi
+cmp -s total.txt tests/datos.txt`
+
+// Review repro 1: a new spec with test.only, feature not built, must not verify. Each layer alone
+// stops it: --forbid-only on the exam and e2e, and the .only( mark in supresiones.
+func TestTestOnlyNoVerifica(t *testing.T) {
+	for _, capa := range []string{"forbid-only", "supresiones"} {
+		t.Run(capa, func(t *testing.T) {
+			homeWeb(t, devStub, pwOnlyStub)
+			r := repoDeJuguete(t)
+			sup := config.Check{Nombre: config.Supresiones}
+			cmd := "npx playwright test"
+			if capa == "forbid-only" {
+				sup.Omitir = "only the flag layer"
+			} else {
+				cmd = "npx playwright test --reporter=line" // still gets the flag; the mark must catch it too
+			}
+			r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"},
+				{Nombre: config.E2E, Cmd: cmd, Servidor: e2eStub.Servidor, Puerto: e2eStub.Puerto}, sup}
+			e, out, err := r.Abrir("01", "total", "tests/s01.sh", cmd, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Sano: "test -f total.txt"}, t0)
+			if err != nil {
+				t.Fatalf("%v\n%s", err, out)
+			}
+			os.MkdirAll(filepath.Join(e.Worktree, "e2e"), 0o755)
+			commitEn(t, e.Worktree, "e2e/smoke.spec.ts", "test.only('page loads', async ({ page }) => {})\n")
+			e, out, err = r.Verificar("", t0)
+			if err == nil || e.Fase == Verificado {
+				t.Fatalf("verified with test.only and no feature:\n%s", out)
+			}
+			if capa == "supresiones" && !strings.Contains(err.Error(), "e2e/smoke.spec.ts:1: test.only(") {
+				t.Fatalf("err = %v", err)
+			}
+		})
+	}
+}

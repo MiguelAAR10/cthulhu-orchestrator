@@ -172,3 +172,13 @@ func TestCheckVeLaToolchainDelHome(t *testing.T) {
 		t.Fatalf("%v %+v", err, e.Recibo)
 	}
 }
+
+// Focused tests are suppressions: .only( and the Jasmine fit( / fdescribe(, but not benefit(.
+func TestSupresionesFocused(t *testing.T) {
+	diff := "+++ b/a.spec.ts\n@@ -0,0 +1,6 @@\n+test.only('a', f)\n+describe.only('b', f)\n+fit('c', f)\n+  fdescribe('d', f)\n+benefit(x)\n+const o = { fit(a) {} }.fit\n"
+	got := SupresionesEn(diff, config.Check{Nombre: config.Supresiones}.Marcas())
+	want := []string{"a.spec.ts:1: test.only('a', f)", "a.spec.ts:2: describe.only('b', f)", "a.spec.ts:3: fit('c', f)", "a.spec.ts:4: fdescribe('d', f)", "a.spec.ts:6: const o = { fit(a) {} }.fit"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %q", got)
+	}
+}

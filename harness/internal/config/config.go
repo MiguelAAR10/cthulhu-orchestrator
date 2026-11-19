@@ -67,7 +67,9 @@ const (
 )
 
 // SupresionesBase son las marcas que la guardia supresiones busca en las líneas que suma un slice.
-var SupresionesBase = []string{"//nolint", "eslint-disable", "@ts-ignore", "@ts-expect-error", "# type: ignore", "# noqa", "#[allow("}
+// Las pruebas enfocadas (.only, fit, fdescribe) también lo son: dejan fuera al resto de la suite.
+var SupresionesBase = []string{"//nolint", "eslint-disable", "@ts-ignore", "@ts-expect-error", "# type: ignore", "# noqa", "#[allow(",
+	".only(", "describe.only(", "fit(", "fdescribe("}
 
 // Interno dice si el check lo corre orq y no un comando del proyecto.
 func (ch Check) Interno() bool { return ch.Nombre == Supresiones }
@@ -584,7 +586,18 @@ done
 `
 
 // Ejecutable es el script que corre el check: Cmd, o Cmd con el servidor de la app arrancado antes.
-func (ch Check) Ejecutable() string { return ch.ConServidor(ch.Cmd) }
+func (ch Check) Ejecutable() string { return ch.ConServidor(SinOnly(ch.Cmd)) }
+
+var playwrightTest = regexp.MustCompile(`\bplaywright\s+test\b`)
+
+// SinOnly suma --forbid-only a cada `playwright test` de cmd: un test.only nuevo haría que Playwright
+// corriera solo ese y dejara fuera el examen. Un script de npm no se ve aquí; lo cubre la marca .only( de supresiones.
+func SinOnly(cmd string) string {
+	if strings.Contains(cmd, "--forbid-only") {
+		return cmd
+	}
+	return playwrightTest.ReplaceAllString(cmd, "$0 --forbid-only")
+}
 
 // ConServidor envuelve cmd con el servidor del check, si lo tiene.
 func (ch Check) ConServidor(cmd string) string {

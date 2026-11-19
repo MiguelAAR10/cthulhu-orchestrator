@@ -173,13 +173,35 @@ func SupresionesEn(diff string, marcas []string) []string {
 				linea, _ = strconv.Atoi(n)
 			}
 		case strings.HasPrefix(l, "+"):
-			if slices.ContainsFunc(marcas, func(m string) bool { return strings.Contains(l, m) }) {
+			if slices.ContainsFunc(marcas, func(m string) bool { return tieneMarca(l, m) }) {
 				out = append(out, fmt.Sprintf("%s:%d: %s", archivo, linea, strings.TrimSpace(l[1:])))
 			}
 			linea++
 		}
 	}
 	return out
+}
+
+// tieneMarca dice si l lleva la marca m. Una marca que empieza por letra (fit(, eslint-disable) no
+// cuenta dentro de otra palabra: benefit( no es fit(.
+func tieneMarca(l, m string) bool {
+	if m == "" || !esIdent(m[0]) {
+		return m != "" && strings.Contains(l, m)
+	}
+	for i := 0; ; {
+		j := strings.Index(l[i:], m)
+		if j < 0 {
+			return false
+		}
+		if k := i + j; k == 0 || !esIdent(l[k-1]) {
+			return true
+		}
+		i += j + 1
+	}
+}
+
+func esIdent(c byte) bool {
+	return c == '_' || c == '$' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
 }
 
 // CmdSupresiones es lo que la página y el recibo muestran como comando de la guardia supresiones.
