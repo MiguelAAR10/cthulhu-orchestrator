@@ -220,3 +220,32 @@ func TestEntornoSoloRutasNuncaSecretos(t *testing.T) {
 		}
 	}
 }
+
+// Review 2: the default init command is an npm script. When the script is a bare `playwright test`,
+// --forbid-only reaches it through the package manager.
+func TestSinOnlyEnScripts(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"scripts":{"test:e2e":"playwright test","test":"npx playwright test --reporter=junit","e2e:ci":"playwright test && echo done","lint":"eslint ."}}`), 0o644)
+	casos := map[string]string{
+		"npm run test:e2e":                   "npm run test:e2e -- --forbid-only",
+		"npm run test:e2e -- --grep x":       "npm run test:e2e -- --grep x --forbid-only",
+		"npm test":                           "npm test -- --forbid-only",
+		"npm run-script test:e2e && echo ok": "npm run-script test:e2e -- --forbid-only && echo ok",
+		"pnpm test:e2e":                      "pnpm test:e2e --forbid-only",
+		"pnpm run test:e2e":                  "pnpm run test:e2e --forbid-only",
+		"yarn test:e2e":                      "yarn test:e2e --forbid-only",
+		"npm run e2e:ci":                     "npm run e2e:ci", // compound: the flag would reach echo
+		"npm run lint":                       "npm run lint",
+		"npm install":                        "npm install",
+		"npm run test:e2e -- --forbid-only":  "npm run test:e2e -- --forbid-only",
+		"npx playwright test":                "npx playwright test --forbid-only",
+	}
+	for in, want := range casos {
+		if got := SinOnlyEn(dir, in); got != want {
+			t.Errorf("SinOnlyEn(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := SinOnlyEn(t.TempDir(), "npm run test:e2e"); got != "npm run test:e2e" {
+		t.Errorf("without package.json: %q", got)
+	}
+}

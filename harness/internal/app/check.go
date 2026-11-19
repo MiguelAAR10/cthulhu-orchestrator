@@ -26,7 +26,7 @@ func Check(cwd string) ([]slice.ResultadoCheck, error) {
 	if err != nil {
 		return nil, err
 	}
-	rs, err := slice.CorrerChecks(cs, func(cmd string) (string, int, error) {
+	rs, err := slice.CorrerChecks(cs, dir, func(cmd string) (string, int, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), slice.TimeoutDefecto)
 		defer cancel()
 		c := exec.CommandContext(ctx, "sh", "-c", cmd)

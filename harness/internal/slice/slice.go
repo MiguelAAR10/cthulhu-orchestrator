@@ -89,17 +89,19 @@ type Estado struct {
 	SinConteo   string     `json:"sin_conteo,omitempty"` // por qué este slice no cuenta pruebas (sin reporte del runner)
 	EnSitio     string     `json:"en_sitio,omitempty"`   // por qué el examen corre en el worktree y no en una copia aislada
 	Vigilados   []Vigilado `json:"vigilados,omitempty"`  // archivos del runner y su hash en el rojo
-	Ruta        string     `json:"ruta,omitempty"`       // fix|slice ("" = slice)
-	Ascendido   bool       `json:"ascendido,omitempty"`  // un fix que subió a slice
-	RutaMotivo  string     `json:"ruta_motivo,omitempty"`
-	TimeoutSeg  int        `json:"timeout_seg,omitempty"`
-	Recibo      *Recibo    `json:"recibo,omitempty"`
-	Integrado   string     `json:"integrado,omitempty"` // SHA del merge revalidado
-	Equipo      []Worker   `json:"equipo,omitempty"`    // workers en paralelo dentro del slice
-	Motivo      string     `json:"motivo,omitempty"`    // por qué está bloqueado
-	Alcance     []string   `json:"alcance,omitempty"`   // rutas que la historia justifica tocar
-	Demo        []string   `json:"demo,omitempty"`      // hasta 3 pasos para ver el resultado funcionando
-	Tarjeta     *Tarjeta   `json:"tarjeta,omitempty"`   // ficha de entendimiento que aprueba el Owner
+	// PruebasExamen: las pruebas que fallaban en el rojo, por nombre del reporte; verificar las exige pasadas.
+	PruebasExamen []string `json:"pruebas_examen,omitempty"`
+	Ruta          string   `json:"ruta,omitempty"`      // fix|slice ("" = slice)
+	Ascendido     bool     `json:"ascendido,omitempty"` // un fix que subió a slice
+	RutaMotivo    string   `json:"ruta_motivo,omitempty"`
+	TimeoutSeg    int      `json:"timeout_seg,omitempty"`
+	Recibo        *Recibo  `json:"recibo,omitempty"`
+	Integrado     string   `json:"integrado,omitempty"` // SHA del merge revalidado
+	Equipo        []Worker `json:"equipo,omitempty"`    // workers en paralelo dentro del slice
+	Motivo        string   `json:"motivo,omitempty"`    // por qué está bloqueado
+	Alcance       []string `json:"alcance,omitempty"`   // rutas que la historia justifica tocar
+	Demo          []string `json:"demo,omitempty"`      // hasta 3 pasos para ver el resultado funcionando
+	Tarjeta       *Tarjeta `json:"tarjeta,omitempty"`   // ficha de entendimiento que aprueba el Owner
 }
 
 func (e *Estado) ID() string      { return fmt.Sprintf("S-%s", e.NN) }

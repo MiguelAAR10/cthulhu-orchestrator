@@ -3,6 +3,7 @@ package slice
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -50,5 +51,23 @@ func TestCortoNoEntraEnPanico(t *testing.T) {
 		if got := Corto(in); got != want {
 			t.Errorf("Corto(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// The report names each test; a TAP number is dropped, since it shifts when fewer tests run.
+func TestContarNombres(t *testing.T) {
+	casos := []struct{ formato, raw, fallo, paso string }{
+		{"tap", "not ok 1 - cart total # expected 170\nok 2 page loads\n", "cart total", "page loads"},
+		{"junit", `<testsuites><testcase classname="a.spec.ts" name="x"><failure/></testcase><testcase name="y"/></testsuites>`, "a.spec.ts › x", "y"},
+		{"gotest-json", `{"Action":"fail","Package":"p","Test":"TestX"}` + "\n" + `{"Action":"pass","Package":"p","Test":"TestY"}`, "p TestX", "p TestY"},
+	}
+	for _, c := range casos {
+		got, err := Contar(c.formato, []byte(c.raw))
+		if err != nil || !slices.Equal(got.Fallaron, []string{c.fallo}) || !slices.Equal(got.Pasaron, []string{c.paso}) {
+			t.Fatalf("%s: %+v %v", c.formato, got, err)
+		}
+	}
+	if f := faltanDelExamen([]string{"cart total"}, &Conteo{Pasaron: []string{"page loads"}}); !slices.Equal(f, []string{"cart total"}) {
+		t.Fatalf("faltan = %v", f)
 	}
 }

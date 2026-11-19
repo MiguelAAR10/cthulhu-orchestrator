@@ -37,12 +37,15 @@ type Contrato struct {
 	Vigilados  []Vigilado `json:"vigilados,omitempty"`
 	Alcance    []string   `json:"alcance,omitempty"`
 	Tarjeta    *Tarjeta   `json:"tarjeta,omitempty"`
+	// PruebasExamen va en el contrato: un estado reescrito no puede vaciar la lista.
+	PruebasExamen []string `json:"pruebas_examen,omitempty"`
 }
 
 func contratoDe(e *Estado) Contrato {
 	return Contrato{NN: e.NN, Test: e.Test, Bundle: e.Bundle, Cmd: e.Cmd, Sano: e.Sano, Base: e.Base, Rama: e.Rama,
 		SHARojo: e.SHARojo, SHAExamen: e.SHAExamen, Huella: e.Huella, Reporte: e.Reporte, Formato: e.Formato,
-		Omitir: e.Omitir, SinConteo: e.SinConteo, TimeoutSeg: e.TimeoutSeg, Vigilados: e.Vigilados, Alcance: e.Alcance, Tarjeta: e.Tarjeta}
+		Omitir: e.Omitir, SinConteo: e.SinConteo, TimeoutSeg: e.TimeoutSeg, Vigilados: e.Vigilados, Alcance: e.Alcance,
+		PruebasExamen: e.PruebasExamen, Tarjeta: e.Tarjeta}
 }
 
 func refContrato(nn string) string  { return "refs/orq/contrato/" + nn }
