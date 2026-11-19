@@ -14,5 +14,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - name: Allow unprivileged user namespaces (bubblewrap on Ubuntu 24.04)
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Install staticcheck (pinned dev tool, see Makefile)
+        run: go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
       - name: make ci
         run: make ci

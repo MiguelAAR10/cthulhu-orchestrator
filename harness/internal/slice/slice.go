@@ -270,6 +270,7 @@ func (r Repo) Load(nn ...string) (*Estado, error) {
 		}
 		e, err := leerEstado(r.estadoPath(strings.TrimPrefix(nn[0], "S-")))
 		if errors.Is(err, os.ErrNotExist) {
+			//lint:ignore ST1005 the message starts with the slice ID (S-NN)
 			return nil, fmt.Errorf("S-%s no está abierto", strings.TrimPrefix(nn[0], "S-"))
 		}
 		if err != nil {

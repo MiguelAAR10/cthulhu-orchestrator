@@ -2,8 +2,11 @@ GO      ?= go
 BIN     ?= $(HOME)/bin
 CFG     ?= $(HOME)/.config/orq
 STATE   ?= $(HOME)/.local/state/orq
+# staticcheck is a dev tool in ~/go/bin, pinned; orq itself stays standard library only.
+STATICCHECK_VERSION := 2025.1.1
+STATICCHECK ?= $(HOME)/go/bin/staticcheck
 
-.PHONY: build test ci install limits status
+.PHONY: build test lint ci install limits status
 
 build:
 	cd harness && $(GO) build -trimpath -o ../dist/orq ./cmd/orq
@@ -11,11 +14,17 @@ build:
 test:
 	cd harness && $(GO) vet ./... && $(GO) test ./...
 
+# lint looks for ignored values and dead branches in the packages that decide what a worker may do.
+lint:
+	@$(STATICCHECK) -version 2>/dev/null | grep -q '^staticcheck $(STATICCHECK_VERSION) ' || \
+	{ echo "lint needs staticcheck $(STATICCHECK_VERSION). install: go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)"; exit 1; }
+	cd harness && $(STATICCHECK) ./internal/gate/... ./internal/slice/...
+
 # ci runs every suite. Every step gets its own ORQ_STATE, ORQ_LIMITS, ORQ_WORKTREES and ORQ_CONFIG
 # under a temp dir and its own orq binary there: nothing reads or writes the installed orq or its state.
 # The candidate is built once, in a local clone carrying this tree's files: Go records the VCS
 # revision only when .git is a directory, and in a linked worktree it is a file.
-ci:
+ci: lint
 	@set -e; tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/orq-ci.XXXXXX"); trap 'rm -rf "$$tmp"' EXIT; \
 	mkdir -p "$$tmp/state" "$$tmp/wt" "$$tmp/bin"; \
 	export ORQ_STATE="$$tmp/state" ORQ_LIMITS="$$tmp/limits.json" ORQ_WORKTREES="$$tmp/wt" ORQ_CONFIG="$$tmp/config.json" ORQ_SIN_DOC=1; \
