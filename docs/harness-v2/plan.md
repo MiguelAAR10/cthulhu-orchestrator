@@ -229,4 +229,4 @@ Order notes: Q1 follows B6 because it runs inside the sandboxed verification. U1
   - v2/build 547be6a (worktree ~/worktrees/cthulhu-build): D2b review-2 fix committed by the builder (exam tests by name + `--forbid-only` through package scripts), NOT yet integrated or `make ci`-verified; the builder was stopped before writing its report.
   - v2/d3 c97002e (worktree ~/worktrees/cthulhu-d3): D3 review fixes WIP (launch checks the sealed contract, route sealed, zone `.` refused), stopped mid-work, NOT verified.
   - Next on resume: finish/verify D3 fixes, integrate both branches, `make ci`, rerun the D2b review-2 repro myself, close D2b and D3; then D3b (wire `claude plugin eval`, see scout notes) and D4.
-
+- 2026-11-19 12:45: resumed after the RAM pause. **D2b closed** on d80cc88 (Playwright in the box, feature map `docs/mapa.md`, exam tests by name, `--forbid-only`). 2 review rounds + fix, about USD 17. D3 fixes resumed in `~/worktrees/cthulhu-d3`.

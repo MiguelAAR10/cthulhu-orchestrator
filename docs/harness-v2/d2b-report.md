@@ -243,3 +243,9 @@ Both layers fired: the exam got `--forbid-only` through the npm script, and the 
 
 Still open:
 - When the exam runs without a report (`--sin-conteo`), there are no names to require. A compound npm script then relies on the `.only(` mark alone.
+
+## Close (orchestrator, 2026-11-19)
+Integrated as d80cc88 after 2 review rounds plus a round-2 fix (`reviews/d2b-review.md`, `reviews/d2b-review-2.md`). `make ci` on d80cc88 with the candidate (`modified=false`): exit 0, e2e 86/0, aislamiento 14/0.
+Orchestrator check of the round-2 finding, real Playwright 1.65.1 app, exam `npm run test:e2e` with a junit report: a worker `test.only ('page loads', …)` (with a space) is refused with "1 prueba(s) del examen no aparecen como pasadas … total.spec.ts › cart shows the total"; the honest fix then gets `e2e paso · supresiones paso`, aligned, and no server is left running.
+Known limit found during that check: without a `checks.e2e` block the box gets no Playwright browsers, and a browser-launch failure ("Executable doesn't exist") is counted as a test failure, so `abrir` accepts it as a red and `verificar` spends repairs on it. Fix later: bind the browsers for any Playwright exam and label that error as infrastructure.
+Map decision taken by the orchestrator (Owner may change): `docs/mapa.md` in the repo.
