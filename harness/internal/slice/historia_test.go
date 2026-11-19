@@ -3,6 +3,8 @@ package slice
 import (
 	"strings"
 	"testing"
+
+	"orq/internal/diario"
 )
 
 func TestHistoriaConTresHijos(t *testing.T) {
@@ -44,5 +46,51 @@ func TestHistoriaConTresHijos(t *testing.T) {
 	hs, err := r.Historias()
 	if err != nil || len(hs) != 1 || hs[0].Titulo != "Pagos" {
 		t.Fatalf("historias: %+v %v", hs, err)
+	}
+}
+
+func TestPausaHistoriaYGlobal(t *testing.T) {
+	r := repoDeJuguete(t)
+	r.AbrirHistoria("h", "H", t0)
+	e := &Estado{NN: "02", Historia: "h"}
+	suelto := &Estado{NN: "01"}
+	if err := r.Pausado(e); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.PausarHistoria("h", true, t0); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Pausado(e); err == nil || !strings.Contains(err.Error(), "orq historia reanudar h") {
+		t.Fatalf("paused story: %v", err)
+	}
+	if err := r.Pausado(suelto); err != nil {
+		t.Fatalf("a slice outside the story is not paused: %v", err)
+	}
+	r.PausarHistoria("h", false, t0)
+	if err := r.PausarTodo(true, "almuerzo", t0); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Pausado(suelto); err == nil || !strings.Contains(err.Error(), "orq reanudar") || !strings.Contains(err.Error(), "almuerzo") {
+		t.Fatalf("global pause: %v", err)
+	}
+	if motivo, ok := r.PausaGlobal(); !ok || motivo != "almuerzo" {
+		t.Fatalf("PausaGlobal: %q %v", motivo, ok)
+	}
+	r.PausarTodo(false, "", t0)
+	if err := r.Pausado(e); err != nil {
+		t.Fatal(err)
+	}
+	evs, _ := diario.Leer(diario.Ruta(r.OrqDir))
+	var ps []string
+	for _, ev := range evs {
+		if ev.Tipo == "pausa" {
+			ps = append(ps, ev.Resultado+":"+ev.Detalle)
+		}
+	}
+	if strings.Join(ps, " ") != "pausada:h reanudada:h pausada:todo reanudada:todo" {
+		t.Fatalf("journal: %v", ps)
+	}
+	if err := r.PausarHistoria("nada", true, t0); err == nil {
+		t.Fatal("pausing an unknown story must fail")
 	}
 }

@@ -72,6 +72,9 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	if err := e.PuedeLanzar(); err != nil {
 		return "", false, err
 	}
+	if err := r.Pausado(e); err != nil {
+		return "", false, err
+	}
 	skills, err := p.skillsDelWorker(e)
 	if err != nil {
 		return "", false, err

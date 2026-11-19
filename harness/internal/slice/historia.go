@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"orq/internal/diario"
 	"orq/internal/orqdir"
 )
 
@@ -108,4 +109,68 @@ func (r Repo) Hijos(id string) (abiertos []*Estado, cerrados []Registro, err err
 		}
 	}
 	return abiertos, cerrados, nil
+}
+
+func (r Repo) pausaPath() string { return filepath.Join(r.OrqDir, "pausa") }
+
+func (r Repo) anotarPausa(pausada bool, que string, now time.Time) error {
+	res := "reanudada"
+	if pausada {
+		res = "pausada"
+	}
+	return diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{TS: now, Tipo: "pausa", Resultado: res, Detalle: que})
+}
+
+// PausarHistoria pauses or resumes one story: its children get no new worker while paused.
+func (r Repo) PausarHistoria(id string, pausada bool, now time.Time) error {
+	soltar, err := r.candado("abrir")
+	if err != nil {
+		return err
+	}
+	defer soltar()
+	h, err := r.LeerHistoria(id)
+	if err != nil {
+		return err
+	}
+	h.Pausada = pausada
+	if err := r.guardarHistoria(h); err != nil {
+		return err
+	}
+	return r.anotarPausa(pausada, id, now)
+}
+
+// PausarTodo pauses or resumes every launch in the project. Nothing running is touched.
+func (r Repo) PausarTodo(pausada bool, motivo string, now time.Time) error {
+	if pausada {
+		if err := orqdir.WriteAtomic(r.pausaPath(), []byte(motivo)); err != nil {
+			return err
+		}
+	} else if err := os.Remove(r.pausaPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return r.anotarPausa(pausada, "todo", now)
+}
+
+// PausaGlobal says whether the project is paused, and why.
+func (r Repo) PausaGlobal() (motivo string, ok bool) {
+	raw, err := os.ReadFile(r.pausaPath())
+	return string(raw), err == nil
+}
+
+// Pausado refuses a launch for e while the project or its story is paused.
+func (r Repo) Pausado(e *Estado) error {
+	if motivo, ok := r.PausaGlobal(); ok {
+		return fmt.Errorf("orq está en pausa (%s): no se lanzan workers. Reanuda con orq reanudar", motivo)
+	}
+	if e.Historia == "" {
+		return nil
+	}
+	h, err := r.LeerHistoria(e.Historia)
+	if err != nil {
+		return err
+	}
+	if h.Pausada {
+		return fmt.Errorf("la historia %s está en pausa: %s no lanza workers. Reanuda con orq historia reanudar %s", h.ID, e.ID(), h.ID)
+	}
+	return nil
 }
