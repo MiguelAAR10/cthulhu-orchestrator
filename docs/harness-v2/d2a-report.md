@@ -123,3 +123,21 @@ All of the exit tests above run inside `make ci`, on throwaway repos, with no ne
 
 - Once D5 names the second provider, drop the unreachable Codex launch code in `agente` and `app.argsRol`.
 - `orq doctor` could check that every check command is visible inside the box, so the Owner learns about it before the first close.
+
+## Review fixes (round 1 of 2, `reviews/d2a-review.md`)
+
+Each fix has a test seen failing first. `internal/gate` is untouched. `make ci` exit 0 on `b41367a` (unit suites, 86 attack checks, 14 forge scenarios).
+
+| # | Finding | Fix | Commit | Test |
+|---|---|---|---|---|
+| 1 | Go lint passed when gofmt never ran | `perfil` writes `out=$(gofmt -l . 2>&1); c=$?; printf …; if [ $c -ne 0 ]; then exit $c; fi; test -z "$out"`. A missing gofmt exits 127, which reads as infrastructure. An unparseable file exits 2. An unformatted file exits 1 | `2e6db9e` | `perfil.TestLintGoNoPasaSinGofmt`: clean, missing gofmt, `func {`, unformatted |
+| 2 | Worker could rewrite what a check runs | The receipt gets `definiciones_checks` and the note "check definitions changed: <files>". Files that count: `package.json` (`scripts` only, so dependency-only changes do not count), `tsconfig*.json`, `eslint.config.*`, `.eslintrc*`, `biome.json*`, `.golangci.*`, `pyproject.toml` (`[tool.*]` only), `setup.cfg`, `ruff.toml`, `.prettierrc*`, plus `checks.definiciones.archivos`. The page flags them `!!` with the diff (up to 80 lines). `cerrar --aceptado` refuses without `--acepto-checks` | `48b358c` | `slice.TestDefinicionDeCheckCambiadaPideAlOwner` (review repro), `TestDefinicionesSoloDependenciasNoCuenta`, `cli.TestDecidirDefinicionesDeChecks` |
+| 3 | Deleted tests not caught | The receipt gets `tests_borrados` and the note "tests deleted: …". It covers every test file deleted or renamed between red and the verified commit. The page flags each one `!!` under Archivos | `48b358c` | `slice.TestTestsBorradosEnElRecibo`, `cli.TestDecidirTestsBorrados` |
+| 4 | Suppressions not caught by default | A built-in check `supresiones` is on whenever a `checks` block exists, and `orq init` writes one for every stack. It runs host-side on `git diff -U0` from red to the verified commit and looks only at added lines. It fails with `file:line: text`. `checks.supresiones.patrones` extends the list and `checks.supresiones.omitir` turns it off. `orq check` also runs it in the worker clone, including uncommitted and untracked files | `48b358c` | `slice.TestSupresionesGuardiaPorDefecto`, `TestSupresionesApagadaOExtendida`, `cli.TestCheckEnClonLeeConfigDelProyecto`, `config.TestSupresionesYDefiniciones` |
+| 5 | Toolchains under `$HOME` invisible in the box | `sandbox.Herramientas` resolves each tool a check names on the host `PATH`. When the tool is under `$HOME`, verificar binds read-only both the `PATH` directory and the symlink target's directory. If either is a `bin/`, it binds that directory's parent (the toolchain root) instead. It never binds `$HOME` itself, `~/.claude*`, `~/.config`, `~/.ssh`, `~/.gnupg`, `~/.local/state` or the orq state dir, and never a directory that contains one of them, so `~/.local/bin` is bound but `~/.local` is not. `orq check --caja` reports per check whether the box can run it and what it binds, and exits 1 if one cannot run | `b41367a` | `sandbox.TestHerramientasUnderHome` (stub toolchain under a temp HOME), `slice.TestCheckVeLaToolchainDelHome` (real box, failed at exit 127 before), `cli.TestCheckCajaInforma` |
+| 6 | Page labelled exit 127 `fallo` | `!! <check> infraestructura · exit 127 · <cmd> · la caja no ve el comando` | `37591e5` | `cli.TestDecidirExit127EsInfraestructura` |
+
+Notes:
+- On this machine, `orq check --caja` on a fresh Go module shows lint, types and tests running in the box, binding `~/.local/bin` and `~/.local/lib/go-1.25.8`. No one has yet run a real `go test` verification end to end through `orq slice verificar`. The integration test uses a stub tool in the real box.
+- `checks.definiciones` and `checks.supresiones` are reserved names in the `checks` block. `patrones` is accepted only on `supresiones` and `archivos` only on `definiciones`.
+- Not done: the `--acepto-checks` acceptance is not written to the diario as its own event.
