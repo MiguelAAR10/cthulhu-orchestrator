@@ -77,19 +77,22 @@ func (r Repo) LeerHistoria(id string) (*Historia, error) {
 	return &h, nil
 }
 
-// Historias lists every story, sorted by id.
+// Historias lists every readable story, sorted by id. An unreadable file does not stop the rest:
+// the stories that read come back together with an error that names each file that did not.
 func (r Repo) Historias() ([]*Historia, error) {
 	m, _ := filepath.Glob(filepath.Join(r.dirHistorias(), "*.json"))
 	slices.Sort(m)
 	var out []*Historia
+	var errs []error
 	for _, f := range m {
 		h, err := r.LeerHistoria(strings.TrimSuffix(filepath.Base(f), ".json"))
 		if err != nil {
-			return nil, err
+			errs = append(errs, err)
+			continue
 		}
 		out = append(out, h)
 	}
-	return out, nil
+	return out, errors.Join(errs...)
 }
 
 // Hijos are the story's open slices and its closed ones, in slice order.

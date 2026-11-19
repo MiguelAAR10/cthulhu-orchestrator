@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -116,5 +117,46 @@ func TestSesionCerrarWorkerFalloMantienePanel(t *testing.T) {
 	out, errs, code := run(t, "sesion", "cerrar", w)
 	if code != 0 || !strings.Contains(out, "S-01/a1 verificado") || !strings.Contains(out, "cerrada: "+w) {
 		t.Fatalf("%d %s %s", code, out, errs)
+	}
+}
+
+func TestStatusNoOcultaSliceConHistoriaDesconocida(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	conLimites(t)
+	if _, errs, code := run(t, "historia", "abrir", "pagos", "--titulo", "Pagos"); code != 0 {
+		t.Fatal(errs)
+	}
+	abrirHijo(t, "01")
+	f := filepath.Join(root, ".orq", "slices", "01.json")
+	raw, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(f, []byte(strings.Replace(string(raw), `"historia": "pagos"`, `"historia": "otra"`, 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _, _ := run(t, "status")
+	if !strings.Contains(out, "!! historia desconocida: otra") || !strings.Contains(out, "S-01") {
+		t.Fatalf("an open slice must never be hidden:\n%s", out)
+	}
+}
+
+func TestStatusUnaHistoriaMalaNoOcultaSlices(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	conLimites(t)
+	if _, errs, code := run(t, "slice", "abrir", "01", "--titulo", "suelto", "--test", "tests/s01.sh", "--cmd", "sh run.sh", "--sin-scouts", "e2e", "--sin-conteo", "prueba"); code != 0 {
+		t.Fatal(errs)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".orq", "historias"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".orq", "historias", "mala.json"), []byte("{no json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _, _ := run(t, "status")
+	if !strings.Contains(out, "mala") || !strings.Contains(out, "S-01") {
+		t.Fatalf("one bad story file reported, every slice still listed:\n%s", out)
 	}
 }

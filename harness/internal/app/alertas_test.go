@@ -143,3 +143,29 @@ func TestWorkerCerradoNoAlertaSinProgreso(t *testing.T) {
 		t.Fatalf("a closed worker makes no progress by design: %+v", as)
 	}
 }
+
+func TestFueraDeAlcanceSeAnotaUnaVezPorSlice(t *testing.T) {
+	p, _, _ := proyectoDePrueba(t, "")
+	e, _, err := p.Slices().Abrir("02", "dos", "tests/s01.sh", "sh tests/s01.sh", slice.Opciones{SinConteo: "prueba", Alcance: []string{"v01.txt"}}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	aprobarTarjeta(t, p, "02")
+	p.LanzarWorker(context.Background(), PedidoWorker{Slice: "02", Agente: "claude", Alcance: "x", Presupuesto: "10 min"})
+	commitEnClon(t, e.Worktree, "otro.txt", "x")
+	alertasEn(t, p)
+	commitEnClon(t, e.Worktree, "otro2.txt", "x")
+	as := alertasEn(t, p)
+	n := 0
+	for _, ev := range eventosAlerta(t, p) {
+		if ev.Paso == "fuera_de_alcance" && ev.Slice == "02" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("journaled %d times, want 1", n)
+	}
+	if len(as) != 1 || !strings.Contains(as[0].Detalle, "otro2.txt") {
+		t.Fatalf("status shows the latest list: %+v", as)
+	}
+}

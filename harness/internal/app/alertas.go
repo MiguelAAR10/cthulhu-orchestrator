@@ -68,17 +68,26 @@ func (p Proyecto) Alertas(ctx context.Context) ([]Alerta, error) {
 			}
 		}
 	}
+	// One journal row per slice, kind and actor: a changing detail (the out-of-scope file list, the
+	// last-progress time) is shown by status but not journaled again. Each exam after approval is
+	// its own event, so its detail is part of the key.
+	clave := func(a Alerta) Alerta {
+		if a.Tipo != "examen_tras_aprobar" {
+			a.Detalle = ""
+		}
+		return a
+	}
 	vistas := map[Alerta]bool{}
 	for _, ev := range evs {
 		if ev.Tipo == "alerta" {
-			vistas[Alerta{Slice: ev.Slice, Tipo: ev.Paso, Actor: ev.Actor, Detalle: ev.Detalle}] = true
+			vistas[clave(Alerta{Slice: ev.Slice, Tipo: ev.Paso, Actor: ev.Actor, Detalle: ev.Detalle})] = true
 		}
 	}
 	for _, a := range out {
-		if vistas[a] {
+		if vistas[clave(a)] {
 			continue
 		}
-		vistas[a] = true
+		vistas[clave(a)] = true
 		if err := p.anotar(diario.Evento{Tipo: "alerta", Paso: a.Tipo, Slice: a.Slice, Actor: a.Actor, Detalle: a.Detalle}); err != nil {
 			return out, err
 		}
