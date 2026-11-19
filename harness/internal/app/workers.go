@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"orq/internal/agente"
@@ -14,8 +15,11 @@ import (
 	"orq/internal/gitx"
 	"orq/internal/limits"
 	"orq/internal/orqdir"
+	"orq/internal/perfil"
 	"orq/internal/plan"
+	"orq/internal/skilleval"
 	"orq/internal/slice"
+	"orq/internal/state"
 	"orq/internal/terminal"
 )
 
@@ -66,6 +70,10 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 		return "", false, err
 	}
 	if err := e.PuedeLanzar(); err != nil {
+		return "", false, err
+	}
+	skills, err := p.skillsDelWorker(e)
+	if err != nil {
 		return "", false, err
 	}
 	// Con plan, la tarea manda: zona, rutas y dificultad salen de ella, y queda en curso.
@@ -194,7 +202,7 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	if tareaPl != nil {
 		contrato += fmt.Sprintf("\nTarea del plan: %s (%s). Al terminar avisa al Orquestador; él la marca hecha con `orq plan hecha %s`.\n", tareaPl.ID, tareaPl.Dificultad, tareaPl.ID)
 	}
-	prompt := contrato + "\nAntes de empezar corre `orq skill worker` y sigue esa guía. Cuando termines, pide verificación por el canal.\n"
+	prompt := contrato + skills + "\nAntes de empezar corre `orq skill worker` y sigue esa guía. Cuando termines, pide verificación por el canal.\n"
 	paso := "contrato"
 	if tareaPl != nil {
 		paso += ":" + tareaPl.ID // una tarea nueva para un worker vivo es un contrato nuevo
@@ -204,4 +212,39 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 		return nombre, false, fmt.Errorf("worker abierto pero no recibió el contrato: %w", err)
 	}
 	return nombre, res == terminal.YaEstaba && entregado, nil
+}
+
+// skillsDelWorker es el párrafo del contrato con las skills del proyecto para el tipo de tarea del
+// slice, de mejor a peor nota, y las que quedan fuera por skills.minimo.
+func (p Proyecto) skillsDelWorker(e *slice.Estado) (string, error) {
+	pf := p.Perfil()
+	tipo := e.Tipo
+	if tipo == "" {
+		tipo = pf.Tipo()
+	}
+	var nombres []string
+	for _, s := range perfil.ParaRol(perfil.Lista(pf), "worker") {
+		nombres = append(nombres, s.Nombre)
+	}
+	ns, err := skilleval.Notas(state.Dir())
+	if err != nil {
+		return "", fmt.Errorf("notas de skills: %w", err)
+	}
+	elegidas, fuera := skilleval.Ordenar(nombres, ns, tipo, p.Cfg.Skills.Minimo)
+	lista := func(es []skilleval.Eleccion) string {
+		var ps []string
+		for _, el := range es {
+			if el.Nota == nil {
+				ps = append(ps, el.Skill+" sin nota")
+			} else {
+				ps = append(ps, fmt.Sprintf("%s %.2f", el.Skill, *el.Nota))
+			}
+		}
+		return strings.Join(ps, ", ")
+	}
+	txt := fmt.Sprintf("\nSkills para el tipo %s, de mejor a peor nota: %s.\n", tipo, lista(elegidas))
+	if len(fuera) > 0 {
+		txt += fmt.Sprintf("Fuera por nota bajo skills.minimo %.2f: %s.\n", *p.Cfg.Skills.Minimo, lista(fuera))
+	}
+	return txt, nil
 }

@@ -472,8 +472,9 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		ruta := fs.String("ruta", "", "fix (un worker, sin equipo ni plan) | slice (por defecto)")
 		timeout := fs.Int("timeout", 0, "segundos máximos del examen (0 = 600)")
 		demo := fs.String("demo", "", "hasta 3 pasos para ver el resultado funcionando, separados por ;")
+		tipo := fs.String("tipo", "", "tipo de tarea con que se eligen las skills del worker (por defecto, el stack)")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *titulo == "" || *test == "" || *cmd == "" {
-			fmt.Fprintln(stderr, "uso: orq slice abrir NN --titulo \"...\" --test ruta --cmd \"...\" (--reporte f --formato tap|junit|gotest-json | --sin-conteo \"motivo\") [--bundle a,b] [--sano \"cmd\"] [--permite-omitir] [--ruta fix|slice] [--timeout s] [--demo \"paso; paso; paso\"] [--sin-scouts \"motivo\"]")
+			fmt.Fprintln(stderr, "uso: orq slice abrir NN --titulo \"...\" --test ruta --cmd \"...\" (--reporte f --formato tap|junit|gotest-json | --sin-conteo \"motivo\") [--bundle a,b] [--sano \"cmd\"] [--permite-omitir] [--ruta fix|slice] [--timeout s] [--demo \"paso; paso; paso\"] [--tipo T] [--sin-scouts \"motivo\"]")
 			return 1
 		}
 		if *sinScouts == "" && !p.HayContexto("S-"+args[1]) {
@@ -486,7 +487,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 				extra = append(extra, f)
 			}
 		}
-		e, out, err := r.Abrir(args[1], *titulo, *test, *cmd, slice.Opciones{Alcance: partir(*alcance), Bundle: extra, Sano: *sano, Reporte: *reporte, Formato: *formato, PermiteOmitir: *omitir, SinConteo: *sinConteo, EnSitio: *enSitio, Ruta: *ruta, Timeout: *timeout, Demo: pasos(*demo)}, time.Now())
+		e, out, err := r.Abrir(args[1], *titulo, *test, *cmd, slice.Opciones{Alcance: partir(*alcance), Bundle: extra, Sano: *sano, Reporte: *reporte, Formato: *formato, PermiteOmitir: *omitir, SinConteo: *sinConteo, EnSitio: *enSitio, Ruta: *ruta, Timeout: *timeout, Demo: pasos(*demo), Tipo: *tipo}, time.Now())
 		show(out)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)

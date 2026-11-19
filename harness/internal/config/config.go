@@ -43,6 +43,12 @@ type Recursos struct {
 	CargaMax       float64 `json:"carga_max"`         // carga de 1 min por núcleo a partir de la cual no se lanza
 }
 
+// Skills decide qué skills recibe un worker según su nota (orq skill eval).
+type Skills struct {
+	// Minimo deja fuera las skills cuya última nota para el tipo de la tarea es menor; nil = sin filtro.
+	Minimo *float64 `json:"minimo,omitempty"`
+}
+
 // Check es un comando del proyecto que decide si el código es correcto (lint, tipos, pruebas o una
 // guardia extra). Lleva el comando o, si el proyecto no lo tiene, por qué se omite: omitido no es pasado.
 type Check struct {
@@ -135,6 +141,7 @@ type Config struct {
 	Workers  map[string]map[string]Agente `json:"workers"` // dificultad → agente → modelo y esfuerzo
 	Recursos Recursos                     `json:"recursos"`
 	Checks   map[string]Check             `json:"checks,omitempty"` // nombre → comando; ver ChecksEnOrden
+	Skills   Skills                       `json:"skills"`
 
 	origen   map[string]string // clave con puntos → de dónde salió
 	archivos []Archivo
@@ -400,6 +407,9 @@ func (c Config) validar() error {
 	}
 	if err := c.validarChecks(); err != nil {
 		return err
+	}
+	if m := c.Skills.Minimo; m != nil && (*m < 0 || *m > 1) {
+		return fmt.Errorf("skills.minimo debe estar entre 0 y 1, no %v", *m)
 	}
 	r := c.Recursos
 	switch {

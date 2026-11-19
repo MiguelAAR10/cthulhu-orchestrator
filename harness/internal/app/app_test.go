@@ -16,6 +16,7 @@ import (
 	"orq/internal/diario"
 	"orq/internal/limits"
 	"orq/internal/plan"
+	"orq/internal/skilleval"
 	"orq/internal/slice"
 	"orq/internal/sysinfo"
 	"orq/internal/terminal"
@@ -478,5 +479,42 @@ func TestSubirRutaSigueSiendoValida(t *testing.T) {
 	}
 	if err := p.Slices().Confiar(e); err != nil {
 		t.Fatalf("subir la ruta re-sella el contrato: %v", err)
+	}
+}
+
+func TestLanzarOrdenaSkillsPorNota(t *testing.T) {
+	estado := t.TempDir()
+	t.Setenv("ORQ_STATE", estado)
+	for _, n := range []skilleval.Nota{
+		{Skill: "systematic-debugging", Hash: "h1", Tipo: "general", Nota: 0.9},
+		{Skill: "receiving-code-review", Hash: "h2", Tipo: "general", Nota: 0.2},
+		{Skill: "test-driven-development", Hash: "h3", Tipo: "go", Nota: 0.1},
+	} {
+		if err := skilleval.Guardar(estado, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p, term, _ := proyectoDePrueba(t, `{"skills":{"minimo":0.5}}`)
+	if _, _, err := p.LanzarWorker(context.Background(), PedidoWorker{Agente: "claude", Alcance: "x", Presupuesto: "10 min"}); err != nil {
+		t.Fatal(err)
+	}
+	txt := term.Ops("avisar")[0].Texto
+	if !strings.Contains(txt, "Skills para el tipo general, de mejor a peor nota: systematic-debugging 0.90, test-driven-development sin nota") ||
+		!strings.Contains(txt, "Fuera por nota bajo skills.minimo 0.50: receiving-code-review 0.20.") {
+		t.Fatalf("contrato: %s", txt)
+	}
+}
+
+func TestLanzarUsaElTipoDelSlice(t *testing.T) {
+	t.Setenv("ORQ_STATE", t.TempDir())
+	p, term, _ := proyectoDePrueba(t, "")
+	if _, _, err := p.Slices().Abrir("02", "dos", "tests/s01.sh", "sh tests/s01.sh", slice.Opciones{SinConteo: "prueba", Ruta: slice.RutaFix, Tipo: "go"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := p.LanzarWorker(context.Background(), PedidoWorker{Slice: "02", Agente: "claude", Alcance: "x", Presupuesto: "10 min"}); err != nil {
+		t.Fatal(err)
+	}
+	if txt := term.Ops("avisar")[0].Texto; !strings.Contains(txt, "Skills para el tipo go,") {
+		t.Fatalf("contrato: %s", txt)
 	}
 }

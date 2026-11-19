@@ -249,3 +249,17 @@ func TestSinOnlyEnScripts(t *testing.T) {
 		t.Errorf("without package.json: %q", got)
 	}
 }
+
+func TestConfigSkillsMinimo(t *testing.T) {
+	dir := t.TempDir()
+	c, err := CargarDe(escribir(t, filepath.Join(dir, "a.json"), `{"skills":{"minimo":0.5}}`))
+	if err != nil || c.Skills.Minimo == nil || *c.Skills.Minimo != 0.5 {
+		t.Fatalf("%+v %v", c.Skills, err)
+	}
+	if c, _ := CargarDe(); c.Skills.Minimo != nil {
+		t.Fatal("por defecto no hay mínimo")
+	}
+	if _, err := CargarDe(escribir(t, filepath.Join(dir, "b.json"), `{"skills":{"minimo":1.5}}`)); err == nil || !strings.Contains(err.Error(), "skills.minimo debe estar entre 0 y 1") {
+		t.Fatalf("%v", err)
+	}
+}

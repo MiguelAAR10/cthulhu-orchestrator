@@ -92,6 +92,7 @@ type Estado struct {
 	// PruebasExamen: las pruebas que fallaban en el rojo, por nombre del reporte; verificar las exige pasadas.
 	PruebasExamen []string `json:"pruebas_examen,omitempty"`
 	Ruta          string   `json:"ruta,omitempty"`      // fix|slice ("" = slice)
+	Tipo          string   `json:"tipo,omitempty"`      // tipo de tarea para elegir skills ("" = el stack)
 	Ascendido     bool     `json:"ascendido,omitempty"` // un fix que subió a slice
 	RutaMotivo    string   `json:"ruta_motivo,omitempty"`
 	TimeoutSeg    int      `json:"timeout_seg,omitempty"`
@@ -347,6 +348,7 @@ type Opciones struct {
 	SinConteo        string   // motivo para abrir sin --reporte/--formato (el runner no puede dejar reporte)
 	EnSitio          string   // ya no existe: el examen corre siempre en la caja; decirlo es un error
 	Ruta             string   // fix|slice; vacío = slice
+	Tipo             string   // tipo de tarea con que se eligen las skills del worker; vacío = el stack
 	Timeout          int      // segundos; 0 = 600
 	Alcance          []string // rutas que la historia justifica; fuera de ellas, alarma de desalineación
 	Demo             []string // pasos para ver el resultado funcionando; la página de decisión los muestra

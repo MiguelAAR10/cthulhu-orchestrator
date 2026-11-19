@@ -103,3 +103,14 @@ func TestSkillCompararCLI(t *testing.T) {
 		t.Fatal("sin el hash nuevo")
 	}
 }
+
+func TestSliceAbrirGuardaElTipo(t *testing.T) {
+	root := repoCLI(t)
+	if _, errs, code := run(t, append(abrirBase, "--sin-conteo", "x", "--tipo", "go")...); code != 0 {
+		t.Fatal(errs)
+	}
+	raw, _ := os.ReadFile(filepath.Join(root, ".orq", "slices", "01.json"))
+	if !strings.Contains(string(raw), `"tipo": "go"`) {
+		t.Fatalf("%s", raw)
+	}
+}
