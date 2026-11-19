@@ -1,10 +1,10 @@
 package sandbox
 
 // Toolchains: the box sees the system (/usr, /bin, ...) but not $HOME, where go, node or uv usually
-// live. For each tool a check names, the directory of every symlink hop from the PATH hit to the real
-// binary, and the real binary's directory, are bound read-only,
-// with the toolchain root when the tool sits in a bin/ (GOROOT, a node version). Never a directory
-// that holds or sits inside credentials, agent config or orq's state.
+// live. For each tool a command names, the directory of every symlink hop from the PATH hit to the real
+// binary, and the real binary's directory, are bound read-only, with the toolchain root when the tool
+// sits in a bin/ (GOROOT, a node version). Never a directory that holds or sits inside credentials,
+// agent config or orq's state.
 
 import (
 	"bytes"

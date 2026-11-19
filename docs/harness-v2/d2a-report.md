@@ -141,3 +141,43 @@ Notes:
 - On this machine, `orq check --caja` on a fresh Go module shows lint, types and tests running in the box, binding `~/.local/bin` and `~/.local/lib/go-1.25.8`. No one has yet run a real `go test` verification end to end through `orq slice verificar`. The integration test uses a stub tool in the real box.
 - `checks.definiciones` and `checks.supresiones` are reserved names in the `checks` block. `patrones` is accepted only on `supresiones` and `archivos` only on `definiciones`.
 - Not done: the `--acepto-checks` acceptance is not written to the diario as its own event.
+
+## Review fixes, round 2 (`reviews/d2a-review-2.md`)
+
+Each fix has a test seen failing first. Every commit passed `gofmt -l harness` (empty), `go vet ./...`, `go test -race ./...` and `make ci` (exit 0).
+
+| # | Defect | Fix | Commit | Test (failed before) |
+|---|---|---|---|---|
+| 1 | The box skipped the middle symlink (`~/.local/lib/go -> go-1.25.8`), so `go` was not found (exit 127) | `sandbox.saltos` follows the PATH hit component by component, the way the kernel does, and records every symlink on the way, for files and for directories. The box binds each link's directory, the real binary's directory, and the toolchain root when that directory is a `bin/` (GOROOT). The deny list is the same, and it applies to every hop. Top-level system links (`/bin -> usr/bin`) are skipped because the box already recreates them | `debc544` | `sandbox.TestHerramientasSiguenCadaEnlace`: a temp HOME with this machine's layout, run in a real box (`command -v go && go version`). It was exit 127 before. A hop into `~/.config` stays out of the box, with the reason |
+| 2 | `orq check --caja` printed a static "corre en la caja" | For each tool a check names, `sandbox.Sondear` runs `command -v <tool>` and then `--version` (or `version`) in a real box with the same binding as verificar. It reports `<tool> → <path in the box> · <first line>` and the probe's exit when it is not 0. Exit 126/127, or no path, is reported as "no corre en la caja: la sonda de X sale N" and exits 1 | `0198680` | `cli.TestCheckCajaInforma`: a tool behind the two-hop chain, and `rota`, whose interpreter the box never sees. The old code said `rota` "corre" |
+| 3 | The exam got no toolchain binding | `correrEn` binds the toolchain of every tool its command names, so the exam, `--sano` and the checks share one binding | `6adbd1e` | `slice.TestExamenVeSuToolchain`: an exam that is a tool behind the two-hop chain. It was "fakego: not found" before |
+| 4 | Exit 127 used up a repair and led to BLOQUEADO "sin progreso" | When the exam or a check exits 127, verificar still fails and still writes its receipt. It does not change `Fallos`, `HeadFallo` or the failure signature. The error says "infraestructura (…, exit 127): no cuenta como reparación" | `7379b9f` | `slice.TestInfraestructuraNoGastaReparacion` (check and exam): 4 runs on the same head stay IMPLEMENTANDO with 0 failures and leave 4 receipts |
+
+### Real end-to-end run (item 5)
+
+This ran in a throwaway Go module under the session scratchpad. `ORQ_STATE`, `ORQ_LIMITS` (missing file, so no `sandbox.ro`), `ORQ_WORKTREES` and `ORQ_CONFIG` were temp. The binary was built into the scratchpad; `~/bin/orq` was not touched, and nothing under `~/.config/orq` or `~/.local/state/orq` changed. Steps: `orq init`, then a red exam `accept/sum_test.go` (`Sum(2, 3) = 0, want 5`), then `orq slice abrir 01 … --cmd "go test ./accept/"` (red, in the box), then a green commit in the worker clone, then `orq slice verificar` → **VERIFICADO** (exit 0).
+
+`orq check --caja` before the slice:
+
+```
+lint  corre en la caja: gofmt → /home/miguel/.local/bin/gofmt · flag provided but not defined: -version (exit 2) · monta /home/miguel/.local/bin, /home/miguel/.local/lib
+types  corre en la caja: go → /home/miguel/.local/bin/go · go version go1.25.8 linux/amd64 · monta /home/miguel/.local/bin, /home/miguel/.local/lib
+tests  corre en la caja: go → /home/miguel/.local/bin/go · go version go1.25.8 linux/amd64 · monta /home/miguel/.local/bin, /home/miguel/.local/lib
+```
+
+Receipt excerpt (`.orq/recibos.jsonl`):
+
+```json
+{"attempt": "S-01/a1", "head": "de88bbe9b90f768eb6a61d3d24c0b0a0fda119a8", "cmd": "go test ./accept/",
+ "exit": 0, "resultado": "paso", "salida": "ok  \texample.com/m/accept\t0.002s",
+ "checks": [
+  {"nombre": "lint", "cmd": "out=$(gofmt -l . 2>&1); c=$?; printf '%s\\n' \"$out\"; if [ $c -ne 0 ]; then exit $c; fi; test -z \"$out\"", "exit": 0, "resultado": "paso"},
+  {"nombre": "types", "cmd": "go vet ./...", "exit": 0, "resultado": "paso"},
+  {"nombre": "tests", "cmd": "go test ./...", "exit": 0, "resultado": "paso", "salida": "?   \texample.com/m\t[no test files]\nok  \texample.com/m/accept\t0.003s"},
+  {"nombre": "supresiones", "cmd": "orq: marcas de supresión en las líneas que suma el slice", "exit": 0, "resultado": "paso"}]}
+```
+
+Notes:
+- `gofmt` has no version flag. The probe counts any exit other than 126/127 as "it ran", and shows that exit.
+- The box now binds `~/.local/lib` whole, because the `go` link lives there. Under the deny list this is allowed, but the box sees every toolchain in `~/.local/lib`, not only Go.
+- Still open: `abrir` accepts a red caused by exit 127, a "red" that does not come from an assertion. Item 4 means it cannot burn repairs later, but `abrir` could refuse it up front.
