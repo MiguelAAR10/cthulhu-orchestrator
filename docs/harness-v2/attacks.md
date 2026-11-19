@@ -72,3 +72,4 @@ Limits: until the worker box of step 2, the gate stops mistakes, not deliberate 
 
 - **RA-1** informe-2.md part 2 §5, informe-4.md §3 · any role can type `--aprobado`, `--decision-owner`, `--acepto-runner`, `--owner` → limit until step 3 (accepted: plan.md "Design", human authority with a passphrase in step 3; step1-report.md "Review fixes")
 - **R3-2** step1-review-3.md item 2 · the dry-run `code` is a sha256 with no secret, so a worker can compute it → limit until step 3 (accepted: step1-report.md "Review fixes 2")
+- **R1b-1** step1b-review.md item 1 · abbreviated long options, repeated `-B`/`-C`, `branch --copy --force`, `branch -m main`, `checkout main && reset --soft` move the `main` branch of the worker's own repository → limit until step 2 (workers run only in boxed clones; `ingerir` takes only `refs/heads/slice/NN`: step2-plan.md Task 6, `TestIngestaSoloRamaDelSlice`)

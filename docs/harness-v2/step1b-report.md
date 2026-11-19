@@ -157,3 +157,6 @@ Survivors in `IsWorker`: 0. In the descendant comparison itself (`clones.go:197 
    - Not changed: `install` is outside this row, and the rule says never to run it.
 2. **The gate fix in 3b** (`valorDe`/`fuerza`) was a bypass found by mutation, fixed with its rows seen red first. It touches gate code that the row did not name. It needs a review focused on that finding.
 3. The two real missing tests outside the named decisions (phase guard, `rec.Contado`) are waiting for a decision on which step owns them.
+
+## Close (orchestrator, 2026-11-18)
+Integrated as 0730e9f. `make ci` by the orchestrator: exit 0; candidate `revision=0730e9f… modified=false` checked by every suite; lint clean; race 22 packages ok; e2e 86/0; aislamiento 14/0/0. Focused review `reviews/step1b-review.md`: candidate check holds; the force-create item is reclassified to step 2 (attack R1b-1, step 2 Task 6 test).

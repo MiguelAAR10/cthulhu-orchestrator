@@ -152,6 +152,8 @@ The temp config dir keeps the setup flow away from `~/.claude` and `~/.claude-al
 - [ ] Owner runs §5. Builder runs `orq caja credencial`, then `validacion/caja-real.sh`. Confirm the `usage` fields exist in the private transcripts, and confirm whether `setup-token` wrote into its temp dir.
 - [ ] Write the trial record (§4 fields), using the report format in plan.md "Reporting". Commit `docs: step 2 technical trial`.
 
+**Added from the step 1b review (Task 6):** `TestIngestaSoloRamaDelSlice`: the worker's clone moves its own `main` (`checkout main && reset --soft HEAD~1`, `branch --copy --force slice/01 main`) and creates other branches; after `ingerir`, the main repo's `main` and every ref except `refs/orq/…/NN` bookkeeping are unchanged, and only `slice/NN` was fetched. Linked worktrees are no longer used for workers.
+
 **Added from the step 1b report (Task 6):** `verificar` refuses a slice in `BLOQUEADO`; the receipt states the number of tests the exam counted. Each gets a failing test first.
 
 **Out of scope:** Codex or any second provider in the box (step 7); boxing the Orchestrator, Planner, Astra or Atena (they need a state broker); the worker message spool (workers report "done" through the pane; ingest is pulled by `verificar`); cgroup limits on CPU, RAM and disk; hidden exam variants; detecting a worker that fakes its own exam from inside; the Owner passphrase (step 3); installing over `~/bin/orq`; any change to the gate's parsing.
