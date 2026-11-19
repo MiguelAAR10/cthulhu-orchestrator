@@ -3,11 +3,15 @@ package slice
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"orq/internal/diario"
 )
 
 const tarjetaBuena = `# S-01 · checkout
@@ -150,5 +154,48 @@ func TestSinTarjetaAprobadaNoSeLanza(t *testing.T) {
 	e.Ruta = RutaFix
 	if err := e.PuedeLanzar(); err != nil {
 		t.Fatalf("un fix no pide tarjeta: %v", err)
+	}
+}
+
+// diarioTarjetas writes the fixture of TestMetricasTarjetaDesdeDiario: 4 closed slices, 3 approved
+// cards (4, 10 and 2 min; S-01 was rewritten at 10:20), one card never approved, 2 exam corrections.
+func diarioTarjetas(t *testing.T, orqDir string) {
+	t.Helper()
+	h := func(hh, mm int) time.Time { return time.Date(2026, 11, 18, hh, mm, 0, 0, time.UTC) }
+	evs := []diario.Evento{
+		{TS: h(10, 0), Tipo: "tarjeta", Slice: "01", Resultado: "lista"},
+		{TS: h(10, 20), Tipo: "tarjeta", Slice: "01", Resultado: "lista"},
+		{TS: h(10, 24), Tipo: "tarjeta", Slice: "01", Resultado: "aprobada"},
+		{TS: h(11, 0), Tipo: "tarjeta", Slice: "02", Resultado: "lista"},
+		{TS: h(11, 10), Tipo: "tarjeta", Slice: "02", Resultado: "aprobada"},
+		{TS: h(12, 0), Tipo: "tarjeta", Slice: "03", Resultado: "lista"},
+		{TS: h(12, 2), Tipo: "tarjeta", Slice: "03", Resultado: "aprobada"},
+		{TS: h(13, 0), Tipo: "tarjeta", Slice: "04", Resultado: "lista"},
+		{TS: h(11, 30), Tipo: "examen", Slice: "02", Detalle: "req ATN-1"},
+		{TS: h(12, 30), Tipo: "examen", Slice: "03", Detalle: "req ATN-2"},
+	}
+	for _, e := range evs {
+		if err := diario.Anotar(diario.Ruta(orqDir), e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, res := range []string{"aceptado", "aceptado", "rechazado", "aceptado"} {
+		appendJSON(filepath.Join(orqDir, "slices.jsonl"), Registro{NN: fmt.Sprintf("%02d", i+1), Intento: 1, Result: res, Abierto: h(9, 0), Cerrado: h(14, 0)})
+	}
+}
+
+func TestMetricasTarjetaDesdeDiario(t *testing.T) {
+	r := Repo{OrqDir: t.TempDir()}
+	diarioTarjetas(t, r.OrqDir)
+	m := r.Metricas(time.Time{}, time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC))
+	if m.TarjetaMinMediana != 4 || m.TarjetasAprobadas != 3 {
+		t.Fatalf("tarjeta: mediana %v de %d", m.TarjetaMinMediana, m.TarjetasAprobadas)
+	}
+	if m.CorreccionesExamen != 2 || m.CorreccionesPor10 != 5 {
+		t.Fatalf("correcciones %d, por 10 %v", m.CorreccionesExamen, m.CorreccionesPor10)
+	}
+	m = r.Metricas(time.Date(2026, 11, 18, 10, 30, 0, 0, time.UTC), time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC))
+	if m.TarjetaMinMediana != 6 || m.TarjetasAprobadas != 2 {
+		t.Fatalf("desde 10:30: mediana %v de %d", m.TarjetaMinMediana, m.TarjetasAprobadas)
 	}
 }

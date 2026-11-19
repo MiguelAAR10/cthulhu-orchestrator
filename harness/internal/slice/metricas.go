@@ -28,6 +28,12 @@ type Metricas struct {
 	Decididos          int
 	SinDecidir24h      int
 	IntentosPorCausa   map[string]int
+	// De la tarjeta: minutos de lista a aprobada (mediana) y cuántas aprobadas la forman; exámenes
+	// corregidos tras abrir, en total y por cada 10 slices cerrados.
+	TarjetaMinMediana  float64
+	TarjetasAprobadas  int
+	CorreccionesExamen int
+	CorreccionesPor10  float64
 }
 
 // MetricasRuta son los números de una ruta. Un fix ascendido cuenta en slice, que es donde terminó;
@@ -110,7 +116,9 @@ func (r Repo) Metricas(desde, now time.Time) Metricas {
 			prev[rc.Attempt] = rc.Head
 		}
 	}
-	r.metricasDecision(&m, desde, now)
+	evs, _ := diario.Leer(diario.Ruta(r.OrqDir))
+	metricasDecision(&m, evs, desde, now)
+	metricasTarjeta(&m, evs, desde)
 	raw, _ := os.ReadFile(r.CuarentenaPath())
 	m.Cuarentena = len(strings.Fields(strings.ReplaceAll(string(raw), " ", "_")))
 	return m
@@ -118,8 +126,7 @@ func (r Repo) Metricas(desde, now time.Time) Metricas {
 
 // metricasDecision mide la espera del Owner. El reloj de un slice arranca con su última verificación
 // que pasa y se detiene con su decisión; reabrirlo o cerrarlo sin decisión lo detiene sin contar.
-func (r Repo) metricasDecision(m *Metricas, desde, now time.Time) {
-	evs, _ := diario.Leer(diario.Ruta(r.OrqDir))
+func metricasDecision(m *Metricas, evs []diario.Evento, desde, now time.Time) {
 	m.IntentosPorCausa = map[string]int{}
 	verificado := map[string]time.Time{}
 	var minutos []float64
@@ -147,14 +154,41 @@ func (r Repo) metricasDecision(m *Metricas, desde, now time.Time) {
 			m.SinDecidir24h++
 		}
 	}
-	m.Decididos = len(minutos)
-	if len(minutos) == 0 {
-		return
+	m.Decididos, m.DecisionMinMediana = len(minutos), mediana(minutos)
+}
+
+// metricasTarjeta mide cuánto espera una tarjeta al Owner: desde su última versión lista hasta la
+// aprobación. Las correcciones de examen son los exámenes sumados o corregidos tras abrir.
+func metricasTarjeta(m *Metricas, evs []diario.Evento, desde time.Time) {
+	lista := map[string]time.Time{}
+	var minutos []float64
+	for _, e := range evs {
+		switch {
+		case e.Tipo == "tarjeta" && e.Resultado == "lista":
+			lista[e.Slice] = e.TS
+		case e.Tipo == "tarjeta" && e.Resultado == "aprobada":
+			if l, ok := lista[e.Slice]; ok && !e.TS.Before(desde) {
+				minutos = append(minutos, e.TS.Sub(l).Minutes())
+			}
+			delete(lista, e.Slice)
+		case e.Tipo == "examen" && !e.TS.Before(desde):
+			m.CorreccionesExamen++
+		}
 	}
-	slices.Sort(minutos)
-	mitad := len(minutos) / 2
-	m.DecisionMinMediana = minutos[mitad]
-	if len(minutos)%2 == 0 {
-		m.DecisionMinMediana = (minutos[mitad-1] + minutos[mitad]) / 2
+	m.TarjetasAprobadas, m.TarjetaMinMediana = len(minutos), mediana(minutos)
+	if cerrados := m.Aceptados + m.Rechazados; cerrados > 0 {
+		m.CorreccionesPor10 = 10 * float64(m.CorreccionesExamen) / float64(cerrados)
 	}
+}
+
+func mediana(xs []float64) float64 {
+	if len(xs) == 0 {
+		return 0
+	}
+	slices.Sort(xs)
+	mitad := len(xs) / 2
+	if len(xs)%2 == 0 {
+		return (xs[mitad-1] + xs[mitad]) / 2
+	}
+	return xs[mitad]
 }

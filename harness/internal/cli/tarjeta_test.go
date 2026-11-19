@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"orq/internal/diario"
+	"orq/internal/slice"
 )
 
 const tarjetaCLI = `## Historia
@@ -164,4 +167,31 @@ func TestDecidirSinTarjetaAvisa(t *testing.T) {
 	sliceVerdeCon(t, nil, nil)
 	out, _, _ := run(t, "slice", "decidir", "01")
 	contiene(t, seccionDe(out, "Tarjeta"), "!! sin tarjeta aprobada")
+}
+
+func TestMetricasCLITarjeta(t *testing.T) {
+	root := repoCLI(t)
+	orq := filepath.Join(root, ".orq")
+	os.MkdirAll(orq, 0o755)
+	now := time.Now().UTC()
+	for _, e := range []diario.Evento{
+		{TS: now.Add(-2 * time.Hour), Tipo: "tarjeta", Slice: "01", Resultado: "lista"},
+		{TS: now.Add(-2*time.Hour + 4*time.Minute), Tipo: "tarjeta", Slice: "01", Resultado: "aprobada"},
+		{TS: now.Add(-time.Hour), Tipo: "examen", Slice: "01"},
+	} {
+		if err := diario.Anotar(diario.Ruta(orq), e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var log strings.Builder
+	for _, nn := range []string{"01", "02"} {
+		raw, _ := json.Marshal(slice.Registro{NN: nn, Intento: 1, Result: "aceptado", Abierto: now.Add(-3 * time.Hour), Cerrado: now})
+		log.Write(append(raw, '\n'))
+	}
+	os.WriteFile(filepath.Join(orq, "slices.jsonl"), []byte(log.String()), 0o644)
+	out, errs, code := run(t, "metricas")
+	if code != 0 {
+		t.Fatalf("%d %s", code, errs)
+	}
+	contiene(t, out, "tarjeta lista → aprobada: mediana 4 min (1 aprobadas)", "exámenes corregidos tras abrir: 1 en 2 slices cerrados (5.0 por 10)")
 }

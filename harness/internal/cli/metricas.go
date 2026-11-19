@@ -58,6 +58,12 @@ func runMetricas(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "sin decidir tras 24 h: %d\n", m.SinDecidir24h)
 	fmt.Fprintf(stdout, "intentos nuevos por causa: worker %d · examen %d\n", m.IntentosPorCausa[slice.CausaWorker], m.IntentosPorCausa[slice.CausaExamen])
+	if m.TarjetasAprobadas > 0 {
+		fmt.Fprintf(stdout, "tarjeta lista → aprobada: mediana %.0f min (%d aprobadas)\n", m.TarjetaMinMediana, m.TarjetasAprobadas)
+	} else {
+		fmt.Fprintln(stdout, "tarjeta lista → aprobada: sin tarjetas aprobadas todavía")
+	}
+	fmt.Fprintf(stdout, "exámenes corregidos tras abrir: %d en %d slices cerrados (%.1f por 10)\n", m.CorreccionesExamen, cerrados, m.CorreccionesPor10)
 	fmt.Fprintf(stdout, "fixes que subieron a slice: %d (cuentan en slice, donde terminaron)\n", m.Ascendidos)
 	fmt.Fprintf(stdout, "en cuarentena: %d · recursos sobrantes: `orq doctor`\n", m.Cuarentena)
 	fmt.Fprintln(stdout, "costo por slice y tiempo humano: n/d (orq no los registra todavía)")
