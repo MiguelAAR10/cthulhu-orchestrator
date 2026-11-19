@@ -50,6 +50,7 @@ func TestDecisiones(t *testing.T) {
 		config    = "sets no git config"
 		lista     = "a worker runs only these git commands"
 		puntoGit  = "no .git"
+		salida    = "git --output writes a file"
 		oculto    = "runs a command the gate does not read"
 		global    = "está protegido"
 	)
@@ -282,6 +283,23 @@ func TestDecisiones(t *testing.T) {
 		{bash("EDITOR=/tmp/x git commit"), config},
 		{bash("git checkout -B main"), rama},
 		{bash("git switch -C main"), rama},
+		{bash("git log -1 --format=x --output=$HOME/.gitconfig"), salida},
+		{bash("git diff --output $HOME/.gitconfig"), salida},
+		{bash("git log -1 --format=x --output=.git/config"), salida},
+		{bash("git diff --output .git/config"), salida},
+		{bash("git log -1 --format=x --output=tests/aceptacion/a_test.go"), salida},
+		{bash("git diff --output tests/aceptacion/a_test.go"), salida},
+		{bash("git log -1 --format=x --output=/x/state/s.json"), salida},
+		{bash("git diff --output /x/state/s.json"), salida},
+		{bash("git show --outp=x.patch HEAD"), salida},
+		{bash("git log -1 --format=x > x.txt"), ""},
+		{bash("git reflog"), ""},
+		{bash("git reflog show main"), ""},
+		{bash("git reflog expire --all"), "git reflog"},
+		{bash("git reflog delete HEAD@{1}"), "git reflog"},
+		{bash("git ls-tree -r HEAD"), ""},
+		{bash("git rev-list --count HEAD"), ""},
+		{bash("git check-ignore -v src/x"), ""},
 		// review 5: the global git config and credentials are not the worker's
 		{bash(`printf '[core]\n\tfsmonitor = "git --git-dir=/x/repo/.git update-ref refs/heads/hackH HEAD; true"\n' >> ~/.gitconfig`), global},
 		{bash("echo x >> /x/home/.gitconfig"), global},

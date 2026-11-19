@@ -27,10 +27,10 @@ var gitEnvCmd = conjunto("GIT_EXTERNAL_DIFF", "GIT_SSH", "GIT_SSH_COMMAND", "GIT
 // missed twice). tag and worktree only list; branch, checkout and switch move only its own refs.
 var gitPermitido = conjunto("status", "add", "commit", "log", "diff", "show", "branch", "switch", "checkout",
 	"restore", "rm", "mv", "reset", "stash", "rev-parse", "ls-files", "merge-base", "cat-file", "blame", "grep",
-	"describe", "shortlog", "tag", "worktree", "version", "help")
+	"describe", "shortlog", "tag", "worktree", "version", "help", "reflog", "ls-tree", "rev-list", "check-ignore")
 
 const listaGit = "status, add, commit, log, diff, show, branch, switch, checkout, restore, rm, mv, reset, stash, " +
-	"rev-parse, ls-files, merge-base, cat-file, blame, grep, describe, shortlog, tag -l, worktree list, version, help"
+	"rev-parse, ls-files, merge-base, cat-file, blame, grep, describe, shortlog, tag -l, worktree list, version, help, reflog (show/list), ls-tree, rev-list, check-ignore"
 
 // declaran are the builtins whose VAR=value arguments set (and may export) variables.
 var declaran = conjunto("export", "declare", "typeset", "readonly", "local")
@@ -130,6 +130,10 @@ func gitAjeno(c simple, raiz, rama string) (Decision, bool) {
 		sub == "tag" && len(r) > 0 && !hay(t, "-l", "--list"),
 		sub == "worktree" && (len(p) == 0 || p[0].s != "list"):
 		return deny("orq: a worker runs only these git commands: %s (not %q). Ask the orchestrator for anything else.", listaGit, sub), true
+	case sub == "reflog" && len(p) > 0 && (p[0].s == "expire" || p[0].s == "delete" || p[0].s == "exists"):
+		return deny("orq: a worker runs only `git reflog` to show or list (not %q).", p[0].s), true
+	case saleArchivo(t):
+		return deny("orq: git --output writes a file the gate cannot check. Use `git %s > file` instead; the gate checks the redirect.", sub), true
 	case hay(t, "--ext-diff", "--textconv"):
 		return oculto("git " + sub + " --ext-diff/--textconv")
 	case sub == "grep" && (conPrefijo(t, "-O", "--open-files-in-pager") || corta(t, 'O')):
@@ -255,4 +259,18 @@ func RepoPropio(dir string) (raiz, rama string) {
 			return cercano, ""
 		}
 	}
+}
+
+// saleArchivo reports a git --output option (any form, including git's unambiguous abbreviations
+// such as --outp), which writes to any path without the gate seeing it.
+func saleArchivo(t []string) bool {
+	for _, x := range t {
+		if x == "--" {
+			return false
+		}
+		if len(x) >= 4 && strings.HasPrefix("--output", strings.SplitN(x, "=", 2)[0]) {
+			return true
+		}
+	}
+	return false
 }
