@@ -1,7 +1,8 @@
 package sandbox
 
 // Toolchains: the box sees the system (/usr, /bin, ...) but not $HOME, where go, node or uv usually
-// live. For each tool a check names, the directory where the host PATH resolves it is bound read-only,
+// live. For each tool a check names, the directory of every symlink hop from the PATH hit to the real
+// binary, and the real binary's directory, are bound read-only,
 // with the toolchain root when the tool sits in a bin/ (GOROOT, a node version). Never a directory
 // that holds or sits inside credentials, agent config or orq's state.
 
@@ -107,11 +108,19 @@ func Herramientas(cmd string) []Herramienta {
 			}
 			continue
 		}
-		real, err := filepath.EvalSymlinks(h.Ruta)
+		links, real, err := saltos(h.Ruta)
 		if err != nil {
-			real = h.Ruta
+			h.Motivo = fmt.Sprintf("%s: %v", w, err)
+			out = append(out, h)
+			continue
 		}
-		dirs := []string{filepath.Dir(h.Ruta), filepath.Dir(real)}
+		// Cada enlace del camino tiene que existir en la caja: se monta su directorio, y el del real.
+		var dirs []string
+		for _, l := range append(links, real) {
+			if d := filepath.Dir(l); d != "/" { // /bin -> usr/bin: la caja ya los recrea
+				dirs = append(dirs, d)
+			}
+		}
 		for _, d := range dirs {
 			switch {
 			case slices.ContainsFunc(sistema, func(s string) bool { return bajo(d, filepath.Clean(s)) }):
@@ -136,6 +145,40 @@ func Herramientas(cmd string) []Herramienta {
 		}
 	}
 	return out
+}
+
+// saltos sigue p hasta el archivo real, componente por componente como el kernel, y devuelve cada
+// enlace simbólico del camino (de archivo o de directorio), ya con sus padres resueltos, y el real.
+func saltos(p string) (links []string, real string, err error) {
+	p = filepath.Clean(p)
+	for range 40 {
+		partes := strings.Split(strings.TrimPrefix(p, "/"), "/")
+		cur, siguio := "/", false
+		for i, parte := range partes {
+			cur = filepath.Join(cur, parte)
+			fi, err := os.Lstat(cur)
+			if err != nil {
+				return nil, "", err
+			}
+			if fi.Mode()&os.ModeSymlink == 0 {
+				continue
+			}
+			dst, err := os.Readlink(cur)
+			if err != nil {
+				return nil, "", err
+			}
+			if !filepath.IsAbs(dst) {
+				dst = filepath.Join(filepath.Dir(cur), dst)
+			}
+			links = append(links, cur)
+			p, siguio = filepath.Join(append([]string{dst}, partes[i+1:]...)...), true
+			break
+		}
+		if !siguio {
+			return links, p, nil
+		}
+	}
+	return nil, "", fmt.Errorf("demasiados enlaces simbólicos en %s", p)
 }
 
 // RODe junta los directorios a montar, sin repetidos ni uno dentro de otro.
