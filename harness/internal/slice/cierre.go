@@ -77,7 +77,7 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 		return nil, nil, "", errors.Join(err, errors.New("no hay slice abierto"))
 	}
 	reg := &Registro{NN: e.NN, Intento: e.Intento, Titulo: e.Titulo, Abierto: e.Abierto, Cerrado: now.UTC().Truncate(time.Second), Motivo: motivo,
-		Ruta: e.RutaEfectiva(), Ascendido: e.Ascendido, RutaMotivo: e.RutaMotivo}
+		Ruta: e.RutaEfectiva(), Ascendido: e.Ascendido, RutaMotivo: e.RutaMotivo, Historia: e.Historia}
 	var out string
 	var cuarentena []string
 	if aceptado {

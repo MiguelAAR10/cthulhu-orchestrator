@@ -1,0 +1,48 @@
+package slice
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestHistoriaConTresHijos(t *testing.T) {
+	r := repoDeJuguete(t)
+	if _, err := r.AbrirHistoria("pagos", "Pagos", t0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.AbrirHistoria("pagos", "otra", t0); err == nil {
+		t.Fatal("a repeated story id must be refused")
+	}
+	if _, err := r.AbrirHistoria("Pagos con espacio", "x", t0); err == nil {
+		t.Fatal("an id outside [a-z0-9-] must be refused")
+	}
+	o := Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Historia: "pagos"}
+	for _, nn := range []string{"01", "02", "03"} {
+		if _, _, err := r.Abrir(nn, "hijo "+nn, "tests/s01.sh", examen, o, t0); err != nil {
+			t.Fatalf("abrir %s: %v", nn, err)
+		}
+	}
+	if _, _, err := r.Abrir("04", "x", "tests/s01.sh", examen, Opciones{SinConteo: "j", Historia: "nada"}, t0); err == nil || !strings.Contains(err.Error(), "orq historia abrir") {
+		t.Fatalf("unknown story: %v", err)
+	}
+	ab, cer, err := r.Hijos("pagos")
+	if err != nil || len(ab) != 3 || len(cer) != 0 {
+		t.Fatalf("hijos: %d abiertos %d cerrados %v", len(ab), len(cer), err)
+	}
+	for _, e := range ab {
+		if e.Historia != "pagos" {
+			t.Fatalf("%s historia %q", e.ID(), e.Historia)
+		}
+	}
+	if _, _, _, err := r.Cerrar("03", false, "no hacía falta", t0); err != nil {
+		t.Fatal(err)
+	}
+	ab, cer, err = r.Hijos("pagos")
+	if err != nil || len(ab) != 2 || len(cer) != 1 || cer[0].NN != "03" || cer[0].Historia != "pagos" {
+		t.Fatalf("after closing 03: %d abiertos %+v %v", len(ab), cer, err)
+	}
+	hs, err := r.Historias()
+	if err != nil || len(hs) != 1 || hs[0].Titulo != "Pagos" {
+		t.Fatalf("historias: %+v %v", hs, err)
+	}
+}

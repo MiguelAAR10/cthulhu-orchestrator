@@ -103,6 +103,7 @@ type Estado struct {
 	Alcance       []string `json:"alcance,omitempty"`   // rutas que la historia justifica tocar
 	Demo          []string `json:"demo,omitempty"`      // hasta 3 pasos para ver el resultado funcionando
 	Tarjeta       *Tarjeta `json:"tarjeta,omitempty"`   // ficha de entendimiento que aprueba el Owner
+	Historia      string   `json:"historia,omitempty"`  // story this slice is a child of
 }
 
 func (e *Estado) ID() string      { return fmt.Sprintf("S-%s", e.NN) }
@@ -352,6 +353,7 @@ type Opciones struct {
 	Timeout          int      // segundos; 0 = 600
 	Alcance          []string // rutas que la historia justifica; fuera de ellas, alarma de desalineación
 	Demo             []string // pasos para ver el resultado funcionando; la página de decisión los muestra
+	Historia         string   // story the slice is a child of; it must exist
 }
 
 func (e *Estado) limite() time.Duration {
@@ -415,6 +417,7 @@ type Registro struct {
 	Ruta       string    `json:"ruta,omitempty"`        // fix|slice con la que se cerró
 	Ascendido  bool      `json:"ascendido,omitempty"`   // empezó como fix y subió a slice
 	RutaMotivo string    `json:"ruta_motivo,omitempty"` // por qué subió
+	Historia   string    `json:"historia,omitempty"`
 }
 
 // Cuarentena es algo que el harness no se atreve a borrar.
