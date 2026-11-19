@@ -296,6 +296,9 @@ func runStatus(stdout, stderr io.Writer) int {
 	} else {
 		fmt.Fprintln(stdout, "HALT: no")
 	}
+	if p, err := abrirProyecto(); err == nil {
+		esperanOwner(p, time.Now(), stdout)
+	}
 	// Máquina y capacidad: cuántos agentes caben ahora y qué número lo decide.
 	root, _ := orqdir.Root()
 	cfg, err := config.Cargar(root)
@@ -321,6 +324,23 @@ func runStatus(stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "  %s\n", c.Motivo())
 	}
 	return 0
+}
+
+// esperanOwner lista los slices verificados sin decisión, con su edad desde el recibo.
+func esperanOwner(p proyecto, now time.Time, stdout io.Writer) {
+	es, err := p.Slices().Esperando()
+	if err != nil {
+		fmt.Fprintf(stdout, "esperan al Owner: no se pudo leer (%v)\n", err)
+		return
+	}
+	if len(es) == 0 {
+		fmt.Fprintln(stdout, "esperan al Owner: ninguno")
+		return
+	}
+	fmt.Fprintln(stdout, "esperan al Owner (verificados, el más antiguo primero):")
+	for _, e := range es {
+		fmt.Fprintf(stdout, "  %s «%s» hace %s · orq slice decidir %s\n", e.Attempt(), e.Titulo, edad(now.Sub(e.Recibo.TS)), e.NN)
+	}
 }
 
 func runHalt(args []string, stdout, stderr io.Writer) int {

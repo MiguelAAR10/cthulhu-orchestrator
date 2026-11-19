@@ -165,3 +165,17 @@ func TestMetricasDecisionDesdeDiario(t *testing.T) {
 		t.Fatalf("since 10:07 only 3 decisions count, got %d", m.Decididos)
 	}
 }
+
+func TestEsperandoOrdenaPorAntiguedad(t *testing.T) {
+	r, _, _ := dosSlices(t)
+	if _, _, err := r.Verificar("01", t0.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.Verificar("02", t0); err != nil {
+		t.Fatal(err)
+	}
+	es, err := r.Esperando()
+	if err != nil || len(es) != 2 || es[0].NN != "02" || es[1].NN != "01" {
+		t.Fatalf("%v %v", es, err)
+	}
+}

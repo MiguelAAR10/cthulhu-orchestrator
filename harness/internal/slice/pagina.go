@@ -3,6 +3,7 @@ package slice
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"orq/internal/diario"
@@ -63,4 +64,20 @@ func (p *Pagina) Planeado() []string {
 // RunnerAceptado dice si la verificación aceptó un cambio en los archivos del runner.
 func (p *Pagina) RunnerAceptado() bool {
 	return strings.Contains(p.Estado.Recibo.Nota, "runner cambiado y aceptado")
+}
+
+// Esperando devuelve los slices verificados que esperan decisión, el más antiguo primero.
+func (r Repo) Esperando() ([]*Estado, error) {
+	ab, err := r.Abiertos()
+	if err != nil {
+		return nil, err
+	}
+	var out []*Estado
+	for _, e := range ab {
+		if e.Fase == Verificado && e.Recibo != nil {
+			out = append(out, e)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b *Estado) int { return a.Recibo.TS.Compare(b.Recibo.TS) })
+	return out, nil
 }

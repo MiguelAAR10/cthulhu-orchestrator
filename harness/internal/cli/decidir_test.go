@@ -174,3 +174,28 @@ func TestMetricasCLIImprimeMediana(t *testing.T) {
 		}
 	}
 }
+
+// conLimites writes a valid limits file where ORQ_LIMITS points.
+func conLimites(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	raw := `{"min_free_gb":{"/":1},"max_workers":99,"scratch":{"paths":["` + dir + `/s"],"quota_gb":1,"critical_free_gb":1},"state_max_age_hours":24}`
+	if err := os.WriteFile(os.Getenv("ORQ_LIMITS"), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStatusListaVerificados(t *testing.T) {
+	repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	conLimites(t)
+	out, errs, code := run(t, "status")
+	if code != 0 {
+		t.Fatalf("%d %s", code, errs)
+	}
+	contiene(t, out, "esperan al Owner: ninguno")
+	sliceVerdeCon(t, nil, nil)
+	conLimites(t)
+	out, _, _ = run(t, "status")
+	contiene(t, out, "esperan al Owner (verificados, el más antiguo primero):", "S-01/a1 «total» hace 0m · orq slice decidir 01")
+}
