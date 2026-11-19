@@ -127,6 +127,9 @@ func seccionesDecision(pd *app.PaginaDecision) []seccion {
 	for _, f := range rec.TestsBorrados {
 		archivos.Lineas = append(archivos.Lineas, alerta("test borrado por el slice: %s", f))
 	}
+	for _, l := range pd.LineasMapa {
+		archivos.Lineas = append(archivos.Lineas, normal("mapa: %s", l))
+	}
 	for _, av := range pd.Avisos {
 		archivos.Lineas = append(archivos.Lineas, alerta("%s", av))
 	}

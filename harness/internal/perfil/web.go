@@ -74,7 +74,7 @@ func Rutas(root string) []Ruta {
 	return rs
 }
 
-// Mapa es el esqueleto de .orq/mapa.md: una línea por ruta, que completan el Owner o un worker.
+// Mapa es el esqueleto de docs/mapa.md: una línea por ruta, que completan el Owner o un worker.
 func Mapa(rs []Ruta) string {
 	var b strings.Builder
 	b.WriteString("# Feature map\n\nOne line per route: path → page file · how to reach it · what it should show.\n")

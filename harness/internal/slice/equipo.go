@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -165,6 +166,21 @@ func (r Repo) reusar(e *Estado, w *Worker, agente string, rutas []string) (*Esta
 	return e, w, r.save(e)
 }
 
+// RutaMapa es el mapa de rutas de una app web, versionado en el repo: el worker que suma una ruta
+// suma su línea en el mismo commit, así el diff lo muestra. Es de todas las zonas.
+const RutaMapa = "docs/mapa.md"
+
+// MapaEn es la ruta del mapa de rutas de root: docs/mapa.md, o el viejo .orq/mapa.md si solo está
+// ese; "" si no hay ninguno.
+func MapaEn(root string) string {
+	for _, p := range []string{filepath.Join(root, RutaMapa), filepath.Join(root, ".orq", "mapa.md")} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
 // Juntar integra en la rama del slice lo nuevo de cada worker. Rechaza a quien tocó fuera de su zona,
 // el examen u otra ruta protegida, y se detiene ante un conflicto sin dejar nada a medias.
 func (r Repo) Juntar(nn string) (*Estado, []string, error) {
@@ -224,7 +240,7 @@ func (r Repo) Juntar(nn string) (*Estado, []string, error) {
 			for _, ruta := range w.Rutas {
 				ok = ok || dentro(ruta, f)
 			}
-			if !ok || slices.Contains(e.Bundle, f) || slices.Contains(protegidas, f) {
+			if (!ok && f != RutaMapa) || slices.Contains(e.Bundle, f) || slices.Contains(protegidas, f) {
 				fuera = append(fuera, f)
 			}
 		}
@@ -346,7 +362,7 @@ func (e *Estado) fueraDeAlcance(f string) bool {
 		permitido = append(permitido, w.Rutas...)
 		acotado = acotado || len(w.Rutas) > 0
 	}
-	if !acotado {
+	if !acotado || f == RutaMapa {
 		return false
 	}
 	for _, p := range permitido {

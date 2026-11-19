@@ -3,7 +3,6 @@ package app
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -177,8 +176,10 @@ func (p Proyecto) Contrato(nn, worker, alcance, suite, presupuesto string) (stri
 		fmt.Fprintf(&b, "Lo que exige el Owner:\n%s\n", lista(rv.Restriccion, ""))
 	}
 	fmt.Fprintf(&b, "Presupuesto: %s · el examen tolera %d reparaciones; después se bloquea.\n", presupuesto, slice.MaxFallos-1)
-	mapa := filepath.Join(p.Root, ".orq", "mapa.md")
-	if _, err := os.Stat(mapa); err == nil {
+	switch mapa := slice.MapaEn(p.Root); {
+	case mapa == filepath.Join(p.Root, slice.RutaMapa):
+		fmt.Fprintf(&b, "Web: antes de pedir verificación, reproduce el bug o recorre la función en un navegador real (Playwright MCP o `npx playwright`); el mapa de rutas %s de tu copia dice cómo llegar. Si sumas una ruta, suma su línea al mapa en el mismo commit.\n", slice.RutaMapa)
+	case mapa != "":
 		fmt.Fprintf(&b, "Web: antes de pedir verificación, reproduce el bug o recorre la función en un navegador real (Playwright MCP o `npx playwright`); el mapa de rutas %s dice cómo llegar. Si sumas una ruta, manda su línea del mapa en tu respuesta.\n", mapa)
 	}
 	b.WriteString("Cómo: TDD con tests propios fuera del paquete; commits pequeños; ante fallo, reproduce antes de cambiar. No borres código ajeno.\n")

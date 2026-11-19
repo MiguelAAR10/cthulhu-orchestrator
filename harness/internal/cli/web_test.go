@@ -34,7 +34,7 @@ func TestInitWebEscribeMapaYE2E(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("init: %d %s %s", code, out, errs)
 	}
-	mapa := filepath.Join(root, ".orq", "mapa.md")
+	mapa := filepath.Join(root, "docs", "mapa.md")
 	raw, err := os.ReadFile(mapa)
 	if err != nil {
 		t.Fatal(err)
@@ -49,12 +49,21 @@ func TestInitWebEscribeMapaYE2E(t *testing.T) {
 	}
 	contiene(t, out, "mapa de rutas en "+mapa, "check e2e: npx playwright test · servidor npm run dev en 127.0.0.1:3000")
 
-	escribirEn(t, root, ".orq/mapa.md", "mine\n")
+	escribirEn(t, root, "docs/mapa.md", "mine\n")
 	if out, errs, code := run(t, "init"); code != 0 {
 		t.Fatalf("second init: %d %s %s", code, out, errs)
 	}
 	if raw, _ := os.ReadFile(mapa); string(raw) != "mine\n" {
 		t.Fatalf("init overwrote the map: %s", raw)
+	}
+	// An old map in .orq/ is still the map: init does not write a second one.
+	os.Remove(mapa)
+	escribirEn(t, root, ".orq/mapa.md", "old\n")
+	if out, _, _ := run(t, "init"); !strings.Contains(out, "ya existe") {
+		t.Fatalf("second map over an old one:\n%s", out)
+	}
+	if _, err := os.Stat(mapa); err == nil {
+		t.Fatal("init wrote docs/mapa.md next to an old .orq/mapa.md")
 	}
 }
 
@@ -69,7 +78,7 @@ func TestInitWebSinPlaywrightNoEscribeE2E(t *testing.T) {
 		t.Fatalf("e2e without a Playwright config: %+v", c.Checks)
 	}
 	contiene(t, out, "sin check e2e: sin playwright.config")
-	if _, err := os.Stat(filepath.Join(root, ".orq", "mapa.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "docs", "mapa.md")); err != nil {
 		t.Fatalf("the map is written for every web project: %v", err)
 	}
 }
@@ -157,7 +166,7 @@ func TestGuiaWorkerWeb(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	contiene(t, string(raw), ".orq/mapa.md", "real browser", "Playwright MCP", "npx playwright", "map line")
+	contiene(t, string(raw), "docs/mapa.md", "real browser", "Playwright MCP", "npx playwright", "any route you add", "same commit")
 }
 
 func TestContratoNombraElMapa(t *testing.T) {
@@ -171,10 +180,30 @@ func TestContratoNombraElMapa(t *testing.T) {
 	if strings.Contains(out, "mapa.md") {
 		t.Fatalf("a map line without a map:\n%s", out)
 	}
-	escribirEn(t, root, ".orq/mapa.md", "# Feature map\n")
+	escribirEn(t, root, ".orq/mapa.md", "# Feature map\n") // an old map still counts
 	out, errs, code := run(t, "slice", "contrato")
 	if code != 0 {
 		t.Fatalf("contrato: %d %s", code, errs)
 	}
 	contiene(t, out, filepath.Join(root, ".orq", "mapa.md"), "navegador real")
+	escribirEn(t, root, "docs/mapa.md", "# Feature map\n")
+	out, _, _ = run(t, "slice", "contrato")
+	contiene(t, out, "docs/mapa.md", "navegador real", "en el mismo commit")
+}
+
+// The worker adds the route's map line in its own commit; the decision page shows the new lines,
+// and with a declared scope the map is not "outside the scope".
+func TestDecidirMuestraElMapa(t *testing.T) {
+	sliceVerdeCon(t, []string{"--alcance", "total.txt"}, func(wt string) {
+		os.MkdirAll(filepath.Join(wt, "docs"), 0o755)
+		commitClon(t, wt, "docs/mapa.md", "# Feature map\n- `/cart` → `app/cart/page.tsx` · reach: header link · shows: the total\n")
+	})
+	out, _, code := run(t, "slice", "decidir")
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	contiene(t, out, "mapa: - `/cart` → `app/cart/page.tsx` · reach: header link · shows: the total")
+	if strings.Contains(out, "docs/mapa.md fuera del alcance") {
+		t.Fatalf("the map counted as out of scope:\n%s", out)
+	}
 }

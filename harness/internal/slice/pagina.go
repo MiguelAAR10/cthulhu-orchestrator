@@ -18,6 +18,8 @@ type Pagina struct {
 	Avisos     []string        // desvíos de la página misma, p. ej. la punta ya no es el commit verificado
 	// DiffDefiniciones es el diff, del rojo al verificado, de los archivos que definen lo que corre un check.
 	DiffDefiniciones string
+	// LineasMapa son las líneas que el slice suma al mapa de rutas (docs/mapa.md).
+	LineasMapa []string
 }
 
 // Pagina arma la página de decisión del slice nn; solo existe para un slice VERIFICADO.
@@ -68,6 +70,19 @@ func (r Repo) Pagina(nn string) (*Pagina, error) {
 		return nil, err
 	}
 	pg := &Pagina{Estado: e, Alineacion: a, Avisos: avisos, DiffDefiniciones: diffDefs}
+	if d, err := r.git("diff", "-U0", "--no-color", "--no-ext-diff", e.SHARojo, rec.Head, "--", RutaMapa); err == nil {
+		for _, l := range strings.Split(d, "\n") {
+			if strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "+++") && strings.TrimSpace(l[1:]) != "" {
+				// La línea la escribió el worker: sin caracteres de control que mangoneen la terminal.
+				pg.LineasMapa = append(pg.LineasMapa, strings.Map(func(c rune) rune {
+					if c < 0x20 || c == 0x7f {
+						return -1
+					}
+					return c
+				}, l[1:]))
+			}
+		}
+	}
 	for _, ev := range evs {
 		if ev.Tipo == "examen" && ev.Slice == e.NN && !ev.TS.Before(e.Abierto) {
 			pg.Examen = append(pg.Examen, ev)

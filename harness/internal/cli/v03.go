@@ -102,19 +102,22 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	return runSkills(nil, stdout, stderr)
 }
 
-// escribirMapa deja en .orq/mapa.md el esqueleto con las rutas del router, si aún no existe: después es
-// del Owner y de los workers.
+// escribirMapa deja en docs/mapa.md del repo el esqueleto con las rutas del router, si aún no hay mapa
+// (tampoco uno viejo en .orq/): después es del Owner y de los workers, que lo versionan.
 func escribirMapa(root string, stdout io.Writer) error {
-	ruta := filepath.Join(root, ".orq", "mapa.md")
-	if _, err := os.Stat(ruta); err == nil {
-		fmt.Fprintf(stdout, "mapa de rutas ya existe en %s: no se tocó\n", ruta)
+	if viejo := slice.MapaEn(root); viejo != "" {
+		fmt.Fprintf(stdout, "mapa de rutas ya existe en %s: no se tocó\n", viejo)
 		return nil
 	}
+	ruta := filepath.Join(root, slice.RutaMapa)
 	rs := perfil.Rutas(root)
+	if err := os.MkdirAll(filepath.Dir(ruta), 0o755); err != nil {
+		return err
+	}
 	if err := orqdir.WriteAtomic(ruta, []byte(perfil.Mapa(rs))); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "mapa de rutas en %s: %d rutas; completa cómo llegar y qué muestra cada una\n", ruta, len(rs))
+	fmt.Fprintf(stdout, "mapa de rutas en %s: %d rutas; completa cómo llegar y qué muestra cada una, y commitéalo\n", ruta, len(rs))
 	return nil
 }
 

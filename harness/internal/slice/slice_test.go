@@ -614,9 +614,14 @@ func TestEquipoFrontBackTestEnUnSlice(t *testing.T) {
 	os.MkdirAll(filepath.Join(back.Worktree, "web"), 0o755)
 	commitEn(t, back.Worktree, "web/hack.txt", "x\n") // back se sale de su zona
 	commitEn(t, test.Worktree, "tests/unit/t.sh", "true\n")
+	os.MkdirAll(filepath.Join(front.Worktree, "docs"), 0o755)
+	commitEn(t, front.Worktree, RutaMapa, "- `/cart` → `web/cart` · reach: menu · shows: total\n") // the feature map is everyone's
 	_, inf, err := r.Juntar("01")
 	if err == nil || !strings.Contains(strings.Join(inf, "\n"), "w-back: tocó fuera de su zona") {
 		t.Fatalf("%v\n%s", err, strings.Join(inf, "\n"))
+	}
+	if strings.Contains(strings.Join(inf, "\n"), "w-front: tocó fuera") {
+		t.Fatalf("the feature map counted as outside the zone:\n%s", strings.Join(inf, "\n"))
 	}
 	// back lo corrige y se vuelve a juntar; los ya juntados no se repiten
 	Git(back.Worktree, "rm", "-q", "web/hack.txt")
