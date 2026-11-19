@@ -35,6 +35,8 @@ type Spec struct {
 	// Vinculos montan de solo lectura un directorio en otra ruta, siempre dentro de un RW del Spec:
 	// las dependencias del proyecto (node_modules) vistas dentro de la copia donde corre el examen.
 	Vinculos []Vinculo
+	Red      Red    // RedProxy: own netns, out only through the proxy socket
+	Proxy    string // with RedProxy: the outside dir holding the proxy socket, mounted at DirRed
 }
 
 // Vinculo es un montaje de solo lectura de Origen en Destino.
@@ -231,6 +233,11 @@ func construir(s Spec, h host, argv []string) ([]string, []string, error) {
 		}
 		ms = append(ms, m)
 	}
+	rm, err := validarRed(s, h)
+	if err != nil {
+		return nil, nil, err
+	}
+	ms = append(ms, rm...)
 	if s.Net && h.Resolv != "" {
 		ms = append(ms, montaje{src: h.Resolv, dst: h.Resolv})
 	}
