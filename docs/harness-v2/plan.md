@@ -93,6 +93,18 @@ Next relevant progress: "this real agent completed this task inside the intended
 
 **Models:** Opus builds and reviews, Sonnet for small mechanical work and scouts, Fable plans only on request, never Codex. Reviews keep author/reviewer separation, clear criteria and executable reproductions.
 
+## Route (Owner, 2026-11-18 late) — supersedes the order of "Design", "Reorder" and "Milestone direction"
+
+Decision after the Fable value advice (`working/advice/fable-value-2026-11-18.md`). First value: less Owner attention per accepted story, measured as median minutes verified → decision (target ≤ 10) and verified slices undecided after 24 h (target 0; 75 today).
+
+- **Frozen:** the gate as it is (mistake-stopper; no more review rounds or attack rows without a real incident). The box after Task 1 (`180ee54`, network + proxy); Tasks 2–7 resume only when the Owner names a second provider for an expensive repo or a worker damages something outside its clone, with a 2-round review budget.
+- **Cut:** Owner passphrase (a plain command in his terminal is enough), quality levels, mutation on worker diffs, `instinto`, model-compacted memory, U1, L1, Orca, C6/W1 as separate pieces.
+- **Frozen until the stop rule says continue:** recovery test, portable knowledge and skill catalog, second provider.
+- **Order, one at a time (Opus builds, Opus reviews; Sonnet for wiring):** D1 decision page + timestamps → D2 correct code per project (lint/types/tests in `orq init`, receipt carries the three; remove Codex from config defaults) → D3 understanding card before code → D4 big stories as child slices, pause, drift alerts, orq merges on worker close → D5 second provider (Owner names it; never Codex).
+- **Budget per deliverable:** at most 2 review rounds or about USD 15; then it goes back to the Owner.
+- **Stop rule:** after 10 real stories through D1–D3: median ≤ 10 min and 0 undecided after 24 h → continue to D4/D5; 10–20 min → one fix, 5 more stories; > 20 min or the page did not replace reading the diff → stop building the harness, keep orq 1.0.0 + CI + protected branches.
+- **Install for real tests:** v2 side by side as `~/bin/orq2`, only in projects the Owner chooses; `~/bin/orq` (1.0.0) untouched for live workers. The final rename stays a separate decision.
+
 **Frozen:** pub/sub bus and hive memory, second orchestrator, U1 `orq setup`, L1 translation, Orca adapter work, C6 and W1 as separate pieces (their useful parts are in 2b), full Q1 quality profile, mutation and held-out tests (until the pilot shows wrong acceptances), model-compacted memory and injected "instincts". Not claimed: catching cheaters as the core value; being the only verifier.
 
 ## Activities
@@ -203,3 +215,4 @@ Order notes: Q1 follows B6 because it runs inside the sandboxed verification. U1
 - Resume orchestrator: `claude-alt --resume 97993ac3-28de-4b5f-887a-6d3b8a94f645` from the repo root, or a fresh session reading this checkpoint.
 - 2026-11-18 20:55: **step 1 closed** on integrated commit fdf8149 after 8 reviews (findings classified in `docs/harness-v2/reviews/`). `make ci` by the orchestrator on that revision: exit 0 (race 21 pkgs ok, e2e 86/0, aislamiento 14/0/0; 2 skips declared). Remaining limits listed in step1-report.md "Close". Containment not claimed: will be tested in step 2. Next: step 1b (bounded), Opus builder.
 - 2026-11-18 22:45: **step 1b closed** on 0730e9f (`make ci` exit 0, candidate revision checked by each suite). Review: candidate check holds; branch-moving forms reclassified to step 2 (R1b-1). Step 2 plan committed with the Owner's decisions (account claude-alt; registries and skill sources allowed via proxy). Next: step 2 builder (Opus), task by task.
+- 2026-11-18 23:00: Owner chose the value route (D1–D5), froze the gate and the box after Task 1, and v2 installs as `~/bin/orq2` for real tests. Next: D1 decision page (Opus), starting tomorrow.
