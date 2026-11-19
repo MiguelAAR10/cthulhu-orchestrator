@@ -181,3 +181,9 @@ Notes:
 - `gofmt` has no version flag. The probe counts any exit other than 126/127 as "it ran", and shows that exit.
 - The box now binds `~/.local/lib` whole, because the `go` link lives there. Under the deny list this is allowed, but the box sees every toolchain in `~/.local/lib`, not only Go.
 - Still open: `abrir` accepts a red caused by exit 127, a "red" that does not come from an assertion. Item 4 means it cannot burn repairs later, but `abrir` could refuse it up front.
+
+## Review fixes, round 3 (`reviews/d2a-review-3.md`)
+
+1. `orq slice abrir` refuses a red whose exam exits 126/127 ("falta una herramienta"), also with `--sin-conteo`. Test: `slice.TestAbrirRechazaRojoDeHerramientaFaltante`. The round-2 exit-127 test now uses an exam that is red at open and 127 later.
+2. `verificar` refuses when the worker's head equals `SHARojo` ("no ha commiteado nada"), with no receipt and no change of state. Test: `slice.TestVerificarSinTrabajoSeRechaza`.
+3. `orq init --help` / `-h` prints usage and changes nothing. Test: `cli.TestInitHelpNoCambiaNada` (no `.orq/` or `.claude/` created).

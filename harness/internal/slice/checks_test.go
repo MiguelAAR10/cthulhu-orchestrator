@@ -121,7 +121,7 @@ func TestInfraestructuraNoGastaReparacion(t *testing.T) {
 		cmd    string
 	}{
 		{"check", []config.Check{{Nombre: "lint", Cmd: "orq_no_such_tool -l ."}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"}}, examen},
-		{"examen", nil, "test -f .ok && " + examen + " || orq_no_such_tool"},
+		{"examen", nil, "cmp -s total.txt tests/datos.txt || exit 1; orq_no_such_tool"},
 	} {
 		t.Run(caso.nombre, func(t *testing.T) {
 			r := repoDeJuguete(t)
@@ -144,5 +144,26 @@ func TestInfraestructuraNoGastaReparacion(t *testing.T) {
 				t.Fatalf("each run still leaves its failed receipt: %d", n)
 			}
 		})
+	}
+}
+
+// A red whose exam exits 127 (tool missing) is not a red: abrir refuses it, even with --sin-conteo.
+func TestAbrirRechazaRojoDeHerramientaFaltante(t *testing.T) {
+	r := repoDeJuguete(t)
+	_, _, err := r.Abrir("01", "total", "tests/s01.sh", "orq_no_such_tool tests/s01.sh", Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
+	if err == nil || !strings.Contains(err.Error(), "127") || !strings.Contains(err.Error(), "falta una herramienta") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// With no commit from the worker, verificar refuses instead of verifying nothing.
+func TestVerificarSinTrabajoSeRechaza(t *testing.T) {
+	r := repoDeJuguete(t)
+	if _, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
+		t.Fatal(err)
+	}
+	e, _, err := r.Verificar("", t0)
+	if err == nil || !strings.Contains(err.Error(), "no ha commiteado nada") || e.Fase != Implementando {
+		t.Fatalf("fase %v err = %v", e.Fase, err)
 	}
 }

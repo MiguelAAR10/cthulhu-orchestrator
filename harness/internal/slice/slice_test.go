@@ -140,7 +140,8 @@ func TestFixtureTocadoEsTrampaYBloquea(t *testing.T) {
 
 func TestSinProgresoBloqueaYReintentarInvalidaRecibosViejos(t *testing.T) {
 	r := repoDeJuguete(t)
-	abrir(t, r)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "wip.txt", "intento\n") // a failed attempt: the worker did commit
 	if _, _, err := r.Verificar("", t0); err == nil || strings.Contains(err.Error(), "BLOQUEADO") {
 		t.Fatalf("el primer fallo no debe bloquear: %v", err)
 	}
@@ -371,6 +372,7 @@ func TestTimeoutCortaElExamen(t *testing.T) {
 func TestSinProgresoPorEspaciosYTopeDeIntentos(t *testing.T) {
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
+	commitEn(t, e.Worktree, "wip.txt", "intento\n")
 	r.Verificar("", t0)
 	commitEn(t, e.Worktree, "total.txt", "0 \n") // solo espacios
 	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "sin progreso") {
@@ -434,6 +436,7 @@ func TestMetricasDelCiclo(t *testing.T) {
 		t.Fatalf("%+v", m)
 	}
 	e := abrir(t, r)
+	commitEn(t, e.Worktree, "wip.txt", "intento\n")
 	r.Verificar("", t0)
 	r.Verificar("", t0) // mismo head: sin progreso
 	r.Reintentar("", "otra cosa", CausaWorker, false)
@@ -947,6 +950,7 @@ func TestSinConteoQuedaEnElEstadoYEnCadaRecibo(t *testing.T) {
 	if err != nil || e.SinConteo != "el runner es un cmp" {
 		t.Fatalf("%+v %v", e, err)
 	}
+	commitEn(t, e.Worktree, "wip.txt", "intento\n")
 	if _, _, err := r.Verificar("", t0); err == nil { // sigue en rojo: recibo de fallo
 		t.Fatal("el rojo no debe pasar")
 	}

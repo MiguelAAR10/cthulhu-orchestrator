@@ -39,6 +39,12 @@ const hookSettings = `{
 `
 
 func runInit(args []string, stdout, stderr io.Writer) int {
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			fmt.Fprintln(stdout, "uso: orq init [--modo=mejora|--modo=nuevo]\nDetecta el perfil del proyecto, escribe .orq/ y los checks. --help no cambia nada.")
+			return 0
+		}
+	}
 	p, err := abrirProyecto()
 	if err != nil {
 		fmt.Fprintln(stderr, err)

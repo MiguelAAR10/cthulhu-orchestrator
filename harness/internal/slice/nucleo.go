@@ -208,9 +208,12 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 		return nil, "", err
 	}
 	prov := &Estado{Cmd: cmd, Reporte: o.Reporte, Formato: o.Formato, TimeoutSeg: o.Timeout, Bundle: bundle, Huella: huella}
-	out, _, ok, cnt, _, err := r.examen(prov, sha)
+	out, codeRojo, ok, cnt, _, err := r.examen(prov, sha)
 	if err != nil {
 		return nil, out, err
+	}
+	if codeRojo == 126 || codeRojo == 127 {
+		return nil, out, fmt.Errorf("el examen sale con %d: falta una herramienta (¿%s?), no es un rojo. Un rojo válido es una prueba que corre y falla; mira la línea «not found» de la salida y `orq check --caja`", codeRojo, cmd)
 	}
 	if ok {
 		return nil, out, errors.New("el examen ya pasa: no está en rojo, así que no mide nada todavía")
@@ -311,6 +314,9 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 		return e, in.Sucio, errors.New("la copia del worker tiene cambios sin commit; solo cuenta lo commiteado: el worker debe commitear todo")
 	}
 	head := in.Punta
+	if head == e.SHARojo {
+		return e, "", fmt.Errorf("%s: el worker no ha commiteado nada (la punta es el commit rojo %s): no hay trabajo que verificar", e.ID(), head)
+	}
 	tocoExamen, otras, err := r.protegidasTocadas(e, e.baseExamen(), head)
 	if err != nil {
 		return e, "", err

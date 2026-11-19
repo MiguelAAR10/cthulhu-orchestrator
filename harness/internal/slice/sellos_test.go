@@ -87,7 +87,8 @@ func TestCierreRetomadoNoSellaDosVeces(t *testing.T) {
 
 func TestReintentoAnotaCausa(t *testing.T) {
 	r := repoDeJuguete(t)
-	abrir(t, r)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "wip.txt", "intento\n")
 	r.Verificar("", t0)
 	r.Verificar("", t0) // sin progreso → BLOQUEADO
 	for _, causa := range []string{"", "otra"} {

@@ -168,3 +168,20 @@ func TestCheckCajaInforma(t *testing.T) {
 		t.Fatalf("a static answer for rota:\n%s", out)
 	}
 }
+
+func TestInitHelpNoCambiaNada(t *testing.T) {
+	for _, flag := range []string{"--help", "-h"} {
+		root := repoCLI(t)
+		t.Setenv("ORQ_STATE", t.TempDir())
+		os.RemoveAll(filepath.Join(root, ".orq"))
+		out, _, code := run(t, "init", flag)
+		if code != 0 || !strings.Contains(out, "uso: orq init") {
+			t.Fatalf("%s: %d %q", flag, code, out)
+		}
+		for _, d := range []string{".orq", ".claude"} {
+			if _, err := os.Stat(filepath.Join(root, d)); err == nil {
+				t.Fatalf("%s created %s", flag, d)
+			}
+		}
+	}
+}
