@@ -379,7 +379,7 @@ func (r Repo) bloquear(e *Estado, motivo string) error {
 	if err := r.save(e); err != nil {
 		return err
 	}
-	return fmt.Errorf("%s BLOQUEADO: %s. Decide el Orquestador (o el Atena): `orq slice reintentar \"qué cambia\"` o cerrar como rechazado", e.ID(), motivo)
+	return fmt.Errorf("%s BLOQUEADO: %s. Decide el Orquestador (o el Atena): `orq slice reintentar --causa worker|examen \"qué cambia\"` o cerrar como rechazado", e.ID(), motivo)
 }
 
 func firmaDe(out string) string {

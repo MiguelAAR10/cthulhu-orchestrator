@@ -53,6 +53,9 @@ func seccionesDecision(pd *app.PaginaDecision) []seccion {
 	for _, l := range pd.Historia {
 		historia.Lineas = append(historia.Lineas, normal("%s", l))
 	}
+	for _, av := range pd.AvisosHistoria {
+		historia.Lineas = append(historia.Lineas, alerta("%s", av))
+	}
 	out = append(out, historia)
 
 	pruebas := seccion{Titulo: "Pruebas", Fuente: "recibo, sin conteo del runner"}
@@ -83,6 +86,9 @@ func seccionesDecision(pd *app.PaginaDecision) []seccion {
 	}
 	if len(pd.Alineacion.Cambiados) > slice.MaxArchivos {
 		archivos.Lineas = append(archivos.Lineas, alerta("%d archivos cambiados: ya no es un slice delgado", len(pd.Alineacion.Cambiados)))
+	}
+	for _, av := range pd.Avisos {
+		archivos.Lineas = append(archivos.Lineas, alerta("%s", av))
 	}
 	out = append(out, archivos)
 

@@ -126,13 +126,15 @@ func (r Repo) metricasDecision(m *Metricas, desde, now time.Time) {
 	for _, e := range evs {
 		switch {
 		case e.Tipo == "verificacion" && e.Resultado == "paso":
-			verificado[e.Slice] = e.TS
+			if _, ya := verificado[e.Slice]; !ya { // re-verifying keeps the first paso: the Owner has been waiting since then
+				verificado[e.Slice] = e.TS
+			}
 		case e.Tipo == "decision":
 			if v, ok := verificado[e.Slice]; ok && !e.TS.Before(desde) {
 				minutos = append(minutos, e.TS.Sub(v).Minutes())
 			}
 			delete(verificado, e.Slice)
-		case e.Tipo == "fase" && (e.De == Verificado && e.A == Implementando || e.A == "CERRADO"):
+		case e.Tipo == "fase" && (e.De == Verificado && e.A != Integrando || e.A == "CERRADO"):
 			delete(verificado, e.Slice)
 		case e.Tipo == "intento" && !e.TS.Before(desde):
 			if c, ok := e.Datos["causa"].(string); ok {

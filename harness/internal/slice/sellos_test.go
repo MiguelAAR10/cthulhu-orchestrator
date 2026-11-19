@@ -3,6 +3,7 @@ package slice
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestSellosDelCiclo(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := eventos(t, r, "verificacion")
-	if len(v) != 1 || v[0].Resultado != "paso" || !v[0].TS.Equal(t1) {
+	if len(v) != 1 || v[0].Resultado != "paso" || v[0].TS.Before(t1) || v[0].TS.Sub(t1) > time.Minute {
 		t.Fatalf("verificacion: %+v", v)
 	}
 	terminado, _ := v[0].Datos["terminado"].(string)
@@ -177,5 +178,91 @@ func TestEsperandoOrdenaPorAntiguedad(t *testing.T) {
 	es, err := r.Esperando()
 	if err != nil || len(es) != 2 || es[0].NN != "02" || es[1].NN != "01" {
 		t.Fatalf("%v %v", es, err)
+	}
+}
+
+func metricasDe(t *testing.T, evs []diario.Evento, now time.Time) Metricas {
+	t.Helper()
+	r := Repo{OrqDir: t.TempDir()}
+	for _, e := range evs {
+		if err := diario.Anotar(diario.Ruta(r.OrqDir), e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return r.Metricas(time.Time{}, now)
+}
+
+// Review fix 1: re-verifying a VERIFICADO slice does not restart the Owner's clock.
+func TestMetricasReverificarNoReiniciaElReloj(t *testing.T) {
+	m := metricasDe(t, []diario.Evento{
+		{TS: t0, Tipo: "verificacion", Slice: "01", Resultado: "paso"},
+		{TS: t0.Add(30 * time.Minute), Tipo: "verificacion", Slice: "01", Resultado: "paso"},
+		{TS: t0.Add(40 * time.Minute), Tipo: "decision", Slice: "01", Resultado: "aceptado"},
+	}, t0.Add(time.Hour))
+	if m.DecisionMinMediana != 40 {
+		t.Fatalf("median %v, want 40", m.DecisionMinMediana)
+	}
+	m = metricasDe(t, []diario.Evento{
+		{TS: t0, Tipo: "verificacion", Slice: "01", Resultado: "paso"},
+		{TS: t0.Add(47 * time.Hour), Tipo: "verificacion", Slice: "01", Resultado: "paso"},
+	}, t0.Add(48*time.Hour))
+	if m.SinDecidir24h != 1 {
+		t.Fatalf("a stale slice re-verified is still stale, got %d", m.SinDecidir24h)
+	}
+}
+
+// Review fix 2: VERIFICADO→BLOQUEADO leaves the Owner's hands, like `orq status` says.
+func TestMetricasBloqueoDetieneElReloj(t *testing.T) {
+	m := metricasDe(t, []diario.Evento{
+		{TS: t0, Tipo: "verificacion", Slice: "01", Resultado: "paso"},
+		{TS: t0.Add(time.Minute), Tipo: "fase", Slice: "01", De: Verificado, A: Bloqueado},
+	}, t0.Add(48*time.Hour))
+	if m.SinDecidir24h != 0 {
+		t.Fatalf("blocked slice counted as waiting for the Owner: %d", m.SinDecidir24h)
+	}
+	m = metricasDe(t, []diario.Evento{
+		{TS: t0, Tipo: "verificacion", Slice: "01", Resultado: "paso"},
+		{TS: t0.Add(time.Minute), Tipo: "fase", Slice: "01", De: Verificado, A: Integrando},
+	}, t0.Add(48*time.Hour))
+	if m.SinDecidir24h != 1 {
+		t.Fatalf("INTEGRANDO keeps the clock: %d", m.SinDecidir24h)
+	}
+}
+
+// Review fix 3: the page diffs red→rec.Head and warns when the clone moved on.
+func TestPaginaArchivosSonDelCommitVerificado(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if _, _, err := r.Verificar("", t0.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "despues.txt", "x\n")
+	pg, err := r.Pagina("01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(pg.Alineacion.Cambiados, "despues.txt") {
+		t.Fatalf("unverified file listed: %v", pg.Alineacion.Cambiados)
+	}
+	if len(pg.Avisos) != 1 || !strings.Contains(pg.Avisos[0], Corto(pg.Estado.Recibo.Head)) {
+		t.Fatalf("avisos %v", pg.Avisos)
+	}
+}
+
+// Review fix 5: the stamp is taken after the run, so a slow run does not count against the Owner's wait.
+func TestVerificacionSelloDespuesDeLaCorrida(t *testing.T) {
+	r := repoDeJuguete(t)
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", "sleep 1.2; sh tests/s01.sh", Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Sano: "test -f total.txt"}, t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if _, _, err := r.Verificar("", t0); err != nil {
+		t.Fatal(err)
+	}
+	v := eventos(t, r, "verificacion")
+	if len(v) != 1 || v[0].TS.Sub(t0) < time.Second {
+		t.Fatalf("stamp %v must include the run time after %v", v, t0)
 	}
 }

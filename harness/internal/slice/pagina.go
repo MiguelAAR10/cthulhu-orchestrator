@@ -15,6 +15,7 @@ type Pagina struct {
 	Estado     *Estado
 	Alineacion *Alineacion
 	Examen     []diario.Evento // exámenes sumados o corregidos desde que se abrió
+	Avisos     []string        // desvíos de la página misma, p. ej. la punta ya no es el commit verificado
 }
 
 // Pagina arma la página de decisión del slice nn; solo existe para un slice VERIFICADO.
@@ -39,11 +40,29 @@ func (r Repo) Pagina(nn string) (*Pagina, error) {
 		return nil, err
 	}
 	e.Recibo = rec
+	var avisos []string
+	if len(e.Equipo) == 0 && esClon(e.Worktree) {
+		if in, err := r.ingerir(e, e.Worktree, e.Rama, "slice"); err == nil { // fetch only, as Alinear does
+			if tip, err := r.git("rev-parse", "--verify", in.Punta+"^{commit}"); err == nil && tip != rec.Head {
+				avisos = append(avisos, fmt.Sprintf("la punta del clon %s no es el commit verificado %s: los archivos de abajo son del verificado", Corto(tip), Corto(rec.Head)))
+			}
+		}
+	}
+	if fs, err := r.tocadas(e.SHARojo, rec.Head); err == nil {
+		a.Cambiados = fs
+		var fuera []string
+		for _, f := range a.Fuera {
+			if slices.Contains(fs, f) {
+				fuera = append(fuera, f)
+			}
+		}
+		a.Fuera = fuera
+	}
 	evs, err := diario.Leer(diario.Ruta(r.OrqDir))
 	if err != nil {
 		return nil, err
 	}
-	pg := &Pagina{Estado: e, Alineacion: a}
+	pg := &Pagina{Estado: e, Alineacion: a, Avisos: avisos}
 	for _, ev := range evs {
 		if ev.Tipo == "examen" && ev.Slice == e.NN && !ev.TS.Before(e.Abierto) {
 			pg.Examen = append(pg.Examen, ev)

@@ -292,6 +292,7 @@ func (r Repo) Ampliar(nn string, rutas []string) (*Estado, error) {
 // Verificar trae lo commiteado por el worker, comprueba que no tocó nada protegido, corre el examen
 // intacto en la caja y deja un recibo (también en git). Falla dos veces o sin progreso → BLOQUEADO.
 func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado, string, error) {
+	inicio := time.Now()
 	e, err := r.Load(nn)
 	if err != nil || e == nil {
 		return nil, "", errors.Join(err, errors.New("no hay slice abierto"))
@@ -398,7 +399,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if err != nil {
 		return e, out, err
 	}
-	if err := diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{TS: now, Tipo: "verificacion", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
+	if err := diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{TS: now.Add(time.Since(inicio)), Tipo: "verificacion", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
 		Resultado: rec.Resultado, Datos: map[string]any{"head": head, "ejecutados": rec.Ejecutados, "fallidos": rec.Fallidos, "terminado": terminado}}); err != nil {
 		return e, out, err
 	}

@@ -89,7 +89,7 @@ func (p Proyecto) DatosRelevo(rol string) Relevo {
 	case slice.Verificado:
 		rv.Siguiente = "demo con el Owner vía Atena; después `orq slice cerrar --aceptado|--rechazado`"
 	case slice.Bloqueado:
-		rv.Siguiente = "decidir: `orq slice reintentar \"qué cambia\"`, preguntar al Atena o rechazar"
+		rv.Siguiente = "decidir: `orq slice reintentar --causa worker|examen \"qué cambia\"`, preguntar al Atena o rechazar"
 	default:
 		rv.Siguiente = "repetir `orq slice cerrar --aceptado`: continúa donde quedó"
 	}

@@ -199,3 +199,49 @@ func TestStatusListaVerificados(t *testing.T) {
 	out, _, _ = run(t, "status")
 	contiene(t, out, "esperan al Owner (verificados, el más antiguo primero):", "S-01/a1 «total» hace 0m · orq slice decidir 01")
 }
+
+// Review fix 4: a historia linked to the slice wins over a later one; without the link and with
+// several slices open the page says the story may be another slice's.
+func TestDecidirHistoriaVinculadaYAviso(t *testing.T) {
+	root := sliceVerdeCon(t, nil, nil)
+	path := filepath.Join(root, ".orq", "canal.jsonl")
+	for _, m := range []canal.Msg{
+		{De: "atena", Para: "orquestador", Tipo: "historia", Attempt: "S-01/a1", Texto: "historia de uno"},
+		{De: "atena", Para: "orquestador", Tipo: "historia", Attempt: "S-02/a1", Texto: "historia de dos"},
+	} {
+		if err := canal.Append(path, &m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, _, code := run(t, "slice", "decidir", "01")
+	if code != 0 {
+		t.Fatal(out)
+	}
+	contiene(t, out, "historia de uno")
+	if strings.Contains(out, "historia de dos") || strings.Contains(out, "another slice") {
+		t.Fatalf("linked story must win, no warning:\n%s", out)
+	}
+}
+
+func TestDecidirHistoriaSinVinculoConVariosAbiertosAvisa(t *testing.T) {
+	root := sliceVerdeCon(t, nil, nil)
+	if err := canal.Append(filepath.Join(root, ".orq", "canal.jsonl"), &canal.Msg{De: "atena", Para: "orquestador", Tipo: "historia", Texto: "historia suelta"}); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(root, "tests", "s02.sh"), []byte("true\n"), 0o644)
+	for _, c := range [][]string{{"add", "-A"}, {"commit", "-qm", "rojo 2"}} {
+		cmd := exec.Command("git", c...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %s", c, out)
+		}
+	}
+	if _, errs, code := run(t, "slice", "abrir", "02", "--titulo", "iva", "--test", "tests/s02.sh", "--cmd", "sh run.sh", "--sin-conteo", "juguete", "--sin-scouts", "e2e"); code != 0 {
+		t.Fatalf("abrir 02: %d %s", code, errs)
+	}
+	out, _, code := run(t, "slice", "decidir", "01")
+	if code != 0 {
+		t.Fatal(out)
+	}
+	contiene(t, out, "historia suelta", "!! story may belong to another slice")
+}

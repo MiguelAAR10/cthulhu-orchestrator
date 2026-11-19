@@ -94,3 +94,16 @@ Each section header names where its data comes from:
 
 - The help text of `orq slice cerrar --aceptado` says "el Owner aceptó la demo". It could point at `orq slice decidir` first.
 - `orq slice verificar` still prints "falta la demo del Owner". It could print `orq slice decidir NN` instead.
+
+## Review fixes
+
+Fixes for `reviews/d1-review.md`, each repro a test seen failing first:
+
+1. `metricas` keeps the first `paso` while the slice stays VERIFICADO (`TestMetricasReverificarNoReiniciaElReloj`).
+2. The clock stops on any `De=VERIFICADO` transition except to INTEGRANDO, so `SinDecidir24h` agrees with `orq status` (`TestMetricasBloqueoDetieneElReloj`).
+3. The page's "Archivos" diffs red→`rec.Head`; if the clone tip differs, `!!` names both commits (`TestPaginaArchivosSonDelCommitVerificado`).
+4. The story uses the `historia` whose attempt is this slice's; without a link and with more than one slice open the page raises `!! story may belong to another slice` (`TestDecidirHistoriaVinculadaYAviso`, `...SinVinculoConVariosAbiertosAvisa`).
+5. The `verificacion` stamp is `now` plus the time the run took (`TestVerificacionSelloDespuesDeLaCorrida`); `TestSellosDelCiclo` now allows that drift.
+6. Hints in `slice/slice.go` and `app/relevo.go` include `--causa worker|examen`.
+
+`gofmt -l harness` empty, `go vet ./...`, `go test -race ./...` and `make ci` (exit 0) pass. `internal/gate` and `internal/sandbox` untouched.
