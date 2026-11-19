@@ -62,6 +62,9 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	if err != nil || e == nil {
 		return "", false, errors.Join(err, errors.New("no hay slice abierto"))
 	}
+	if err := r.Confiar(e); err != nil {
+		return "", false, err
+	}
 	if err := e.PuedeLanzar(); err != nil {
 		return "", false, err
 	}

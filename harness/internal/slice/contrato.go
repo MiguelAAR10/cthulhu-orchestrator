@@ -39,13 +39,14 @@ type Contrato struct {
 	Tarjeta    *Tarjeta   `json:"tarjeta,omitempty"`
 	// PruebasExamen va en el contrato: un estado reescrito no puede vaciar la lista.
 	PruebasExamen []string `json:"pruebas_examen,omitempty"`
+	Ruta          string   `json:"ruta,omitempty"`
 }
 
 func contratoDe(e *Estado) Contrato {
 	return Contrato{NN: e.NN, Test: e.Test, Bundle: e.Bundle, Cmd: e.Cmd, Sano: e.Sano, Base: e.Base, Rama: e.Rama,
 		SHARojo: e.SHARojo, SHAExamen: e.SHAExamen, Huella: e.Huella, Reporte: e.Reporte, Formato: e.Formato,
 		Omitir: e.Omitir, SinConteo: e.SinConteo, TimeoutSeg: e.TimeoutSeg, Vigilados: e.Vigilados, Alcance: e.Alcance,
-		PruebasExamen: e.PruebasExamen, Tarjeta: e.Tarjeta}
+		PruebasExamen: e.PruebasExamen, Tarjeta: e.Tarjeta, Ruta: e.Ruta}
 }
 
 func refContrato(nn string) string  { return "refs/orq/contrato/" + nn }
@@ -120,6 +121,9 @@ func (r Repo) confiable(e *Estado) error {
 	}
 	return nil
 }
+
+// Confiar es confiable para quien lanza trabajo: un estado reescrito a mano no arranca nada.
+func (r Repo) Confiar(e *Estado) error { return r.confiable(e) }
 
 // diferencias lista los campos del contrato que no coinciden.
 func diferencias(a, b Contrato) []string {

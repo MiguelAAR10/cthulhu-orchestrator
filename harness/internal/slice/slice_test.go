@@ -1261,3 +1261,28 @@ func TestReporteCommiteadoPorElWorkerNoCuenta(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// Review fix: a route relabeled by hand shows up on the decision page's notices.
+func TestPaginaAvisaRutaReescrita(t *testing.T) {
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if _, _, err := r.Verificar("", t0.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	e, err := r.Load("01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Ruta = RutaFix
+	if err := r.save(e); err != nil {
+		t.Fatal(err)
+	}
+	pg, err := r.Pagina("01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pg.Avisos) == 0 || !strings.Contains(pg.Avisos[0], "ruta") {
+		t.Fatalf("avisos %v", pg.Avisos)
+	}
+}

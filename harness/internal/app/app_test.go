@@ -422,3 +422,61 @@ func TestSlicesLlevaLosChecksDelProyecto(t *testing.T) {
 		t.Fatalf("checks = %+v", cs)
 	}
 }
+
+// reescribirEstado edita a mano .orq/slices/NN.json, como lo haría quien no pasa por orq.
+func reescribirEstado(t *testing.T, p Proyecto, nn, de, a string) {
+	t.Helper()
+	f := filepath.Join(p.Slices().OrqDir, "slices", nn+".json")
+	raw, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), de) {
+		t.Fatalf("%s no contiene %q", f, de)
+	}
+	if err := os.WriteFile(f, []byte(strings.Replace(string(raw), de, a, 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLanzarNoConfiaEnAprobacionForjada(t *testing.T) {
+	p, term, _ := proyectoDePrueba(t, "")
+	if _, _, err := p.Slices().Abrir("02", "dos", "tests/s01.sh", "sh tests/s01.sh", slice.Opciones{SinConteo: "prueba"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	tj, _ := slice.LeerTarjeta(tarjetaDePrueba)
+	if _, err := p.Slices().PonerTarjeta("02", tj, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	reescribirEstado(t, p, "02", `"aprobada": "0001-01-01T00:00:00Z"`, `"aprobada": "2026-01-01T00:00:00Z"`)
+	_, _, err := p.LanzarWorker(context.Background(), PedidoWorker{Slice: "02", Agente: "claude", Alcance: "x", Presupuesto: "10 min"})
+	if !errors.Is(err, slice.ErrEstadoForjado) || len(term.Ops("crear")) != 0 {
+		t.Fatalf("aprobación forjada debe negarse: %v, paneles %d", err, len(term.Ops("crear")))
+	}
+}
+
+func TestLanzarNoConfiaEnRutaRebajadaAFix(t *testing.T) {
+	p, term, _ := proyectoDePrueba(t, "")
+	if _, _, err := p.Slices().Abrir("02", "dos", "tests/s01.sh", "sh tests/s01.sh", slice.Opciones{SinConteo: "prueba"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	reescribirEstado(t, p, "02", `"nn": "02"`, `"nn": "02", "ruta": "fix"`)
+	_, _, err := p.LanzarWorker(context.Background(), PedidoWorker{Slice: "02", Agente: "claude", Alcance: "x", Presupuesto: "10 min"})
+	if !errors.Is(err, slice.ErrEstadoForjado) || !strings.Contains(err.Error(), "ruta") || len(term.Ops("crear")) != 0 {
+		t.Fatalf("ruta rebajada debe negarse: %v, paneles %d", err, len(term.Ops("crear")))
+	}
+}
+
+func TestSubirRutaSigueSiendoValida(t *testing.T) {
+	p, _, _ := proyectoDePrueba(t, "")
+	if _, _, err := p.Slices().Abrir("02", "dos", "tests/s01.sh", "sh tests/s01.sh", slice.Opciones{SinConteo: "prueba", Ruta: slice.RutaFix}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	e, err := p.Slices().CambiarRuta("02", slice.RutaSlice, "creció")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Slices().Confiar(e); err != nil {
+		t.Fatalf("subir la ruta re-sella el contrato: %v", err)
+	}
+}

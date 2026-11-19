@@ -90,6 +90,9 @@ func LeerTarjeta(texto string) (Tarjeta, error) {
 		if filepath.IsAbs(z) || z == ".." || strings.HasPrefix(filepath.Clean(z), "../") {
 			return Tarjeta{}, fmt.Errorf("en Zonas, %q no es una ruta dentro del repo", z)
 		}
+		if c := strings.Trim(filepath.Clean(z), "/"); c == "." || c == "" {
+			return Tarjeta{}, fmt.Errorf("en Zonas, %q cubre todo el repo: nombra las carpetas o archivos que se tocan, no la raíz", z)
+		}
 	}
 	return Tarjeta{Historia: partes["Historia"], Fuera: partes["Fuera"], Examen: partes["Examen"], Zonas: partes["Zonas"], Preguntas: partes["Preguntas"]}, nil
 }
