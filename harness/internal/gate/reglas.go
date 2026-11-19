@@ -237,6 +237,16 @@ func proteccionDe(p Payload, l limits.Limits, env Env, wt bool) proteccion {
 		}
 	}
 	harness := []string{env.StateDir, env.LimitsPath}
+	if wt {
+		// The global and system git config run commands (core.fsmonitor, core.pager) in every repository.
+		harness = append(harness, "/etc/gitconfig")
+		if h, err := os.UserHomeDir(); err == nil {
+			harness = append(harness, filepath.Join(h, ".gitconfig"), filepath.Join(h, ".config/git/config"), filepath.Join(h, ".git-credentials"))
+		}
+		if x := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(x) {
+			harness = append(harness, filepath.Join(x, "git/config"))
+		}
+	}
 	if env.MainRoot != nil {
 		if r := env.MainRoot(p.Cwd); r != "" {
 			harness = append(harness, filepath.Join(r, ".orq"))

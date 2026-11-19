@@ -21,26 +21,16 @@ var gitEnvRepo = conjunto("GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTO
 // gitEnvCmd are the variables whose value git runs as a command. A worker sets them only to a
 // command that runs nothing else.
 var gitEnvCmd = conjunto("GIT_EXTERNAL_DIFF", "GIT_SSH", "GIT_SSH_COMMAND", "GIT_PAGER", "GIT_EDITOR",
-	"GIT_SEQUENCE_EDITOR", "GIT_ASKPASS", "GIT_PROXY_COMMAND", "GIT_EXEC_PATH", "GIT_TEMPLATE_DIR")
+	"GIT_SEQUENCE_EDITOR", "GIT_ASKPASS", "GIT_PROXY_COMMAND", "GIT_EXEC_PATH", "GIT_TEMPLATE_DIR", "PAGER", "EDITOR", "VISUAL")
 
-// gitBuiltin are git's own subcommands (`git --list-cmds=main`, git 2.43) minus those that run a
-// command given on the line or serve the repository. Anything else is an alias or a git-* program
-// on PATH, whose text the gate does not read.
-var gitBuiltin = conjunto("add", "am", "annotate", "apply", "archive", "bisect", "blame", "branch",
-	"bugreport", "bundle", "cat-file", "check-attr", "check-ignore", "check-mailmap", "check-ref-format",
-	"checkout", "checkout-index", "cherry", "cherry-pick", "clean", "clone", "column", "commit",
-	"commit-graph", "commit-tree", "config", "count-objects", "credential", "describe", "diagnose", "diff",
-	"diff-files", "diff-index", "diff-tree", "difftool", "fast-export", "fast-import", "fetch", "fetch-pack",
-	"fmt-merge-msg", "for-each-ref", "format-patch", "fsck", "gc", "get-tar-commit-id", "grep", "hash-object",
-	"help", "index-pack", "init", "interpret-trailers", "log", "ls-files", "ls-remote", "ls-tree", "mailinfo",
-	"mailsplit", "maintenance", "merge", "merge-base", "merge-file", "merge-index", "merge-tree", "mergetool",
-	"mktag", "mktree", "multi-pack-index", "mv", "name-rev", "notes", "pack-objects", "pack-refs", "patch-id",
-	"prune", "prune-packed", "pull", "push", "range-diff", "read-tree", "rebase", "reflog", "remote", "repack",
-	"replace", "rerere", "reset", "restore", "rev-list", "rev-parse", "revert", "rm", "shortlog", "show",
-	"show-branch", "show-index", "show-ref", "sparse-checkout", "stage", "stash", "status", "stripspace",
-	"submodule", "switch", "symbolic-ref", "tag", "unpack-file", "unpack-objects", "update-index",
-	"update-ref", "update-server-info", "var", "verify-commit", "verify-pack", "verify-tag", "version",
-	"whatchanged", "worktree", "write-tree")
+// gitPermitido is all the git a worker runs (review 5: a denylist of builtins that run commands
+// missed twice). tag and worktree only list; branch, checkout and switch move only its own refs.
+var gitPermitido = conjunto("status", "add", "commit", "log", "diff", "show", "branch", "switch", "checkout",
+	"restore", "rm", "mv", "reset", "stash", "rev-parse", "ls-files", "merge-base", "cat-file", "blame", "grep",
+	"describe", "shortlog", "tag", "worktree", "version", "help")
+
+const listaGit = "status, add, commit, log, diff, show, branch, switch, checkout, restore, rm, mv, reset, stash, " +
+	"rev-parse, ls-files, merge-base, cat-file, blame, grep, describe, shortlog, tag -l, worktree list, version, help"
 
 // declaran are the builtins whose VAR=value arguments set (and may export) variables.
 var declaran = conjunto("export", "declare", "typeset", "readonly", "local")
@@ -132,96 +122,36 @@ func gitAjeno(c simple, raiz, rama string) (Decision, bool) {
 		return Decision{}, false
 	}
 	sub, r := a[0].s, a[1:]
-	if a[0].dyn || !gitBuiltin[sub] {
-		return deny("orq: %q is not a git builtin: a worker runs no git alias and no git-* program. Write the git command itself.", sub), true
-	}
 	t := textos(r)
-	switch sub {
-	case "config":
-		return gitConfig(r)
-	case "rebase":
-		if hay(t, "-x", "--exec") || conPrefijo(t, "--exec=") || corta(t, 'x') {
-			return oculto("git rebase --exec")
-		}
-	case "submodule":
-		if hay(t, "foreach") {
-			return oculto("git submodule foreach")
-		}
-	case "bisect":
-		if hay(t, "run") {
-			return oculto("git bisect run")
-		}
-	case "difftool", "mergetool":
-		if hay(t, "-x", "--extcmd") || conPrefijo(t, "--extcmd=") {
-			return oculto("git " + sub + " --extcmd")
-		}
-	case "update-ref":
-		if hay(t, "--stdin") {
-			return ramaAjena("--stdin")
-		}
-		if p := posicionales(r, conjunto("-m")); len(p) > 0 && !propia(p[0], rama) {
-			return ramaAjena(p[0].s)
-		}
-	case "symbolic-ref":
-		p := posicionales(r, conjunto("-m"))
-		borra := hay(t, "-d", "--delete") || corta(t, 'd')
-		if len(p) > 0 && (borra || len(p) > 1) {
-			for _, x := range p {
-				if !propia(x, rama) {
-					return ramaAjena(x.s)
-				}
-			}
-		}
-	case "branch":
-		fuerza := hay(t, "-f", "--force") || corta(t, 'f')
-		mueve := hay(t, "-M", "-C") || corta(t, 'M') || corta(t, 'C')
-		p := posicionales(r, conjunto("-u", "--set-upstream-to", "-t", "--track", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--sort", "--format", "--color", "--column"))
-		if mueve {
-			for _, x := range p {
-				if !propia(rama0(x), rama) {
-					return ramaAjena(x.s)
-				}
-			}
-		} else if fuerza && len(p) > 0 && !propia(rama0(p[0]), rama) {
-			return ramaAjena(p[0].s)
-		}
-	}
-	return Decision{}, false
-}
-
-// gitConfig lets a worker read any git config but write only the keys claveLibre allows. It
-// denies whole forms (edit, rename or remove a section) instead of reading what they change.
-func gitConfig(r []palabra) (Decision, bool) {
-	for _, x := range r {
-		if x.dyn {
-			return configAjena("git config " + x.s)
-		}
-	}
-	t := textos(r)
-	if hay(t, "-e", "--edit", "--rename-section", "--remove-section") {
-		return configAjena("git config " + strings.Join(t, " "))
-	}
-	p := posicionales(r, conjunto("-f", "--file", "--blob", "--type", "--default", "--comment", "--value"))
-	var clave palabra
+	p := posicionales(r, conjunto("-u", "--set-upstream-to", "-t", "--track", "--contains", "--no-contains", "--merged",
+		"--no-merged", "--points-at", "--sort", "--format", "--color", "--column"))
 	switch {
-	case len(p) > 0 && conjunto("get", "list")[p[0].s]:
-		return Decision{}, false
-	case len(p) > 0 && conjunto("set", "unset")[p[0].s]:
-		if len(p) < 2 {
-			return Decision{}, false
-		}
-		clave = p[1]
-	case len(p) > 0 && conjunto("edit", "rename-section", "remove-section")[p[0].s]:
-		return configAjena("git config " + p[0].s)
-	case hay(t, "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--get-color", "--get-colorbool", "-l", "--list"):
-		return Decision{}, false
-	case hay(t, "--add", "--replace-all", "--unset", "--unset-all") && len(p) > 0, len(p) >= 2:
-		clave = p[0]
-	default:
-		return Decision{}, false
+	case a[0].dyn || !gitPermitido[sub],
+		sub == "tag" && len(r) > 0 && !hay(t, "-l", "--list"),
+		sub == "worktree" && (len(p) == 0 || p[0].s != "list"):
+		return deny("orq: a worker runs only these git commands: %s (not %q). Ask the orchestrator for anything else.", listaGit, sub), true
+	case hay(t, "--ext-diff", "--textconv"):
+		return oculto("git " + sub + " --ext-diff/--textconv")
+	case sub == "grep" && (conPrefijo(t, "-O", "--open-files-in-pager") || corta(t, 'O')):
+		return oculto("git grep --open-files-in-pager")
 	}
-	if !claveLibre(clave) {
-		return configAjena("git config " + clave.s)
+	fuerza := hay(t, "-f", "--force", "-B", "-C", "--force-create") || corta(t, 'f') || corta(t, 'B') || corta(t, 'C')
+	switch {
+	case sub == "branch" && (hay(t, "-M", "-C") || corta(t, 'M') || corta(t, 'C')):
+		for _, x := range p {
+			if !propia(rama0(x), rama) {
+				return ramaAjena(x.s)
+			}
+		}
+	case sub == "branch" && fuerza && len(p) > 0 && !propia(rama0(p[0]), rama):
+		return ramaAjena(p[0].s)
+	case (sub == "checkout" || sub == "switch") && fuerza:
+		if x, ok := valorDe(r, "-B", "--force-create"); ok && !propia(rama0(x), rama) {
+			return ramaAjena(x.s)
+		}
+		if x, ok := valorDe(r, "-C", "--force-create"); ok && !propia(rama0(x), rama) {
+			return ramaAjena(x.s)
+		}
 	}
 	return Decision{}, false
 }
