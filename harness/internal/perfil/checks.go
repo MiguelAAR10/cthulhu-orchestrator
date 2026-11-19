@@ -9,8 +9,9 @@ import (
 	"orq/internal/config"
 )
 
-// gofmt -l sale 0 aunque haya archivos sin formato: el check falla cuando lista alguno.
-const lintGo = "! gofmt -l . | grep ."
+// gofmt -l sale 0 aunque haya archivos sin formato: el check falla cuando lista alguno, con el código de gofmt
+// cuando no puede leer un archivo o no corre (127: la caja no lo ve). Nunca pasa sin que gofmt haya corrido.
+const lintGo = `out=$(gofmt -l . 2>&1); c=$?; printf '%s\n' "$out"; if [ $c -ne 0 ]; then exit $c; fi; test -z "$out"`
 
 // testPorDefecto es lo que `npm init` escribe en scripts.test: no es una prueba.
 const testPorDefecto = "no test specified"

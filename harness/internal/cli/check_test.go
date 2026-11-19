@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"orq/internal/config"
@@ -32,10 +33,10 @@ func TestInitEscribeChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	cs := c.ChecksEnOrden()
-	if len(cs) != 3 || cs[0].Cmd != "! gofmt -l . | grep ." || cs[1].Cmd != "go vet ./..." || cs[2].Cmd != "go test ./..." {
+	if len(cs) != 3 || !strings.HasPrefix(cs[0].Cmd, "out=$(gofmt -l . 2>&1)") || cs[1].Cmd != "go vet ./..." || cs[2].Cmd != "go test ./..." {
 		t.Fatalf("checks = %+v", cs)
 	}
-	contiene(t, out, "check lint: ! gofmt -l . | grep .", "check types: go vet ./...", "check tests: go test ./...")
+	contiene(t, out, "check lint: out=$(gofmt -l . 2>&1)", "check types: go vet ./...", "check tests: go test ./...")
 }
 
 func TestInitNoPisaChecksDelOwner(t *testing.T) {

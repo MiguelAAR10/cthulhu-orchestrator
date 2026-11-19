@@ -1,7 +1,9 @@
 package perfil
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,7 +25,7 @@ func archivos(t *testing.T, fs map[string]string) string {
 func TestChecksGo(t *testing.T) {
 	got := Checks(archivos(t, map[string]string{"go.mod": "module x\n"}))
 	want := map[string]config.Check{
-		"lint":  {Cmd: "! gofmt -l . | grep ."},
+		"lint":  {Cmd: lintGo},
 		"types": {Cmd: "go vet ./..."},
 		"tests": {Cmd: "go test ./..."},
 	}
@@ -61,5 +63,45 @@ func TestChecksSinStack(t *testing.T) {
 		if got[n].Cmd != "" || !strings.Contains(got[n].Omitir, ".orq/config.json") {
 			t.Errorf("%s = %+v", n, got[n])
 		}
+	}
+}
+
+// The Go lint check fails when gofmt cannot run or cannot parse a file, and passes only on clean code.
+func TestLintGoNoPasaSinGofmt(t *testing.T) {
+	gofmt, err := exec.LookPath("gofmt")
+	if err != nil {
+		t.Skip("gofmt not on PATH")
+	}
+	correr := func(dir, path string) int {
+		c := exec.Command("sh", "-c", lintGo)
+		c.Dir, c.Env = dir, []string{"PATH=" + path}
+		err := c.Run()
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return ee.ExitCode()
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return 0
+	}
+	sh, _ := exec.LookPath("sh")
+	conGofmt := filepath.Dir(gofmt) + ":" + filepath.Dir(sh)
+	limpio := archivos(t, map[string]string{"a.go": "package a\n"})
+	if code := correr(limpio, conGofmt); code != 0 {
+		t.Errorf("clean code: exit %d, want 0", code)
+	}
+	if filepath.Dir(gofmt) == filepath.Dir(sh) {
+		t.Log("gofmt and sh share a directory: the missing-gofmt case is not exercised")
+	} else if code := correr(limpio, filepath.Dir(sh)); code != 127 {
+		t.Errorf("gofmt missing: exit %d, want 127 (infrastructure)", code)
+	}
+	roto := archivos(t, map[string]string{"a.go": "package a\nfunc {\n"})
+	if code := correr(roto, conGofmt); code == 0 {
+		t.Error("unparseable file: lint passed")
+	}
+	sucio := archivos(t, map[string]string{"a.go": "package a\nvar  x=1\n"})
+	if code := correr(sucio, conGofmt); code == 0 {
+		t.Error("unformatted file: lint passed")
 	}
 }
