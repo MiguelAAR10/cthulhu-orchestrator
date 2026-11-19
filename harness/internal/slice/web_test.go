@@ -1,8 +1,10 @@
 package slice
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -222,5 +224,35 @@ func TestExamenNpmScriptArrancaServidor(t *testing.T) {
 	commitEn(t, e.Worktree, "total.txt", "170\n")
 	if e, out, err = r.Verificar("", t0); err != nil || e.Fase != Verificado {
 		t.Fatalf("%v %s\n%s", err, e.Fase, out)
+	}
+}
+
+// Review, lower risk: the files behind checks.e2e.servidor are runner files too. A worker that points
+// the server at a stub has to say so with --acepto-runner.
+func TestServidorVigilado(t *testing.T) {
+	r := repoDeJuguete(t)
+	enRojo(t, r, map[string]string{"server.js": "listen()\n", "vite.config.ts": "export default {}\n", "next.config.mjs": "export default {}\n", "playwright.config.ts": "export default {}\n"})
+	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"},
+		{Nombre: config.E2E, Cmd: "true", Servidor: "node server.js --port 4173", Puerto: 4173}}
+	home := homeWeb(t, devStub, pwStub)
+	os.WriteFile(filepath.Join(home, ".local", "bin", "node"), []byte("#!/bin/sh\nexec python3 -m http.server 4173 --bind 127.0.0.1\n"), 0o755)
+	e := abrir(t, r)
+	var got []string
+	for _, v := range e.Vigilados {
+		got = append(got, v.Ruta)
+	}
+	for _, f := range []string{"server.js", "vite.config.ts", "next.config.mjs", "playwright.config.ts"} {
+		if !slices.Contains(got, f) {
+			t.Fatalf("%s not watched: %v", f, got)
+		}
+	}
+	commitEn(t, e.Worktree, "server.js", "stub()\n")
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	var rc *ErrRunnerCambio
+	if _, _, err := r.Verificar("", t0); !errors.As(err, &rc) || !slices.Equal(rc.Archivos, []string{"server.js"}) {
+		t.Fatalf("got %v", err)
+	}
+	if e, out, err := r.Verificar("", t0, VerificarOpc{AceptoRunner: "Owner approved the new server"}); err != nil || e.Fase != Verificado {
+		t.Fatalf("%v\n%s", err, out)
 	}
 }

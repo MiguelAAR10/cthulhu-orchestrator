@@ -135,6 +135,17 @@ func archivosDelRunner(cmd string) []string {
 					break
 				}
 			}
+		case "node", "tsx", "ts-node", "deno", "python", "python3":
+			// node server.js: el archivo es el programa. -m/-c/-e corren otra cosa que no es un archivo.
+			for _, t := range toks[1:] {
+				if t == "-m" || t == "-c" || t == "-e" || t == "--eval" {
+					break
+				}
+				if !strings.HasPrefix(t, "-") && t != "run" {
+					add(filepath.Clean(t))
+					break
+				}
+			}
 		default:
 			if strings.HasPrefix(toks[0], "./") {
 				add(filepath.Clean(toks[0]))
@@ -191,7 +202,19 @@ func (r Repo) blobEn(sha, ruta string) string {
 // Excluye lo que ya forma parte del paquete del examen: eso ya está en la huella.
 func (r Repo) vigiladosEn(sha, cmd string, bundle []string) []Vigilado {
 	var out []Vigilado
-	for _, f := range archivosDelRunner(cmd) {
+	cands := archivosDelRunner(cmd)
+	// El examen corre detrás del servidor de checks.e2e: lo que define ese servidor también decide qué mide.
+	if e2e, ok := r.e2e(); ok && e2e.Servidor != "" {
+		jsExts := []string{"ts", "js", "mjs", "cjs", "mts", "cts"}
+		cands = append(cands, archivosDelRunner(e2e.Servidor)...)
+		for _, base := range []string{"vite.config", "next.config", "playwright.config"} {
+			cands = append(cands, conExtensiones(base, jsExts...)...)
+		}
+	}
+	for _, f := range cands {
+		if slices.ContainsFunc(out, func(v Vigilado) bool { return v.Ruta == f }) {
+			continue
+		}
 		if slices.Contains(bundle, f) {
 			continue
 		}
