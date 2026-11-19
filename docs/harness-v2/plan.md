@@ -224,3 +224,9 @@ Order notes: Q1 follows B6 because it runs inside the sandboxed verification. U1
 - 2026-11-18 23:00: Owner chose the value route (D1–D5), froze the gate and the box after Task 1, and v2 installs as `~/bin/orq2` for real tests. Next: D1 decision page (Opus), starting tomorrow.
 - 2026-11-19 08:50: **D1 closed** on 2d4f5b8 (decision page, `orq status`, `orq metricas`, journal stamps). 2 review rounds, about USD 6.6 total (build 4.27, reviews 0.95 + 0.60, fixes 0.51 + 0.26). `make ci` exit 0. Pending: Owner's 5-slice check with `~/bin/orq2`. Next: D2 (project checks, `orq check` loop, merge-time guardrails, Playwright + feature map for web, Codex out of defaults).
 - 2026-11-19 10:05: **D2a closed** on 7be03d7 (checks per project in `orq init`, `orq check` loop, checks + guardrails in the receipt and the page, toolchain in the box, Codex out of defaults). 3 review rounds, about USD 15 total (build 4.66, fixes 4.31 + 2.30 + 0.33, reviews 0.90 + 1.44 + 0.97). Next: D2b (Playwright + feature map for web stacks).
+- 2026-11-19 11:40: **PAUSED by the Owner (out of RAM; he needs the machine).** State to resume from:
+  - harness-v2 at fbe85e6: D1, D2a closed; D2b built + 2 review rounds; D3 built and merged (8881c9b), review 1 = fix. `make ci` exit 0 on 8881c9b.
+  - v2/build 547be6a (worktree ~/worktrees/cthulhu-build): D2b review-2 fix committed by the builder (exam tests by name + `--forbid-only` through package scripts), NOT yet integrated or `make ci`-verified; the builder was stopped before writing its report.
+  - v2/d3 c97002e (worktree ~/worktrees/cthulhu-d3): D3 review fixes WIP (launch checks the sealed contract, route sealed, zone `.` refused), stopped mid-work, NOT verified.
+  - Next on resume: finish/verify D3 fixes, integrate both branches, `make ci`, rerun the D2b review-2 repro myself, close D2b and D3; then D3b (wire `claude plugin eval`, see scout notes) and D4.
+
