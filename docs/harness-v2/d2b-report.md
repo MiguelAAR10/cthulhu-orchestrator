@@ -142,3 +142,65 @@ Receipt excerpt (`.orq/recibos.jsonl`):
 
 - `orq check --caja` probes only the first word of the server wrapper (`mktemp`). It could probe the `servidor` tools by name, so a missing `python3` or `npm` shows before the first close.
 - `perfil.Detect` treats any `.html` as `web`, so a Go project with HTML templates gets a map with 0 routes. It is harmless, but it is noise.
+
+## Review fixes, round 1
+
+Fixes for `reviews/d2b-review.md`, strongest layer first. Each test below was seen failing before its code existed. Every commit has `gofmt -l harness` empty, `go vet ./...` and `go test -race ./...` green. `make ci` exits 0 (14 pass, 0 fail).
+
+1. **`test.only` cannot drop the exam** (`be7bf1f`).
+   - Every `playwright test` in the exam command and in `checks.e2e` gets `--forbid-only` (`config.SinOnly`).
+   - The default supresiones marks now include `.only(`, `describe.only(`, `fit(` and `fdescribe(`. A mark that starts with a letter must start a word, so `benefit(` does not match `fit(`.
+   - The flag cannot be added inside an npm script. There the `.only(` mark is the layer that stops it, as the real run below shows.
+   - Evidence: `TestTestOnlyNoVerifica` (the reviewer's repro; each layer alone stops it), `TestSupresionesFocused`.
+2. **Every exam and `--sano` run behind the `checks.e2e` server** (`54a9296`). This includes `npm run test:e2e`, not only commands that name playwright.
+   - A server that is down now fails `--sano` at `abrir`. Before, it failed at the exam.
+   - Evidence: `TestExamenNpmScriptArrancaServidor` (`--cmd "npm run test:e2e"`, `--sano` that needs the server's mark). `TestE2EServidorQueNoAbre` now kills the server after `abrir`.
+3. **The files behind the server are watched like runner files** (`b6ca6fe`). With `checks.e2e.servidor` set, these join the watch: `vite.config.*`, `next.config.*`, `playwright.config.*` and the program of the server command (`node|tsx|ts-node|deno|python[3] <file>`; `-m`, `-c` and `-e` name no file). A change needs `--acepto-runner`.
+   - Evidence: `TestServidorVigilado`.
+4. **The feature map lives in `docs/mapa.md`** (`edbc754`). This was the Owner's open decision 1, option (b).
+   - `orq init` writes the map only when there is neither `docs/mapa.md` nor an old `.orq/mapa.md`.
+   - The worker guide and the contract tell the worker to add the map line in the same commit as the route.
+   - An old `.orq/mapa.md` is still read. Then the contract keeps the old line: "send it in your reply".
+   - The decision page lists the new lines as `mapa: …`, stripped of control characters.
+   - `docs/mapa.md` belongs to every zone. `juntar` does not reject it, and a declared scope does not flag it.
+   - Evidence: `TestInitWebEscribeMapaYE2E`, `TestGuiaWorkerWeb`, `TestContratoNombraElMapa`, `TestDecidirMuestraElMapa`, `TestEquipoFrontBackTestEnUnSlice`.
+5. **`checks.e2e.espera_s`** (`be54780`): the server wait in seconds, 1 to 600, default 60. It is valid only with `servidor`. The timeout message names the key. This was the Owner's open decision 3.
+   - Evidence: `TestEsperaServidor`.
+
+### Real run, again
+
+Same setup as above: a static app, `@playwright/test` 1.65.1, temp `ORQ_*`, and a binary built into the scratchpad. The only differences:
+- The script is `"test:e2e": "playwright test"`, so `init` wrote `checks.e2e = npm run test:e2e`.
+- The Playwright config has **no** `forbidOnly`.
+- `servidor` is `python3 -m http.server 4173 --bind 127.0.0.1`, with `espera_s: 30`.
+
+Steps:
+1. `orq init` wrote `docs/mapa.md` (0 routes).
+2. `orq slice abrir 01 --test e2e/total.spec.ts --cmd "npm run test:e2e" --bundle playwright.config.ts --reporte results.xml --formato junit` opened red on the assertion, with the server up. Before this round, it opened red with `ERR_CONNECTION_REFUSED`.
+3. **Reviewer's repro.** The worker added `e2e/smoke.spec.ts` with `test.only`, leaving `0`. `verificar` printed `1 passed` for the exam, but did not verify: `check supresiones falla (exit 1): e2e/smoke.spec.ts:2: test.only('page loads', …`.
+4. The worker dropped `.only`, set `170`, and added `` - `/` → `index.html` · reach: open the site · shows: the cart total (170) `` to `docs/mapa.md`. The result was **VERIFICADO**: 2 run, 0 failed.
+5. `orq slice decidir` showed `e2e paso · exit 0 · npm run test:e2e`, two `captura:` lines, and `mapa: - `/` → `index.html` · …`.
+6. No `http.server` was left running.
+
+Receipt excerpt (`.orq/recibos.jsonl`, paths shortened):
+
+```json
+{"attempt": "S-01/a1", "head": "c04e70d2ad8e47092946672807f546943e522435", "cmd": "npm run test:e2e",
+ "exit": 0, "resultado": "paso", "contado": true, "ejecutados": 2,
+ "checks": [
+  {"nombre": "lint", "resultado": "omitido", "motivo": "package.json no tiene script lint"},
+  {"nombre": "types", "resultado": "omitido", "motivo": "package.json no tiene script typecheck ni typescript con tsconfig.json"},
+  {"nombre": "tests", "resultado": "omitido", "motivo": "package.json no tiene script test"},
+  {"nombre": "e2e", "cmd": "npm run test:e2e", "exit": 0, "resultado": "paso",
+   "salida": "\n> test:e2e\n> playwright test\n\n\nRunning 2 tests using 2 workers\n\n[1/2] e2e/smoke.spec.ts:2:1 › page loads\n[2/2] e2e/total.spec.ts:2:1 › cart shows the total\n  2 passed (1.4s)",
+   "servidor": "python3 -m http.server 4173 --bind 127.0.0.1",
+   "capturas": [".../app/.orq/capturas/S-01-a1/test-results/smoke-page-loads/test-finished-1.png",
+                ".../app/.orq/capturas/S-01-a1/test-results/total-cart-shows-the-total/test-finished-1.png"]},
+  {"nombre": "supresiones", "exit": 0, "resultado": "paso"}]}
+```
+
+Still open:
+- Through an npm script, `--forbid-only` is not injected. The `.only(` mark covers it.
+  - The mark sees only lines the slice adds. A `.only` already in the red commit is not flagged.
+  - Possible next step: resolve `npm run X` from `package.json` and append `-- --forbid-only` when the script is a bare `playwright test`.
+- The rejected `test.only` attempt used one of the two repairs. That is correct (the commit did not pass), but the Orchestrator should know it.
