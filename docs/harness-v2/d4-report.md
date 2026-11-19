@@ -135,3 +135,8 @@ Each fix has a test that was seen failing first.
 4. **Alert dedup per slice and kind.** The journal key is slice + kind + actor, without the detail, so out-of-scope is journaled once per slice; `orq status` shows the latest file list. `examen_tras_aprobar` keeps its detail in the key because each exam is its own event. Test: `TestFueraDeAlcanceSeAnotaUnaVezPorSlice`.
 
 Not covered by a test: the team-member check (a wrong name on a team slice).
+
+## Close (orchestrator, 2026-11-19)
+Integrated as dab17f8 after 1 review round (`reviews/d4-review.md`) and its fix (cb15eee). `make ci` on dab17f8 with the candidate (`modified=false`): exit 0, e2e 86/0, aislamiento 14/0; the four fix tests pass (`TestCerrarWorkerNombreSinSesionNoIntegra` is the reviewer's `worker-nadie-s01` repro). Not done by the orchestrator: running those tests against the pre-fix code (the old `app`/`cli` packages do not build with today's tests).
+Defaults taken (Owner may change): merge is triggered by the worker's close, not its "done"; no-progress alert at 30 min; pause stops launches but not verificar/cerrar.
+Owner check still pending: one real large story with ≥ 3 children through `~/bin/orq2`.
