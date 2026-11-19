@@ -143,3 +143,26 @@ func TestEjecutableSinServidor(t *testing.T) {
 		t.Fatalf("got %s", x)
 	}
 }
+
+// checks.e2e.espera_s sets how long the server may take to open its port (default 60 s).
+func TestEsperaServidor(t *testing.T) {
+	ch := Check{Nombre: E2E, Cmd: "npx playwright test", Servidor: "npm run dev", Puerto: 3000}
+	if x := ch.Ejecutable(); !strings.Contains(x, "-gt 240 ]") {
+		t.Fatalf("default wait is not 60 s:\n%s", x)
+	}
+	ch.EsperaS = 180
+	if x := ch.Ejecutable(); !strings.Contains(x, "-gt 720 ]") || !strings.Contains(x, "en 180 s") {
+		t.Fatalf("espera_s 180:\n%s", x)
+	}
+	base := `"lint":{"cmd":"x"},"types":{"cmd":"x"},"tests":{"cmd":"x"}`
+	for _, extra := range []string{`,"e2e":{"cmd":"x","espera_s":30}`, `,"e2e":{"cmd":"x","servidor":"s","puerto":1,"espera_s":-1}`,
+		`,"e2e":{"cmd":"x","servidor":"s","puerto":1,"espera_s":601}`, `,"lint2":{"cmd":"x","espera_s":5}`} {
+		if _, err := CargarDe(escribir(t, filepath.Join(t.TempDir(), "p.json"), `{"checks":{`+base+extra+`}}`)); err == nil || !strings.Contains(err.Error(), "espera_s") {
+			t.Errorf("%s: err = %v", extra, err)
+		}
+	}
+	c, err := CargarDe(escribir(t, filepath.Join(t.TempDir(), "p.json"), `{"checks":{`+base+`,"e2e":{"cmd":"x","servidor":"s","puerto":1,"espera_s":120}}}`))
+	if err != nil || c.Checks[E2E].EsperaS != 120 {
+		t.Fatalf("%v %+v", err, c.Checks)
+	}
+}

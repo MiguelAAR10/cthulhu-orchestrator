@@ -56,7 +56,15 @@ type Check struct {
 	// puerto de 127.0.0.1 en que se espera que escuche.
 	Servidor string `json:"servidor,omitempty"`
 	Puerto   int    `json:"puerto,omitempty"`
+	// EsperaS, solo con Servidor: segundos que se espera a que abra el puerto (0 = EsperaDefecto).
+	EsperaS int `json:"espera_s,omitempty"`
 }
+
+// EsperaDefecto y EsperaMax acotan, en segundos, la espera del servidor de checks.e2e.
+const (
+	EsperaDefecto = 60
+	EsperaMax     = 600
+)
 
 // Nombres reservados del bloque checks. supresiones es una guardia de orq, encendida siempre que hay
 // bloque checks; se apaga con omitir. definiciones no corre: lista archivos que deciden qué corre un check.
@@ -431,6 +439,8 @@ func (c Config) validarChecks() error {
 			}
 		case (ch.Servidor != "" || ch.Puerto != 0) && (n != E2E || ch.Servidor == "" || ch.Puerto < 1 || ch.Puerto > 65535 || sinCmd):
 			return fmt.Errorf("checks.%s: servidor y puerto (1-65535) van juntos, solo en checks.e2e y con cmd", n)
+		case ch.EsperaS != 0 && (ch.Servidor == "" || ch.EsperaS < 1 || ch.EsperaS > EsperaMax):
+			return fmt.Errorf("checks.%s: espera_s (1-%d) va solo con servidor, en checks.e2e", n, EsperaMax)
 		case len(ch.Patrones) > 0 || len(ch.Archivos) > 0:
 			return fmt.Errorf("checks.%s: patrones va solo en checks.supresiones y archivos solo en checks.definiciones", n)
 		case sinCmd == sinOmitir:
@@ -568,8 +578,8 @@ func (c Config) Expandir(texto string) string {
 	return strings.ReplaceAll(texto, "{{workers}}", c.TablaWorkers())
 }
 
-// servidorSh arranca el servidor de la app en su propio grupo de procesos, espera hasta 60 s a que
-// abra 127.0.0.1:puerto, corre el comando y al salir mata al grupo. Sale con el código del comando.
+// servidorSh arranca el servidor de la app en su propio grupo de procesos, espera hasta espera_s
+// (60 s por defecto) a que abra 127.0.0.1:puerto, corre el comando y al salir mata al grupo. Sale con el código del comando.
 const servidorSh = `orq_log=$(mktemp)
 setsid sh -c %[1]s >"$orq_log" 2>&1 </dev/null &
 orq_srv=$!
@@ -577,8 +587,8 @@ trap 'kill -TERM -- -$orq_srv 2>/dev/null' EXIT
 orq_n=0
 until bash -c ': </dev/tcp/127.0.0.1/%[2]d' 2>/dev/null; do
 	orq_n=$((orq_n+1))
-	if [ $orq_n -gt 240 ] || ! kill -0 $orq_srv 2>/dev/null; then
-		echo "orq: el servidor de checks.e2e no abrió 127.0.0.1:%[2]d"; tail -n 20 "$orq_log"; exit 1
+	if [ $orq_n -gt %[4]d ] || ! kill -0 $orq_srv 2>/dev/null; then
+		echo "orq: el servidor de checks.e2e no abrió 127.0.0.1:%[2]d en %[5]d s (checks.e2e.espera_s)"; tail -n 20 "$orq_log"; exit 1
 	fi
 	sleep 0.25
 done
@@ -604,5 +614,9 @@ func (ch Check) ConServidor(cmd string) string {
 	if ch.Servidor == "" {
 		return cmd
 	}
-	return fmt.Sprintf(servidorSh, "'"+strings.ReplaceAll(ch.Servidor, "'", `'\''`)+"'", ch.Puerto, cmd)
+	espera := ch.EsperaS
+	if espera <= 0 {
+		espera = EsperaDefecto
+	}
+	return fmt.Sprintf(servidorSh, "'"+strings.ReplaceAll(ch.Servidor, "'", `'\''`)+"'", ch.Puerto, cmd, espera*4, espera)
 }
