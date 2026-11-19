@@ -151,7 +151,7 @@ func conPrefijo(a []string, ps ...string) bool {
 
 // sliceOrquestador are the `orq slice` subcommands only the orchestrator runs.
 var sliceOrquestador = conjunto("abrir", "cerrar", "reintentar", "tomar", "lanzar", "juntar",
-	"examen", "alcance", "rehuella", "reabrir", "ruta", "verificar", "podar")
+	"examen", "alcance", "rehuella", "reabrir", "ruta", "verificar", "podar", "tarjeta", "aprobar")
 
 // SliceSoloOrquestador says whether `orq slice sub` belongs to the orchestrator. The CLI refuses
 // these inside a worker too, so a copied or renamed binary, an alias or a script cannot run them.

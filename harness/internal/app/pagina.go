@@ -23,6 +23,10 @@ func (p Proyecto) PaginaDecision(nn string) (*PaginaDecision, error) {
 		return nil, err
 	}
 	pd := &PaginaDecision{Pagina: pg, Historia: []string{pg.Estado.Titulo}, FuenteHistoria: "título del slice"}
+	if tj := pg.Estado.Tarjeta; tj != nil {
+		pd.Historia, pd.FuenteHistoria = tj.Historia, "tarjeta del slice"
+		return pd, nil
+	}
 	ms, _ := canal.Load(p.CanalPath())
 	// A historia linked to this slice (Attempt S-NN/aK) wins; the latest one is only a fallback.
 	vinculo := func(m canal.Msg) bool { return strings.HasPrefix(m.Attempt, "S-"+pg.Estado.NN+"/") }

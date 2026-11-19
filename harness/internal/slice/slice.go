@@ -99,6 +99,7 @@ type Estado struct {
 	Motivo      string     `json:"motivo,omitempty"`    // por qué está bloqueado
 	Alcance     []string   `json:"alcance,omitempty"`   // rutas que la historia justifica tocar
 	Demo        []string   `json:"demo,omitempty"`      // hasta 3 pasos para ver el resultado funcionando
+	Tarjeta     *Tarjeta   `json:"tarjeta,omitempty"`   // ficha de entendimiento que aprueba el Owner
 }
 
 func (e *Estado) ID() string      { return fmt.Sprintf("S-%s", e.NN) }

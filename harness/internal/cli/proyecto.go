@@ -440,7 +440,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	}
 	// Pedir ayuda nunca ejecuta: un «verificar --help» corría el examen y podía gastar un intento.
 	if slices.ContainsFunc(args, func(a string) bool { return a == "-h" || a == "--help" || a == "help" }) {
-		fmt.Fprintln(stdout, "uso: orq slice [--slice NN] abrir|tomar|alcance|verificar|juntar|podar|examen|ruta|estado|recibo|decidir|rehuella ... · guía: orq skill orquestador")
+		fmt.Fprintln(stdout, "uso: orq slice [--slice NN] abrir|tarjeta|aprobar|tomar|alcance|verificar|juntar|podar|examen|ruta|estado|recibo|decidir|rehuella ... · guía: orq skill orquestador")
 		return 0
 	}
 	show := func(out string) {
@@ -829,6 +829,10 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		return 0
 	case "decidir":
 		return runDecidir(p, nn, args[1:], stdout, stderr)
+	case "tarjeta":
+		return runTarjeta(p, nn, args[1:], stdout, stderr)
+	case "aprobar":
+		return runAprobar(p, nn, args[1:], stdout, stderr)
 	case "recibo":
 		e, err := r.Load(nn)
 		if err != nil || e == nil || e.Recibo == nil {

@@ -62,6 +62,9 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
                                  Cuenta pruebas por defecto; el examen corre siempre en la caja, sobre una copia
                                  limpia del commit; --ruta fix = un worker, sin equipo ni plan
                                  (--aislado se acepta y no hace nada)
+  orq slice tarjeta [NN] [--archivo tarjeta.md]   pone o muestra la tarjeta de entendimiento: ## Historia (≤3 líneas),
+                                 Fuera, Examen, Zonas, Preguntas (≤5 líneas cada una, ≤400 palabras); aprobada, se congela
+  orq slice aprobar [NN]         el Owner, en su terminal, aprueba la tarjeta; sin ella no se lanza un worker (un fix no la pide)
   orq slice ruta slice "motivo"  sube un fix abierto a slice completo (no baja)
   orq slice tomar QUIEN [--relevo]   un solo escritor por slice
   orq slice reabrir "motivo"   un slice verificado vuelve a construirse para una reparación, con su trabajo
@@ -305,6 +308,7 @@ func runStatus(stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "HALT: no")
 	}
 	if p, err := abrirProyecto(); err == nil {
+		tarjetasPorAprobar(p, time.Now(), stdout)
 		esperanOwner(p, time.Now(), stdout)
 	}
 	// Máquina y capacidad: cuántos agentes caben ahora y qué número lo decide.
