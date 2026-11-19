@@ -105,6 +105,12 @@ Decision after the Fable value advice (`working/advice/fable-value-2026-11-18.md
 - **Stop rule:** after 10 real stories through D1–D3: median ≤ 10 min and 0 undecided after 24 h → continue to D4/D5; 10–20 min → one fix, 5 more stories; > 20 min or the page did not replace reading the diff → stop building the harness, keep orq 1.0.0 + CI + protected branches.
 - **Install for real tests:** v2 side by side as `~/bin/orq2`, only in projects the Owner chooses; `~/bin/orq` (1.0.0) untouched for live workers. The final rename stays a separate decision.
 
+**Approach (Owner, 2026-11-19, from a talk on running ~50 agents): three mechanisms, mapped onto the route.**
+1. *Feedback loop* — the worker checks its own work before saying done: the project's checks (D2) run in a loop inside the worker session (`orq check`), plus, for web stacks, driving the app (Playwright) guided by a per-project feature map (`.orq/mapa.md`: feature → route → how to reach it). Goes into D2.
+2. *Skill evals* — a skill is kept or changed only by score: an eval set per skill (tasks + rubric), K runs in throwaway clones, a grader model scores, an edit is kept only if the score rises; skills per role are chosen from scores and stack, a small set, not everything installed. New deliverable D3b after D3. First check whether Claude Code's own plugin/skill eval covers it before building anything.
+3. *Guardrails at merge, not at the prompt* — rules the agent cannot skip are deterministic checks in the receipt (lint bans per project, architecture boundaries like `internal/arch_test.go`, banned patterns); a failing check blocks the close. Goes into D2. This is why the command-text gate stays frozen.
+Parallel work grows only with measured trust (D1 metric) and RAM caps (disk/memory scout).
+
 **Frozen:** pub/sub bus and hive memory, second orchestrator, U1 `orq setup`, L1 translation, Orca adapter work, C6 and W1 as separate pieces (their useful parts are in 2b), full Q1 quality profile, mutation and held-out tests (until the pilot shows wrong acceptances), model-compacted memory and injected "instincts". Not claimed: catching cheaters as the core value; being the only verifier.
 
 ## Activities
