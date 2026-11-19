@@ -67,6 +67,23 @@ func seccionesDecision(pd *app.PaginaDecision) []seccion {
 	}
 	out = append(out, pruebas)
 
+	checks := seccion{Titulo: "Checks", Fuente: "recibo · checks de .orq/config.json"}
+	for _, c := range rec.Checks {
+		switch c.Resultado {
+		case slice.CheckPaso:
+			checks.Lineas = append(checks.Lineas, normal("%s paso · exit 0 · %s", c.Nombre, c.Cmd))
+		case slice.CheckOmitido:
+			checks.Lineas = append(checks.Lineas, alerta("%s omitido: %s (no cuenta como pasado)", c.Nombre, c.Motivo))
+		default:
+			primera, _, _ := strings.Cut(c.Salida, "\n")
+			checks.Lineas = append(checks.Lineas, alerta("%s fallo · exit %d · %s · %s", c.Nombre, c.Exit, c.Cmd, primera))
+		}
+	}
+	if len(rec.Checks) == 0 {
+		checks.Lineas = append(checks.Lineas, alerta("sin checks en el recibo: corre orq init y vuelve a verificar"))
+	}
+	out = append(out, checks)
+
 	archivos := seccion{Titulo: "Archivos", Fuente: "alcance de orq slice abrir y zonas, contra git diff del rojo a la punta"}
 	if plan := pd.Planeado(); len(plan) > 0 {
 		archivos.Lineas = append(archivos.Lineas, normal("planeado: %s", strings.Join(plan, ", ")))

@@ -245,3 +245,73 @@ func TestDecidirHistoriaSinVinculoConVariosAbiertosAvisa(t *testing.T) {
 	}
 	contiene(t, out, "historia suelta", "!! story may belong to another slice")
 }
+
+// conChecks writes the project's checks block from inside sliceVerdeCon's hook, before verificar.
+func conChecks(bloque string) func(wt string) {
+	return func(wt string) {
+		root := filepath.Join(filepath.Dir(filepath.Dir(wt)), "tienda")
+		if err := os.WriteFile(filepath.Join(root, ".orq", "config.json"), []byte(bloque), 0o644); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func TestDecidirMuestraLosChecks(t *testing.T) {
+	sliceVerdeCon(t, nil, conChecks(`{"checks": {"lint": {"cmd": "true"}, "types": {"cmd": "echo sin errores"}, "tests": {"omitir": "sin script test"}}}`))
+	out, _, code := run(t, "slice", "decidir")
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	contiene(t, out, "== Checks (recibo · checks de .orq/config.json)", "lint paso · exit 0 · true", "types paso · exit 0 · echo sin errores",
+		"!! tests omitido: sin script test (no cuenta como pasado)")
+	html := filepath.Join(t.TempDir(), "p.html")
+	if _, errs, code := run(t, "slice", "decidir", "--html", html); code != 0 {
+		t.Fatalf("%d %s", code, errs)
+	}
+	raw, _ := os.ReadFile(html)
+	contiene(t, string(raw), "Checks", "tests omitido: sin script test")
+}
+
+func TestDecidirSinChecksAvisa(t *testing.T) {
+	sliceVerdeCon(t, nil, nil)
+	out, _, _ := run(t, "slice", "decidir")
+	contiene(t, out, "!! sin checks en el recibo: corre orq init y vuelve a verificar")
+}
+
+func TestVerificarCLIRechazaConMensajeDeLaHerramienta(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	if _, errs, code := run(t, append(append([]string{}, abrirBase...), "--reporte", "out.tap", "--formato", "tap")...); code != 0 {
+		t.Fatalf("abrir: %d %s", code, errs)
+	}
+	run(t, "slice", "tomar", "w1")
+	if err := os.WriteFile(filepath.Join(root, ".orq", "config.json"), []byte(`{"checks": {"lint": {"cmd": "true"}, "tests": {"cmd": "true"},
+		"types": {"cmd": "echo \"src.ts(1,5): error TS2322: Type 'string' is not assignable to type 'number'.\"; exit 2"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	commitClon(t, filepath.Join(filepath.Dir(root), "wt", "tienda-s01"), "total.txt", "170\n")
+	_, errs, code := run(t, "slice", "verificar")
+	if code != 1 {
+		t.Fatalf("verificar exit %d: %s", code, errs)
+	}
+	contiene(t, errs, "check types falla (exit 2)", "error TS2322")
+	if _, errs, code := run(t, "slice", "cerrar", "--aceptado"); code == 0 {
+		t.Fatalf("closed with a failing check: %s", errs)
+	}
+}
+
+func TestVerificarCLIImprimeLosChecks(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	if _, errs, code := run(t, append(append([]string{}, abrirBase...), "--reporte", "out.tap", "--formato", "tap")...); code != 0 {
+		t.Fatalf("abrir: %d %s", code, errs)
+	}
+	run(t, "slice", "tomar", "w1")
+	conChecks(`{"checks": {"lint": {"cmd": "true"}, "types": {"cmd": "true"}, "tests": {"omitir": "sin script test"}}}`)(filepath.Join(filepath.Dir(root), "wt", "tienda-s01"))
+	commitClon(t, filepath.Join(filepath.Dir(root), "wt", "tienda-s01"), "total.txt", "170\n")
+	out, errs, code := run(t, "slice", "verificar")
+	if code != 0 {
+		t.Fatalf("verificar exit %d: %s", code, errs)
+	}
+	contiene(t, out, "checks: lint paso · types paso · tests omitido")
+}

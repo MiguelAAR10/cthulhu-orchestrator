@@ -570,6 +570,13 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		if e.Recibo.Nota != "" {
 			fmt.Fprintf(stdout, "  nota: %s\n", e.Recibo.Nota)
 		}
+		if len(e.Recibo.Checks) > 0 {
+			var xs []string
+			for _, c := range e.Recibo.Checks {
+				xs = append(xs, c.Nombre+" "+c.Resultado)
+			}
+			fmt.Fprintf(stdout, "  checks: %s\n", strings.Join(xs, " · "))
+		}
 		fmt.Fprintln(stdout, "  recibo: orq slice recibo · falta la demo del Owner")
 		if alinear(p, e.NN, stdout, stderr) == 3 {
 			fmt.Fprintln(stdout, "  verde, pero desalineado: resuelve la pregunta con el Atena antes del cierre")
