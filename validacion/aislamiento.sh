@@ -11,7 +11,7 @@
 #          VERIFICADO; al cerrar, main no debe avanzar y la negativa tiene que ser la del contrato en git.
 # Sin bwrap: «SKIP: bwrap missing» y salida 1 (0 solo con ORQ_CI_ALLOW_SKIP=1).
 #
-# ORQ apunta al binario a probar; sin ORQ se compila uno fresco del árbol. Usa ORQ_STATE, ORQ_LIMITS y
+# ORQ apunta al binario a probar (por defecto ORQ_CANDIDATO, el que compiló make ci); tiene que ser ese. Usa ORQ_STATE, ORQ_LIMITS y
 # ORQ_WORKTREES propios en directorios temporales que se borran al terminar. No toca repos reales.
 set -uo pipefail
 
@@ -26,12 +26,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ -z "${ORQ:-}" ]]; then
-  mkdir -p "$BASE/bin"
-  (cd "$RAIZ/harness" && go build -o "$BASE/bin/orq" ./cmd/orq) || { echo "no compila orq"; exit 1; }
-  ORQ="$BASE/bin/orq"
-fi
-ORQ=$(cd "$(dirname "$ORQ")" && pwd)/$(basename "$ORQ")
+ORQ="${ORQ:-${ORQ_CANDIDATO:-}}"
+[[ -n "$ORQ" ]] && ORQ=$(cd "$(dirname "$ORQ")" && pwd)/$(basename "$ORQ")
+. "$RAIZ/validacion/candidato.sh"; candidato "$ORQ" || exit 1
 
 export ORQ_STATE="$BASE/state" ORQ_LIMITS="$BASE/limits.json" ORQ_WORKTREES="$BASE/wt"
 export ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID=""
