@@ -112,3 +112,23 @@ func TestSupresionesYDefiniciones(t *testing.T) {
 		t.Fatalf("off: %+v", cs)
 	}
 }
+
+func TestE2EServidorValido(t *testing.T) {
+	t.Setenv("ORQ_ESCRIBA_MODELO", "")
+	base := `"lint":{"cmd":"a"},"types":{"cmd":"b"},"tests":{"cmd":"c"}`
+	for extra, want := range map[string]string{
+		`,"e2e":{"cmd":"npx playwright test","servidor":"npm run dev"}`:              "checks.e2e",
+		`,"e2e":{"cmd":"npx playwright test","servidor":"npm run dev","puerto":0}`:   "checks.e2e",
+		`,"e2e":{"cmd":"npx playwright test","puerto":3000}`:                         "checks.e2e",
+		`,"e2e":{"cmd":"npx playwright test","servidor":"x","puerto":70000}`:         "checks.e2e",
+		`,"lint2":{"cmd":"npx playwright test","servidor":"npm run dev","puerto":1}`: "checks.lint2",
+	} {
+		if _, err := CargarDe(escribir(t, filepath.Join(t.TempDir(), "p.json"), `{"checks":{`+base+extra+`}}`)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: err = %v, want %q", extra, err, want)
+		}
+	}
+	c, err := CargarDe(escribir(t, filepath.Join(t.TempDir(), "p.json"), `{"checks":{`+base+`,"e2e":{"cmd":"npx playwright test","servidor":"npm run dev","puerto":3000}}}`))
+	if err != nil || c.Checks[E2E].Puerto != 3000 || c.Checks[E2E].Servidor != "npm run dev" {
+		t.Fatalf("valid e2e: %v %+v", err, c.Checks)
+	}
+}

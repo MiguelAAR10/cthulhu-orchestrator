@@ -15,6 +15,9 @@ func archivos(t *testing.T, fs map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
 	for f, body := range fs {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, f)), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(filepath.Join(root, f), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}

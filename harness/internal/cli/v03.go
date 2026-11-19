@@ -66,7 +66,14 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "modo: %s (%d archivos de código) · stack: %s\n", pf.Modo, pf.Fuentes, strings.Join(append([]string{"-"}, pf.Senales...)[min(1, len(pf.Senales)):], ", "))
-	if err := escribirChecks(p.Root, stdout); err != nil {
+	web := slices.Contains(pf.Senales, "web")
+	if web {
+		if err := escribirMapa(p.Root, stdout); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
+	if err := escribirChecks(p.Root, web, stdout); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -95,9 +102,25 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	return runSkills(nil, stdout, stderr)
 }
 
-// escribirChecks suma a <repo>/.orq/config.json el bloque checks detectado, sin tocar las demás claves.
-// Si el bloque ya existe es del Owner: no se pisa.
-func escribirChecks(root string, stdout io.Writer) error {
+// escribirMapa deja en .orq/mapa.md el esqueleto con las rutas del router, si aún no existe: después es
+// del Owner y de los workers.
+func escribirMapa(root string, stdout io.Writer) error {
+	ruta := filepath.Join(root, ".orq", "mapa.md")
+	if _, err := os.Stat(ruta); err == nil {
+		fmt.Fprintf(stdout, "mapa de rutas ya existe en %s: no se tocó\n", ruta)
+		return nil
+	}
+	rs := perfil.Rutas(root)
+	if err := orqdir.WriteAtomic(ruta, []byte(perfil.Mapa(rs))); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "mapa de rutas en %s: %d rutas; completa cómo llegar y qué muestra cada una\n", ruta, len(rs))
+	return nil
+}
+
+// escribirChecks suma a <repo>/.orq/config.json el bloque checks detectado, sin tocar las demás claves,
+// con el check e2e de Playwright en un proyecto web. Si el bloque ya existe es del Owner: no se pisa.
+func escribirChecks(root string, web bool, stdout io.Writer) error {
 	ruta := config.RutaProyecto(root)
 	capa := map[string]json.RawMessage{}
 	if raw, err := os.ReadFile(ruta); err == nil {
@@ -107,11 +130,27 @@ func escribirChecks(root string, stdout io.Writer) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if _, ok := capa["checks"]; ok {
+	var e2e config.Check
+	if web {
+		var sin string
+		if e2e, sin = perfil.E2E(root); sin != "" {
+			fmt.Fprintf(stdout, "sin check e2e: %s\n", sin)
+		}
+	}
+	if propio, ok := capa["checks"]; ok {
 		fmt.Fprintf(stdout, "checks ya definidos en %s: no se tocaron\n", ruta)
+		var cs map[string]json.RawMessage
+		json.Unmarshal(propio, &cs)
+		if _, tiene := cs[config.E2E]; !tiene && e2e.Cmd != "" {
+			raw, _ := json.Marshal(e2e)
+			fmt.Fprintf(stdout, "añade a checks: \"e2e\": %s\n", raw)
+		}
 		return nil
 	}
 	cs := perfil.Checks(root)
+	if e2e.Cmd != "" {
+		cs[config.E2E] = e2e
+	}
 	raw, err := json.Marshal(cs)
 	if err != nil {
 		return err
@@ -127,6 +166,8 @@ func escribirChecks(root string, stdout io.Writer) error {
 	for _, ch := range (config.Config{Checks: cs}).ChecksEnOrden() {
 		if ch.Interno() {
 			fmt.Fprintf(stdout, "check %s: %s\n", ch.Nombre, slice.CmdSupresiones)
+		} else if ch.Servidor != "" {
+			fmt.Fprintf(stdout, "check %s: %s · servidor %s en 127.0.0.1:%d\n", ch.Nombre, ch.Cmd, ch.Servidor, ch.Puerto)
 		} else if ch.Cmd != "" {
 			fmt.Fprintf(stdout, "check %s: %s\n", ch.Nombre, ch.Cmd)
 		} else {

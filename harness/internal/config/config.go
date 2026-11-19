@@ -52,6 +52,10 @@ type Check struct {
 	Patrones []string `json:"patrones,omitempty"`
 	// Archivos solo en checks.definiciones: más archivos que definen lo que corre un check.
 	Archivos []string `json:"archivos,omitempty"`
+	// Servidor y Puerto solo en checks.e2e: el servidor de la app que se arranca antes de Cmd y el
+	// puerto de 127.0.0.1 en que se espera que escuche.
+	Servidor string `json:"servidor,omitempty"`
+	Puerto   int    `json:"puerto,omitempty"`
 }
 
 // Nombres reservados del bloque checks. supresiones es una guardia de orq, encendida siempre que hay
@@ -59,6 +63,7 @@ type Check struct {
 const (
 	Supresiones  = "supresiones"
 	Definiciones = "definiciones"
+	E2E          = "e2e"
 )
 
 // SupresionesBase son las marcas que la guardia supresiones busca en las líneas que suma un slice.
@@ -422,6 +427,8 @@ func (c Config) validarChecks() error {
 			if !sinCmd || len(ch.Archivos) > 0 || (!sinOmitir && len(ch.Patrones) > 0) {
 				return errors.New("checks.supresiones: la corre orq; lleva patrones para sumar marcas u omitir (el motivo) para apagarla")
 			}
+		case (ch.Servidor != "" || ch.Puerto != 0) && (n != E2E || ch.Servidor == "" || ch.Puerto < 1 || ch.Puerto > 65535 || sinCmd):
+			return fmt.Errorf("checks.%s: servidor y puerto (1-65535) van juntos, solo en checks.e2e y con cmd", n)
 		case len(ch.Patrones) > 0 || len(ch.Archivos) > 0:
 			return fmt.Errorf("checks.%s: patrones va solo en checks.supresiones y archivos solo en checks.definiciones", n)
 		case sinCmd == sinOmitir:
