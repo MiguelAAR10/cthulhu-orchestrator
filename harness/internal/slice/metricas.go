@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
+	"slices"
 	"strings"
 	"time"
+
+	"orq/internal/diario"
 )
 
 // Metricas del piloto. Lo que orq no registra (costo, tiempo humano) no se inventa.
@@ -19,6 +22,12 @@ type Metricas struct {
 	HorasMedias           float64                 // abierto → cerrado, aceptados
 	PorRuta               map[string]MetricasRuta // fix|slice: aceptados, primer intento y horas por ruta
 	Ascendidos            int                     // fixes que subieron a slice (cerrados, aceptados o no)
+	// Del diario: minutos de verificado a decidido (mediana), cuántas decisiones la forman, cuántos
+	// verificados llevan más de 24 h sin decisión y la causa de cada intento nuevo.
+	DecisionMinMediana float64
+	Decididos          int
+	SinDecidir24h      int
+	IntentosPorCausa   map[string]int
 }
 
 // MetricasRuta son los números de una ruta. Un fix ascendido cuenta en slice, que es donde terminó;
@@ -46,7 +55,7 @@ func leerJSONL[T any](path string) []T {
 	return out
 }
 
-func (r Repo) Metricas(desde time.Time) Metricas {
+func (r Repo) Metricas(desde, now time.Time) Metricas {
 	var m Metricas
 	var horas float64
 	m.PorRuta = map[string]MetricasRuta{RutaFix: {}, RutaSlice: {}}
@@ -101,7 +110,49 @@ func (r Repo) Metricas(desde time.Time) Metricas {
 			prev[rc.Attempt] = rc.Head
 		}
 	}
+	r.metricasDecision(&m, desde, now)
 	raw, _ := os.ReadFile(r.CuarentenaPath())
 	m.Cuarentena = len(strings.Fields(strings.ReplaceAll(string(raw), " ", "_")))
 	return m
+}
+
+// metricasDecision mide la espera del Owner. El reloj de un slice arranca con su última verificación
+// que pasa y se detiene con su decisión; reabrirlo o cerrarlo sin decisión lo detiene sin contar.
+func (r Repo) metricasDecision(m *Metricas, desde, now time.Time) {
+	evs, _ := diario.Leer(diario.Ruta(r.OrqDir))
+	m.IntentosPorCausa = map[string]int{}
+	verificado := map[string]time.Time{}
+	var minutos []float64
+	for _, e := range evs {
+		switch {
+		case e.Tipo == "verificacion" && e.Resultado == "paso":
+			verificado[e.Slice] = e.TS
+		case e.Tipo == "decision":
+			if v, ok := verificado[e.Slice]; ok && !e.TS.Before(desde) {
+				minutos = append(minutos, e.TS.Sub(v).Minutes())
+			}
+			delete(verificado, e.Slice)
+		case e.Tipo == "fase" && (e.De == Verificado && e.A == Implementando || e.A == "CERRADO"):
+			delete(verificado, e.Slice)
+		case e.Tipo == "intento" && !e.TS.Before(desde):
+			if c, ok := e.Datos["causa"].(string); ok {
+				m.IntentosPorCausa[c]++
+			}
+		}
+	}
+	for _, v := range verificado {
+		if now.Sub(v) > 24*time.Hour {
+			m.SinDecidir24h++
+		}
+	}
+	m.Decididos = len(minutos)
+	if len(minutos) == 0 {
+		return
+	}
+	slices.Sort(minutos)
+	mitad := len(minutos) / 2
+	m.DecisionMinMediana = minutos[mitad]
+	if len(minutos)%2 == 0 {
+		m.DecisionMinMediana = (minutos[mitad-1] + minutos[mitad]) / 2
+	}
 }

@@ -95,6 +95,9 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time) (*R
 			if in.Punta != rec.Head || in.Sucio != "" {
 				return nil, nil, "", errors.New("el recibo no es de este intento o de este commit: corre `orq slice verificar`")
 			}
+			if err := r.anotarDecision(e, "aceptado", "", now); err != nil {
+				return nil, nil, "", err
+			}
 			e.Fase = Integrando
 			if err := r.save(e); err != nil {
 				return nil, nil, "", err
@@ -160,6 +163,9 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time) (*R
 		if err := r.libre(e); err != nil {
 			return nil, nil, "", err
 		}
+		if err := r.anotarDecision(e, "rechazado", motivo, now); err != nil {
+			return nil, nil, "", err
+		}
 	}
 	cuarentena = append(cuarentena, r.limpiarEquipo(e, aceptado, now)...)
 	if q := r.quitarCopia(e, e.Worktree, e.Rama, "slice", now); q != "" {
@@ -200,6 +206,13 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time) (*R
 		return nil, cuarentena, out, err
 	}
 	return reg, cuarentena, out, os.Remove(r.estadoPath(e.NN))
+}
+
+// anotarDecision deja en el diario el momento en que se aceptó o rechazó el slice. Un cierre
+// aceptado se anota al salir de VERIFICADO; retomarlo no vuelve a decidir.
+func (r Repo) anotarDecision(e *Estado, resultado, motivo string, now time.Time) error {
+	return diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{TS: now, Tipo: "decision", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
+		Resultado: resultado, Detalle: motivo})
 }
 
 // libre comprueba que nadie trabaje en las carpetas que se van a quitar.

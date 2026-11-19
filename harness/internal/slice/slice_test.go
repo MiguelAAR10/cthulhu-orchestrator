@@ -147,10 +147,10 @@ func TestSinProgresoBloqueaYReintentarInvalidaRecibosViejos(t *testing.T) {
 	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "sin progreso") {
 		t.Fatalf("got %v", err)
 	}
-	if _, err := r.Reintentar("", "", false); err == nil {
+	if _, err := r.Reintentar("", "", CausaWorker, false); err == nil {
 		t.Fatal("reintentó sin decir qué cambia")
 	}
-	e, err := r.Reintentar("", "leer el total desde el fixture", false)
+	e, err := r.Reintentar("", "leer el total desde el fixture", CausaWorker, false)
 	if err != nil || e.Attempt() != "S-01/a2" || e.Fase != Implementando {
 		t.Fatalf("%+v %v", e, err)
 	}
@@ -377,16 +377,16 @@ func TestSinProgresoPorEspaciosYTopeDeIntentos(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 	for i := 2; i <= MaxIntentos; i++ {
-		if _, err := r.Reintentar("", "cambio", false); err != nil {
+		if _, err := r.Reintentar("", "cambio", CausaWorker, false); err != nil {
 			t.Fatal(err)
 		}
 		e, _ = r.Load()
 		r.bloquear(e, "x")
 	}
-	if _, err := r.Reintentar("", "otra vez", false); err == nil || !strings.Contains(err.Error(), "Owner") {
+	if _, err := r.Reintentar("", "otra vez", CausaWorker, false); err == nil || !strings.Contains(err.Error(), "Owner") {
 		t.Fatalf("got %v", err)
 	}
-	if _, err := r.Reintentar("", "otra vez", true); err != nil {
+	if _, err := r.Reintentar("", "otra vez", CausaWorker, true); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -430,17 +430,17 @@ func TestCierreNoQuitaWorktreeConProcesoVivo(t *testing.T) {
 
 func TestMetricasDelCiclo(t *testing.T) {
 	r := repoDeJuguete(t)
-	if m := r.Metricas(time.Time{}); m.Aceptados != 0 || m.HorasMedias != 0 {
+	if m := r.Metricas(time.Time{}, t0); m.Aceptados != 0 || m.HorasMedias != 0 {
 		t.Fatalf("%+v", m)
 	}
 	e := abrir(t, r)
 	r.Verificar("", t0)
 	r.Verificar("", t0) // mismo head: sin progreso
-	r.Reintentar("", "otra cosa", false)
+	r.Reintentar("", "otra cosa", CausaWorker, false)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
 	r.Verificar("", t0)
 	r.Cerrar("", true, "", t0.Add(2*time.Hour))
-	m := r.Metricas(time.Time{})
+	m := r.Metricas(time.Time{}, t0)
 	if m.Aceptados != 1 || m.Intentos != 2 || m.Verificaciones != 3 || m.FallosSinProgreso != 1 || m.VerdesALaPrimera != 0 {
 		t.Fatalf("%+v", m)
 	}
@@ -1200,7 +1200,7 @@ func TestMetricasPorRuta(t *testing.T) {
 	cerrar("02", "fix", false, 3)
 	cerrar("03", "fix", true, 5) // empezó como fix, terminó como slice
 	cerrar("04", "", false, 8)
-	m := r.Metricas(time.Time{})
+	m := r.Metricas(time.Time{}, t0)
 	if m.Aceptados != 4 || m.Ascendidos != 1 {
 		t.Fatalf("%+v", m)
 	}
@@ -1215,7 +1215,7 @@ func TestMetricasRegistrosViejosSonSlice(t *testing.T) {
 	r := repoDeJuguete(t)
 	appendJSON(r.logPath(), map[string]any{"nn": "01", "intento": 1, "titulo": "viejo", "resultado": "aceptado",
 		"abierto": t0, "cerrado": t0.Add(2 * time.Hour)})
-	m := r.Metricas(time.Time{})
+	m := r.Metricas(time.Time{}, t0)
 	if m.PorRuta[RutaSlice].Aceptados != 1 || m.PorRuta[RutaFix].Aceptados != 0 || m.PorRuta[RutaSlice].HorasMedias != 2 {
 		t.Fatalf("%+v", m)
 	}

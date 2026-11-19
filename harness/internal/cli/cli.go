@@ -76,6 +76,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq slice juntar [--slice NN]  integra lo commiteado de cada worker del equipo; rechaza lo que salga
                                  de su zona o toque el examen; luego orq slice verificar
   orq slice recibo               el recibo vigente
+  orq slice decidir [NN] [--html RUTA]   una página para aceptar o rechazar un slice verificado
   orq slice contrato [--worker N] [--alcance "..."] [--suite "cmd"] [--presupuesto "..."]
                                  el contrato del worker con los datos reales del slice
   orq sesion ver | abrir planificador|astra | cerrar NOMBRE | reenviar NOMBRE
@@ -89,7 +90,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
                                  lecciones con confianza; se aprenden solas (reintentos, rechazos,
                                  desvíos) y las ≥0.7 entran al arrancar cada sesión (máx. 6)
   orq alinear [--slice NN]       ¿lo cambiado sigue sirviendo a la historia? exit 3 = pregunta al Atena
-  orq slice reintentar "qué cambia" [--decision-owner]   intento nuevo desde BLOQUEADO (máx. 3)
+  orq slice reintentar "qué cambia" --causa worker|examen [--decision-owner]   intento nuevo desde BLOQUEADO (máx. 3)
   orq slice cerrar --aceptado | --rechazado "motivo"   integra aparte, revalida, publica y limpia;
                                  si se interrumpe, repetirlo continúa donde quedó
   orq slice estado               fase, intento, escritor, recibo y sobrantes
@@ -295,6 +296,9 @@ func runStatus(stdout, stderr io.Writer) int {
 	} else {
 		fmt.Fprintln(stdout, "HALT: no")
 	}
+	if p, err := abrirProyecto(); err == nil {
+		esperanOwner(p, time.Now(), stdout)
+	}
 	// Máquina y capacidad: cuántos agentes caben ahora y qué número lo decide.
 	root, _ := orqdir.Root()
 	cfg, err := config.Cargar(root)
@@ -320,6 +324,23 @@ func runStatus(stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "  %s\n", c.Motivo())
 	}
 	return 0
+}
+
+// esperanOwner lista los slices verificados sin decisión, con su edad desde el recibo.
+func esperanOwner(p proyecto, now time.Time, stdout io.Writer) {
+	es, err := p.Slices().Esperando()
+	if err != nil {
+		fmt.Fprintf(stdout, "esperan al Owner: no se pudo leer (%v)\n", err)
+		return
+	}
+	if len(es) == 0 {
+		fmt.Fprintln(stdout, "esperan al Owner: ninguno")
+		return
+	}
+	fmt.Fprintln(stdout, "esperan al Owner (verificados, el más antiguo primero):")
+	for _, e := range es {
+		fmt.Fprintf(stdout, "  %s «%s» hace %s · orq slice decidir %s\n", e.Attempt(), e.Titulo, edad(now.Sub(e.Recibo.TS)), e.NN)
+	}
 }
 
 func runHalt(args []string, stdout, stderr io.Writer) int {

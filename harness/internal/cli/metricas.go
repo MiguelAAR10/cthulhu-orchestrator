@@ -28,7 +28,7 @@ func runMetricas(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 	}
-	m := p.Slices().Metricas(desde)
+	m := p.Slices().Metricas(desde, time.Now())
 	if jsonOut {
 		raw, _ := json.MarshalIndent(m, "", "  ")
 		fmt.Fprintln(stdout, string(raw))
@@ -51,6 +51,13 @@ func runMetricas(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "ruta %s: %d aceptados · %s · %.1f h de media\n", ruta, mr.Aceptados, primero, mr.HorasMedias)
 	}
+	if m.Decididos > 0 {
+		fmt.Fprintf(stdout, "verificado → decisión: mediana %.0f min (%d decididos)\n", m.DecisionMinMediana, m.Decididos)
+	} else {
+		fmt.Fprintln(stdout, "verificado → decisión: sin decisiones medidas todavía")
+	}
+	fmt.Fprintf(stdout, "sin decidir tras 24 h: %d\n", m.SinDecidir24h)
+	fmt.Fprintf(stdout, "intentos nuevos por causa: worker %d · examen %d\n", m.IntentosPorCausa[slice.CausaWorker], m.IntentosPorCausa[slice.CausaExamen])
 	fmt.Fprintf(stdout, "fixes que subieron a slice: %d (cuentan en slice, donde terminaron)\n", m.Ascendidos)
 	fmt.Fprintf(stdout, "en cuarentena: %d · recursos sobrantes: `orq doctor`\n", m.Cuarentena)
 	fmt.Fprintln(stdout, "costo por slice y tiempo humano: n/d (orq no los registra todavía)")

@@ -440,7 +440,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	}
 	// Pedir ayuda nunca ejecuta: un «verificar --help» corría el examen y podía gastar un intento.
 	if slices.ContainsFunc(args, func(a string) bool { return a == "-h" || a == "--help" || a == "help" }) {
-		fmt.Fprintln(stdout, "uso: orq slice [--slice NN] abrir|tomar|alcance|verificar|juntar|podar|examen|ruta|estado|recibo|rehuella ... · guía: orq skill orquestador")
+		fmt.Fprintln(stdout, "uso: orq slice [--slice NN] abrir|tomar|alcance|verificar|juntar|podar|examen|ruta|estado|recibo|decidir|rehuella ... · guía: orq skill orquestador")
 		return 0
 	}
 	show := func(out string) {
@@ -471,8 +471,9 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		enSitio := fs.String("en-sitio", "", "removed: the exam always runs in the box; giving it is an error")
 		ruta := fs.String("ruta", "", "fix (un worker, sin equipo ni plan) | slice (por defecto)")
 		timeout := fs.Int("timeout", 0, "segundos máximos del examen (0 = 600)")
+		demo := fs.String("demo", "", "hasta 3 pasos para ver el resultado funcionando, separados por ;")
 		if len(args) < 2 || fs.Parse(args[2:]) != nil || *titulo == "" || *test == "" || *cmd == "" {
-			fmt.Fprintln(stderr, "uso: orq slice abrir NN --titulo \"...\" --test ruta --cmd \"...\" (--reporte f --formato tap|junit|gotest-json | --sin-conteo \"motivo\") [--bundle a,b] [--sano \"cmd\"] [--permite-omitir] [--ruta fix|slice] [--timeout s] [--sin-scouts \"motivo\"]")
+			fmt.Fprintln(stderr, "uso: orq slice abrir NN --titulo \"...\" --test ruta --cmd \"...\" (--reporte f --formato tap|junit|gotest-json | --sin-conteo \"motivo\") [--bundle a,b] [--sano \"cmd\"] [--permite-omitir] [--ruta fix|slice] [--timeout s] [--demo \"paso; paso; paso\"] [--sin-scouts \"motivo\"]")
 			return 1
 		}
 		if *sinScouts == "" && !p.HayContexto("S-"+args[1]) {
@@ -485,7 +486,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 				extra = append(extra, f)
 			}
 		}
-		e, out, err := r.Abrir(args[1], *titulo, *test, *cmd, slice.Opciones{Alcance: partir(*alcance), Bundle: extra, Sano: *sano, Reporte: *reporte, Formato: *formato, PermiteOmitir: *omitir, SinConteo: *sinConteo, EnSitio: *enSitio, Ruta: *ruta, Timeout: *timeout}, time.Now())
+		e, out, err := r.Abrir(args[1], *titulo, *test, *cmd, slice.Opciones{Alcance: partir(*alcance), Bundle: extra, Sano: *sano, Reporte: *reporte, Formato: *formato, PermiteOmitir: *omitir, SinConteo: *sinConteo, EnSitio: *enSitio, Ruta: *ruta, Timeout: *timeout, Demo: pasos(*demo)}, time.Now())
 		show(out)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
@@ -629,21 +630,25 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s reabierto en el mismo worktree, con su trabajo. El recibo ya no vale: lanza la reparación y vuelve a verificar\n", e.Attempt())
 		return 0
 	case "reintentar":
-		owner := false
+		owner, causa := false, ""
 		var resto []string
-		for _, a := range args[1:] {
-			if a == "--decision-owner" {
+		for i := 1; i < len(args); i++ {
+			switch {
+			case args[i] == "--decision-owner":
 				owner = true
-			} else {
-				resto = append(resto, a)
+			case args[i] == "--causa" && i+1 < len(args):
+				causa = args[i+1]
+				i++
+			default:
+				resto = append(resto, args[i])
 			}
 		}
 		if len(resto) == 0 {
-			fmt.Fprintln(stderr, "uso: orq slice reintentar \"qué cambia en este intento\" [--decision-owner]")
+			fmt.Fprintln(stderr, "uso: orq slice reintentar \"qué cambia en este intento\" --causa worker|examen [--decision-owner]")
 			return 1
 		}
 		args = append(args[:1], resto...)
-		e, err := r.Reintentar(nn, strings.Join(resto, " "), owner)
+		e, err := r.Reintentar(nn, strings.Join(resto, " "), causa, owner)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
@@ -814,6 +819,8 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprint(stdout, c)
 		return 0
+	case "decidir":
+		return runDecidir(p, nn, args[1:], stdout, stderr)
 	case "recibo":
 		e, err := r.Load(nn)
 		if err != nil || e == nil || e.Recibo == nil {
@@ -869,6 +876,17 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprint(stderr, usage)
 	return 1
+}
+
+// pasos parte una demo «a; b; c» en hasta 3 pasos.
+func pasos(s string) []string {
+	var out []string
+	for _, x := range strings.Split(s, ";") {
+		if x = strings.TrimSpace(x); x != "" && len(out) < 3 {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 func partir(s string) []string {
