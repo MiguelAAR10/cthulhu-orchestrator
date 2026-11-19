@@ -130,10 +130,12 @@ func gitAjeno(c simple, raiz, rama string) (Decision, bool) {
 		sub == "tag" && len(r) > 0 && !hay(t, "-l", "--list"),
 		sub == "worktree" && (len(p) == 0 || p[0].s != "list"):
 		return deny("orq: a worker runs only these git commands: %s (not %q). Ask the orchestrator for anything else.", listaGit, sub), true
-	case sub == "reflog" && len(p) > 0 && (p[0].s == "expire" || p[0].s == "delete" || p[0].s == "exists"):
-		return deny("orq: a worker runs only `git reflog` to show or list (not %q).", p[0].s), true
 	case saleArchivo(t):
 		return deny("orq: git --output writes a file the gate cannot check. Use `git %s > file` instead; the gate checks the redirect.", sub), true
+	case dinamicaAntes(r) != "":
+		return deny("orq: `git %s` has a word before `--` that is not written literally (%q); it could become an option such as --output. Write it literally or put it after `--`.", sub, dinamicaAntes(r)), true
+	case sub == "reflog" && len(p) > 0 && !reflogLeer(p[0].s):
+		return deny("orq: a worker runs only `git reflog` with no subcommand, show, list, exists or a ref name such as HEAD or refs/heads/x (not %q).", p[0].s), true
 	case hay(t, "--ext-diff", "--textconv"):
 		return oculto("git " + sub + " --ext-diff/--textconv")
 	case sub == "grep" && (conPrefijo(t, "-O", "--open-files-in-pager") || corta(t, 'O')):
@@ -273,4 +275,57 @@ func saleArchivo(t []string) bool {
 		}
 	}
 	return false
+}
+
+// dinamicaAntes returns the first word before `--` that could become an option or subcommand: one
+// whose value the gate cannot read (a variable, $(...), backticks, arithmetic) or a glob that
+// starts with a glob character or `-`. After `--` git takes every word as a path, so those are
+// not checked. A dynamic word that is the value of a value-taking option (-m "$x", --format="$f")
+// is data, not an option, and is allowed.
+func dinamicaAntes(w []palabra) string {
+	for i, x := range w {
+		if x.s == "--" {
+			return ""
+		}
+		if !(x.dyn || x.glob && (strings.HasPrefix(x.s, "-") || strings.ContainsAny(x.s[:1], "*?["))) {
+			continue
+		}
+		if i > 0 && !w[i-1].dyn && valorGit[w[i-1].s] || valorAdjunto(x.s) {
+			continue
+		}
+		return x.s
+	}
+	return ""
+}
+
+// valorGit are the options whose next word is their value.
+var valorGit = conjunto("-m", "--message", "-F", "--file", "--author", "--format", "-S", "-G", "--grep")
+
+// valorAdjunto says whether a word starts with a literal value-taking option joined to its value
+// (--message=..., -S...), so the dynamic part that follows is only that option's value.
+func valorAdjunto(s string) bool {
+	for _, p := range []string{"--message=", "--file=", "--author=", "--format=", "--grep="} {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	for _, p := range []string{"-m", "-F", "-S", "-G"} {
+		if strings.HasPrefix(s, p) && len(s) > 2 && s[2] != '-' {
+			return true
+		}
+	}
+	return false
+}
+
+// reflogLeer says whether the first positional of `git reflog` only reads: show, list, exists or a
+// ref name. A ref name is recognised by its shape (HEAD, or it holds one of / @ ~ ^ . :), so a bare
+// word such as a future subcommand is denied. Checked against git 2.43, whose subcommands are
+// show, expire, delete and exists; `drop` (2.50), `list` and `write` come later. Reading is
+// allowlisted rather than denylisting writers so a subcommand added after 2.50 stays denied.
+func reflogLeer(s string) bool {
+	switch s {
+	case "show", "list", "exists", "HEAD":
+		return true
+	}
+	return strings.ContainsAny(s, "/@~^.:")
 }

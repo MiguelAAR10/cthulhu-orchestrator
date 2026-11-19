@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -295,8 +296,38 @@ func TestDecisiones(t *testing.T) {
 		{bash("git log -1 --format=x > x.txt"), ""},
 		{bash("git reflog"), ""},
 		{bash("git reflog show main"), ""},
-		{bash("git reflog expire --all"), "git reflog"},
-		{bash("git reflog delete HEAD@{1}"), "git reflog"},
+		{bash("git reflog show"), ""},
+		{bash("git reflog list"), ""},
+		{bash("git reflog exists refs/heads/main"), ""},
+		{bash("git reflog HEAD"), ""},
+		{bash("git reflog refs/heads/main"), ""},
+		{bash("git reflog main"), reflogDeny("main")},
+		{bash("git reflog --all"), ""},
+		{bash("git reflog expire --all"), reflogDeny("expire")},
+		{bash("git reflog delete HEAD@{1}"), reflogDeny("delete")},
+		{bash("git reflog drop HEAD@{1}"), reflogDeny("drop")},
+		{bash("git reflog write HEAD"), reflogDeny("write")},
+		{bash("S=expire; git reflog $S --expire=now --all"), dinDeny("reflog", "$S")},
+		{bash("git reflog `echo expire`"), dinDeny("reflog", "`echo expire`")},
+		{bash("git reflog $(echo expire) --all"), dinDeny("reflog", "$(echo expire)")},
+		// review 7: a dynamic word before `--` can become an option, so it is denied as a class
+		{bash("O=--output; git log $O x"), dinDeny("log", "$O")},
+		{bash("git log $(echo --output) x"), dinDeny("log", "$(echo --output)")},
+		{bash("git log -- \"$F\""), ""},
+		{bash("git log -1 -- $F"), ""},
+		{bash(`git commit -m "$msg"`), ""},
+		{bash("git commit -m \"$(cat <<'EOF'\nfix: x\n\nbody\nEOF\n)\""), ""},
+		{bash(`git commit --message="$msg"`), ""},
+		{bash(`git commit -F "$f"`), ""},
+		{bash(`git commit --author="$a" -m x`), ""},
+		{bash(`git log --format="$f"`), ""},
+		{bash(`git log --grep "$g" -S"$s"`), ""},
+		{bash(`git diff -- "$F"`), ""},
+		{bash(`git diff "$F"`), dinDeny("diff", "$F")},
+		{bash(`git commit -m x "$F"`), dinDeny("commit", "$F")},
+		{bash(`git log --foo "$F"`), dinDeny("log", "$F")},
+		{bash("git add src/*.go"), ""},
+		{bash("git log *"), dinDeny("log", "*")},
 		{bash("git ls-tree -r HEAD"), ""},
 		{bash("git rev-list --count HEAD"), ""},
 		{bash("git check-ignore -v src/x"), ""},
@@ -350,8 +381,21 @@ func TestDecisiones(t *testing.T) {
 			t.Errorf("%s: negó y debía permitir (%s)", desc, d.Reason)
 		case c.motivo != "" && d.Allow:
 			t.Errorf("%s: permitió y debía negar por %q", desc, c.motivo)
+		case strings.HasPrefix(c.motivo, "="):
+			if d.Reason != c.motivo[1:] {
+				t.Errorf("%s: motivo %q no es exactamente %q", desc, d.Reason, c.motivo[1:])
+			}
 		case c.motivo != "" && !strings.Contains(d.Reason, c.motivo):
 			t.Errorf("%s: motivo %q no contiene %q", desc, d.Reason, c.motivo)
 		}
 	}
+}
+
+// reflogDeny and dinDeny are the exact deny reasons (prefixed "=" so the table compares whole strings).
+func reflogDeny(w string) string {
+	return "=orq: a worker runs only `git reflog` with no subcommand, show, list, exists or a ref name such as HEAD or refs/heads/x (not " + fmt.Sprintf("%q", w) + ")."
+}
+
+func dinDeny(sub, w string) string {
+	return "=orq: `git " + sub + "` has a word before `--` that is not written literally (" + fmt.Sprintf("%q", w) + "); it could become an option such as --output. Write it literally or put it after `--`."
 }
