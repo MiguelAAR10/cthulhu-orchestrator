@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"orq/internal/canal"
@@ -31,6 +32,12 @@ func (p Proyecto) CerrarWorker(ctx context.Context, nombre string) (string, erro
 	ses, err := canal.LoadSesiones(p.SesPath())
 	if err != nil {
 		return "", err
+	}
+	if _, vive := ses[nombre]; !vive {
+		return "", fmt.Errorf("no hay sesión %s (orq sesion ver): nada se integra", nombre)
+	}
+	if len(e.Equipo) > 0 && !slices.ContainsFunc(e.Equipo, func(w slice.Worker) bool { return w.Nombre == nombre }) {
+		return "", fmt.Errorf("%s no es del equipo de S-%s: nada se integra", nombre, e.NN)
 	}
 	fila := diario.Evento{Tipo: "integracion", Paso: "worker", Actor: nombre, Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva()}
 	var informe []string

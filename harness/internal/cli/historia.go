@@ -96,8 +96,7 @@ func slicesPorHistoria(p proyecto, stdout io.Writer) {
 	r := p.Slices()
 	hs, err := r.Historias()
 	if err != nil {
-		fmt.Fprintf(stdout, "historias: no se pudieron leer (%v)\n", err)
-		return
+		fmt.Fprintf(stdout, "!! historias: no se pudieron leer (%v)\n", err)
 	}
 	if len(hs) > 0 {
 		fmt.Fprintln(stdout, "historias:")
@@ -126,11 +125,28 @@ func slicesPorHistoria(p proyecto, stdout io.Writer) {
 	if err != nil {
 		return
 	}
+	conocida := map[string]bool{}
+	for _, h := range hs {
+		conocida[h.ID] = true
+	}
 	var sueltos []string
+	huerfanas := map[string][]string{}
+	var ids []string
 	for _, e := range ab {
-		if e.Historia == "" {
-			sueltos = append(sueltos, fmt.Sprintf("  %s «%s» %s", e.Attempt(), e.Titulo, e.Fase))
+		linea := fmt.Sprintf("  %s «%s» %s", e.Attempt(), e.Titulo, e.Fase)
+		switch {
+		case e.Historia == "":
+			sueltos = append(sueltos, linea)
+		case !conocida[e.Historia]:
+			if huerfanas[e.Historia] == nil {
+				ids = append(ids, e.Historia)
+			}
+			huerfanas[e.Historia] = append(huerfanas[e.Historia], linea)
 		}
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		fmt.Fprintf(stdout, "!! historia desconocida: %s\n%s\n", id, strings.Join(huerfanas[id], "\n"))
 	}
 	if len(sueltos) > 0 {
 		fmt.Fprintf(stdout, "slices sin historia:\n%s\n", strings.Join(sueltos, "\n"))

@@ -124,3 +124,14 @@ Every test above failed before its code existed. The red for `alertas_test.go` w
 
 - `orq metricas` could count alerts per type and story; the journal already has them.
 - `orq slice estado` could print the story.
+
+## Review fixes, round 1
+
+Each fix has a test that was seen failing first.
+
+1. **Merge-on-close only for a real session.** `CerrarWorker` now requires the name to be a live session and, on a team slice, a member, before it merges or verifies. A wrong name returns an error (CLI exits 1) and changes nothing: no verify, no ledger row. Test: `TestCerrarWorkerNombreSinSesionNoIntegra` (`worker-nadie-s01`). A repeated close of an already closed slice is still a no-op (the phase check runs first).
+2. **`orq status` never hides an open slice.** A slice whose story does not exist is listed under `!! historia desconocida: <id>`. Test: `TestStatusNoOcultaSliceConHistoriaDesconocida`.
+3. **One bad story file hides nothing.** `Historias` returns every readable story plus an error naming each bad file; status prints it as `!! historias: no se pudieron leer …` and still lists every slice. Test: `TestStatusUnaHistoriaMalaNoOcultaSlices`.
+4. **Alert dedup per slice and kind.** The journal key is slice + kind + actor, without the detail, so out-of-scope is journaled once per slice; `orq status` shows the latest file list. `examen_tras_aprobar` keeps its detail in the key because each exam is its own event. Test: `TestFueraDeAlcanceSeAnotaUnaVezPorSlice`.
+
+Not covered by a test: the team-member check (a wrong name on a team slice).

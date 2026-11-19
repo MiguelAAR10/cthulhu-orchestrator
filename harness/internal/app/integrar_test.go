@@ -53,3 +53,16 @@ func TestCerrarWorkerFalloNoCierra(t *testing.T) {
 		t.Fatalf("fase %s, rows %+v", e.Fase, fs)
 	}
 }
+
+func TestCerrarWorkerNombreSinSesionNoIntegra(t *testing.T) {
+	p, _, e := proyectoDePrueba(t, "")
+	lanzar(t, p)
+	commitEnClon(t, e.Worktree, "v01.txt", "ok")
+	if _, err := p.CerrarWorker(context.Background(), "worker-nadie-s01"); err == nil {
+		t.Fatal("a name that is no session must be refused")
+	}
+	e, _ = p.Slices().Load("01")
+	if e.Fase == slice.Verificado || len(filasIntegracion(t, p)) != 0 {
+		t.Fatalf("nothing may change: fase %s, rows %+v", e.Fase, filasIntegracion(t, p))
+	}
+}
