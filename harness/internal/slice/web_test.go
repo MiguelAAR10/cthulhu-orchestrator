@@ -137,3 +137,22 @@ func TestExamenPlaywrightArrancaServidor(t *testing.T) {
 		t.Fatalf("%v %s\n%s", err, e.Fase, out)
 	}
 }
+
+// With a counted report the exam still runs behind the server (the real run's bug: the report
+// prefix rebuilt the command from e.Cmd and dropped the server).
+func TestExamenPlaywrightConReporteArrancaServidor(t *testing.T) {
+	homeWeb(t, devStub, pwStub+"\nif cmp -s total.txt tests/datos.txt; then echo 'ok 1 total' > out.tap; else echo 'not ok 1 total' > out.tap; exit 1; fi")
+	r := repoDeJuguete(t)
+	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"}, e2eStub}
+	e, out, err := r.Abrir("01", "total", "tests/s01.sh", "npx playwright test", Opciones{Reporte: "out.tap", Formato: "tap", Bundle: []string{"tests/datos.txt"}, Sano: "test -f total.txt"}, t0)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "servidor y navegadores ok") {
+		t.Fatalf("the red did not come from the assertion:\n%s", out)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if e, out, err = r.Verificar("", t0); err != nil || e.Fase != Verificado {
+		t.Fatalf("%v %s\n%s", err, e.Fase, out)
+	}
+}
