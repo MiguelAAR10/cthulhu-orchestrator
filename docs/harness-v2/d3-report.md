@@ -120,3 +120,9 @@ Every test above was seen failing before its code existed. All of them run in `m
 
 - `orq slice estado` could print one line about the card: missing, waiting since …, or approved.
 - Atena's skill could read `tarjetas por aprobar` from `orq status` to tell the Owner when a card is waiting.
+
+## Review fixes, round 1
+
+- **Launch trusts unsealed state:** `LanzarWorker` now runs the contract check (`Confiar`/`confiable`) before `PuedeLanzar`; test `TestLanzarNoConfiaEnAprobacionForjada` (forged `aprobada` → refused, no panel).
+- **Route can be relabeled `fix`:** `Ruta` is now sealed in the contract (`CambiarRuta` checks and re-seals), launch refuses a rewritten route and the decision page adds a `!!` notice when state and contract differ; tests `TestLanzarNoConfiaEnRutaRebajadaAFix`, `TestSubirRutaSigueSiendoValida`. Slices opened before this commit as `fix` have no sealed route and will read as forged.
+- **Zone `.` turns the zone check off:** `LeerTarjeta` rejects `.`, `./` (and `/`, already absolute) with "cubre todo el repo"; cases added to `TestLeerTarjetaRechaza`.

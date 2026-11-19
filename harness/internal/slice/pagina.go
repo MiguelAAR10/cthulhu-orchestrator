@@ -48,6 +48,9 @@ func (r Repo) Pagina(nn string) (*Pagina, error) {
 	}
 	e.Recibo = rec
 	var avisos []string
+	if err := r.confiable(e); err != nil {
+		avisos = append(avisos, "the slice state differs from the contract orq sealed (ruta or card may have been rewritten): "+err.Error())
+	}
 	if len(e.Equipo) == 0 && esClon(e.Worktree) {
 		if in, err := r.ingerir(e, e.Worktree, e.Rama, "slice"); err == nil { // fetch only, as Alinear does
 			if tip, err := r.git("rev-parse", "--verify", in.Punta+"^{commit}"); err == nil && tip != rec.Head {

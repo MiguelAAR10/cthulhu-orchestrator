@@ -63,6 +63,9 @@ func TestLeerTarjetaRechaza(t *testing.T) {
 		{"sección desconocida", cambiar("## Preguntas", "## Riesgos\nalgo\n## Preguntas"), "Riesgos"},
 		{"repetida", cambiar("## Preguntas", "## Fuera\notra\n## Preguntas"), "Fuera"},
 		{"zona fuera del repo", cambiar("web/carrito", "../otro"), "Zonas"},
+		{"zona raíz punto", cambiar("web/carrito", "."), "todo el repo"},
+		{"zona raíz ./", cambiar("web/carrito", "./"), "todo el repo"},
+		{"zona raíz barra", cambiar("web/carrito", "/"), "Zonas"},
 		{"zona absoluta", cambiar("web/carrito", "/etc"), "Zonas"},
 		{"texto suelto", "hola\n" + tarjetaBuena, "hola"},
 	}

@@ -67,7 +67,13 @@ func (r Repo) CambiarRuta(nn, ruta, motivo string) (*Estado, error) {
 	case strings.TrimSpace(motivo) == "":
 		return e, errors.New("di por qué el fix creció; subir de ruta sin motivo no vale")
 	}
+	if err := r.confiable(e); err != nil {
+		return e, err
+	}
 	e.Ruta, e.Ascendido, e.RutaMotivo = RutaSlice, true, strings.TrimSpace(motivo)
+	if err := r.sellar(e); err != nil {
+		return e, err
+	}
 	return e, r.save(e)
 }
 
