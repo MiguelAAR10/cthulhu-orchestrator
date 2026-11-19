@@ -56,14 +56,18 @@ func runCheckCaja(stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	cs, err := app.ChecksCaja(cwd)
+	cs, sinE2E, err := app.ChecksCaja(cwd)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	code := 0
 	for _, c := range cs {
-		if no := sandbox.NoCorren(c.Herramientas); no != "" {
+		hs := c.Herramientas
+		if c.Navegadores != nil {
+			hs = append(hs, *c.Navegadores)
+		}
+		if no := sandbox.NoCorren(hs); no != "" {
 			code = 1
 			fmt.Fprintf(stdout, "%s  no corre en la caja: %s\n", c.Nombre, no)
 			continue
@@ -92,11 +96,17 @@ func runCheckCaja(stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "%s  no corre en la caja: %s\n", c.Nombre, strings.Join(fallas, "; "))
 			continue
 		}
+		if c.Navegadores != nil {
+			vistas = append(vistas, c.Navegadores.Nombre+" → "+c.Navegadores.Ruta)
+		}
 		monta := "nada fuera del sistema"
-		if ro := sandbox.RODe(c.Herramientas); len(ro) > 0 {
+		if ro := sandbox.RODe(hs); len(ro) > 0 {
 			monta = strings.Join(ro, ", ")
 		}
 		fmt.Fprintf(stdout, "%s  corre en la caja: %s · monta %s\n", c.Nombre, strings.Join(vistas, "; "), monta)
+	}
+	if sinE2E != "" {
+		fmt.Fprintf(stdout, "e2e  sin check: %s\n", sinE2E)
 	}
 	return code
 }

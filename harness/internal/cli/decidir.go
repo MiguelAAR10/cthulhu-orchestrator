@@ -85,6 +85,9 @@ func seccionesDecision(pd *app.PaginaDecision) []seccion {
 			}
 			checks.Lineas = append(checks.Lineas, alerta("%s fallo · exit %d · %s · %s", c.Nombre, c.Exit, c.Cmd, primera))
 		}
+		for _, p := range c.Capturas {
+			checks.Lineas = append(checks.Lineas, normal("  captura: %s", p))
+		}
 	}
 	if len(rec.Checks) == 0 {
 		checks.Lineas = append(checks.Lineas, alerta("sin checks en el recibo: corre orq init y vuelve a verificar"))

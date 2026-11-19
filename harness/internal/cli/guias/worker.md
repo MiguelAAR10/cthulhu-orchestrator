@@ -8,6 +8,7 @@ You are the only writer of your slice or zone. Your contract comes from the Orch
 - Stop and ask (`orq msg send --para orquestador --tipo pregunta`) on: product ambiguity, scope or acceptance change, more budget, risk (data, money, security, irreversible) or a test that looks wrong. Not your call.
 - No integrating, merging, pushing, cleaning worktrees, opening or closing slices: the gate blocks it.
 - Web: wait on state assertions (expect/locator). Never networkidle or fixed sleeps.
+- Web: before REQUEST VERIFICATION, reproduce the bug or exercise the feature in a real browser (Playwright MCP or `npx playwright`), finding the screen with the feature map `.orq/mapa.md` of the main checkout (the contract gives its path). For any route you add, put its map line (`` - `/path` → `file` · reach: … · shows: … ``) in your reply: you cannot write `.orq/`.
 - Before REQUEST VERIFICATION, run `orq check` (the project's lint, types, tests and guardrails) and fix and rerun until it passes. `verificar` runs the same checks on your commit; a failing one blocks the close, and "omitido" never counts as passed.
 - "Done" means "requesting verification". Reply ≤12 lines: REQUEST VERIFICATION | BLOCKED | QUESTION · head · files · what you tested and output · what not · risks.
 

@@ -90,3 +90,91 @@ func TestInitSugiereE2EConChecksDelOwner(t *testing.T) {
 		t.Fatalf("claims an e2e check it did not write:\n%s", out)
 	}
 }
+
+// homeCaja: a temp HOME with a stub npx in ~/.local/bin and, if nav, a Playwright browsers dir.
+func homeCaja(t *testing.T, nav bool) (home, cache string) {
+	t.Helper()
+	home = filepath.Join(t.TempDir(), "home")
+	bin := filepath.Join(home, ".local", "bin")
+	os.MkdirAll(bin, 0o755)
+	os.WriteFile(filepath.Join(bin, "npx"), []byte("#!/bin/sh\necho npx 10.0.0\n"), 0o755)
+	cache = filepath.Join(home, ".cache", "ms-playwright")
+	if nav {
+		os.MkdirAll(cache, 0o755)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "")
+	t.Setenv("ORQ_LIMITS", filepath.Join(t.TempDir(), "limits.json"))
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	return home, cache
+}
+
+const checksWeb = `{"checks": {"lint": {"cmd": "true"}, "types": {"cmd": "true"}, "tests": {"cmd": "true"}, "e2e": {"cmd": "npx playwright test"}}}`
+
+func TestCheckCajaE2E(t *testing.T) {
+	root := repoNext(t, true)
+	_, cache := homeCaja(t, false)
+	escribirEn(t, root, ".orq/config.json", checksWeb)
+	t.Chdir(root)
+	out, _, code := run(t, "check", "--caja")
+	if code != 1 {
+		t.Fatalf("exit %d without browsers:\n%s", code, out)
+	}
+	contiene(t, out, "e2e  no corre en la caja: no hay navegadores de Playwright en "+cache)
+
+	os.MkdirAll(cache, 0o755)
+	out, _, code = run(t, "check", "--caja")
+	if code != 0 {
+		t.Fatalf("exit %d with browsers:\n%s", code, out)
+	}
+	contiene(t, out, "e2e  corre en la caja: npx → ", "navegadores de playwright → "+cache, cache)
+}
+
+func TestCheckCajaSinE2EDicePorQue(t *testing.T) {
+	root := repoNext(t, false)
+	homeCaja(t, true)
+	escribirEn(t, root, ".orq/config.json", `{"checks": {"lint": {"cmd": "true"}, "types": {"cmd": "true"}, "tests": {"cmd": "true"}}}`)
+	t.Chdir(root)
+	out, _, code := run(t, "check", "--caja")
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	contiene(t, out, "e2e  sin check: sin playwright.config")
+}
+
+func TestDecidirMuestraCapturas(t *testing.T) {
+	sliceVerdeCon(t, nil, conChecks(`{"checks": {"lint": {"cmd": "true"}, "types": {"cmd": "true"}, "tests": {"cmd": "true"},
+		"e2e": {"cmd": "mkdir -p test-results/carrito && printf png > test-results/carrito/final.png"}}}`))
+	out, _, code := run(t, "slice", "decidir")
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	contiene(t, out, "e2e paso · exit 0 · mkdir -p test-results/carrito", "captura: ", filepath.Join("capturas", "S-01-a1", "test-results", "carrito", "final.png"))
+}
+
+func TestGuiaWorkerWeb(t *testing.T) {
+	raw, err := guias.ReadFile("guias/worker.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contiene(t, string(raw), ".orq/mapa.md", "real browser", "Playwright MCP", "npx playwright", "map line")
+}
+
+func TestContratoNombraElMapa(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	if _, errs, code := run(t, append(append([]string{}, abrirBase...), "--reporte", "out.tap", "--formato", "tap")...); code != 0 {
+		t.Fatalf("abrir: %d %s", code, errs)
+	}
+	run(t, "slice", "tomar", "w1")
+	out, _, _ := run(t, "slice", "contrato")
+	if strings.Contains(out, "mapa.md") {
+		t.Fatalf("a map line without a map:\n%s", out)
+	}
+	escribirEn(t, root, ".orq/mapa.md", "# Feature map\n")
+	out, errs, code := run(t, "slice", "contrato")
+	if code != 0 {
+		t.Fatalf("contrato: %d %s", code, errs)
+	}
+	contiene(t, out, filepath.Join(root, ".orq", "mapa.md"), "navegador real")
+}

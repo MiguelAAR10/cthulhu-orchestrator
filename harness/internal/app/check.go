@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"orq/internal/config"
+	"orq/internal/perfil"
 	"orq/internal/sandbox"
 	"orq/internal/slice"
 )
@@ -53,26 +55,41 @@ func Check(cwd string) ([]slice.ResultadoCheck, error) {
 	return rs, nil
 }
 
-// CheckCaja es un check del proyecto y lo que la caja de orq slice verificar ve de sus herramientas.
+// CheckCaja es un check del proyecto y lo que la caja de orq slice verificar ve de sus herramientas
+// y, en checks.e2e, de los navegadores de Playwright.
 type CheckCaja struct {
 	config.Check
 	Herramientas []sandbox.Herramienta
+	Navegadores  *sandbox.Herramienta
 }
 
 // ChecksCaja dice qué herramientas nombra cada check del proyecto y qué montaría la caja para ellas.
-func ChecksCaja(cwd string) ([]CheckCaja, error) {
-	_, _, cs, err := checksDe(cwd)
+// sinE2E dice por qué un proyecto web no tiene checks.e2e ("" si lo tiene o no es web).
+func ChecksCaja(cwd string) (out []CheckCaja, sinE2E string, err error) {
+	root, _, cs, err := checksDe(cwd)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	var out []CheckCaja
+	tiene := false
 	for _, c := range cs {
 		if c.Interno() || c.Cmd == "" {
 			continue
 		}
-		out = append(out, CheckCaja{Check: c, Herramientas: sandbox.Herramientas(c.Cmd)})
+		cc := CheckCaja{Check: c, Herramientas: sandbox.Herramientas(c.Ejecutable())}
+		if c.Nombre == config.E2E {
+			tiene = true
+			nav := sandbox.Navegadores()
+			cc.Navegadores = &nav
+		}
+		out = append(out, cc)
 	}
-	return out, nil
+	if !tiene && slices.Contains(perfil.Detect(root).Senales, "web") {
+		_, sinE2E = perfil.E2E(root)
+		if sinE2E == "" {
+			sinE2E = "hay playwright.config pero el bloque checks no declara e2e: corre `orq init` y añade la línea que sugiere"
+		}
+	}
+	return out, sinE2E, nil
 }
 
 // checksDe ubica el repo de cwd, el rojo si es el clon de un slice abierto, y los checks del proyecto.
