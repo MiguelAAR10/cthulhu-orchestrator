@@ -126,3 +126,8 @@ Every test above was seen failing before its code existed. All of them run in `m
 - **Launch trusts unsealed state:** `LanzarWorker` now runs the contract check (`Confiar`/`confiable`) before `PuedeLanzar`; test `TestLanzarNoConfiaEnAprobacionForjada` (forged `aprobada` → refused, no panel).
 - **Route can be relabeled `fix`:** `Ruta` is now sealed in the contract (`CambiarRuta` checks and re-seals), launch refuses a rewritten route and the decision page adds a `!!` notice when state and contract differ; tests `TestLanzarNoConfiaEnRutaRebajadaAFix`, `TestSubirRutaSigueSiendoValida`, `TestPaginaAvisaRutaReescrita`. Slices opened before this commit as `fix` have no sealed route and will read as forged.
 - **Zone `.` turns the zone check off:** `LeerTarjeta` rejects `.`, `./` (and `/`, already absolute) with "cubre todo el repo"; cases added to `TestLeerTarjetaRechaza`.
+
+## Close (orchestrator, 2026-11-19)
+Integrated as f181f4e after 1 review round (`reviews/d3-review.md`) and its fix. `make ci` on f181f4e with the candidate (`modified=false`): exit 0, e2e 86/0, aislamiento 14/0. Orchestrator check: `TestLanzarNoConfiaEnAprobacionForjada` and `TestLanzarNoConfiaEnRutaRebajadaAFix` (the reviewer's two repros) fail on the pre-fix `app/workers.go` (8881c9b) and pass on f181f4e.
+Known limit: "Owner only" approval is a mistake-stopper; an agent that unsets ORQ_ROL can still approve (the box, step 2, is frozen).
+Owner check still pending: 10 real stories, card approval median ≤ 3 min.
