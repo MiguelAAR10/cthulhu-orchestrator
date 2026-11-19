@@ -181,6 +181,22 @@ Still allowed on purpose: reading config, `git -c user.*/color.*`, `GIT_PAGER=ca
 
 `make ci` (exit 0): gofmt clean, go vet clean, `go test -race` all packages ok, e2e-v05 ok, aislamiento 14 pass / 0 fail / 0 pending.
 
+## Review fixes 5 (git allowlist)
+
+Fixes for `docs/harness-v2/reviews/step1-review-5.md` (verdict: fix), in commit 62b73a9. This is the second miss on the same class (git builtins that run a command), so the premise changed: **for workers, git is an allowlist**, not a list of builtins minus denials.
+
+| Finding | What changed |
+|---|---|
+| 2a · builtin options that run a command | A worker runs only `status, add, commit, log, diff, show, branch, switch, checkout, restore, rm, mv, reset, stash, rev-parse, ls-files, merge-base, cat-file, blame, grep, describe, shortlog, tag -l, worktree list, version, help` (`gitPermitido`, `repo.go`). Anything else, including aliases and `git-*` programs, is denied with a message that names the list. That puts `fetch`, `pull`, `clone`, `ls-remote`, `fetch-pack` (`--upload-pack`/`-u`), `archive --exec`, `submodule`, `bisect`, `rebase`, `am`, `apply`, `config`, `update-ref` and `symbolic-ref` out. `tag` only lists (no arguments, or `-l`/`--list`), and `worktree` only runs `list`. Within the list, `grep -O`/`--open-files-in-pager` and `--ext-diff`/`--textconv` on any subcommand are denied. The global-option checks stay as they were (`-C`, `--git-dir`, `--work-tree`, `-c` only for `user.*`/`color.*`, `--config-env`, `--exec-path=`, `GIT_*` variables, nested `.git`). `PAGER`, `EDITOR` and `VISUAL` joined the variables that git runs as a command. |
+| 2a · refs | The own-branch rules for `branch -f/-M/-C` stay. `checkout -B` and `switch -C` now follow the same rule: they may force-create or reset only `slice/NN` or a branch under it. `reset` moves only the branch that is checked out. |
+| 2b · global git config | Worker writes to `$HOME/.gitconfig`, `~/.config/git/config`, `$XDG_CONFIG_HOME/git/config`, `~/.git-credentials` and `/etc/gitconfig` are protected in the same way as `.git/config`: through Edit, Write, MCP and the shell, and including a recursive delete of a directory that contains them. Reading them is still allowed. |
+
+Removed: the 110-name builtin list, `git config` parsing (`gitConfig`) and the per-builtin denials (`rebase --exec`, `submodule foreach`, `bisect run`, `difftool/mergetool --extcmd`, `update-ref`, `symbolic-ref`). Non-test code: +44 / −104 lines.
+
+Rows in `TestDecisiones`: 31 new deny rows and 22 new allow rows. I saw all 31 deny rows fail before the fix. The deny rows cover every probe in the review (`ls-remote`/`fetch`/`pull`/`fetch-pack --upload-pack`, `clone -u`, `archive --remote --exec`, `grep -O`/`--open-files-in-pager`, and the `printf … >> ~/.gitconfig` fsmonitor write), plus `diff/log/show --ext-diff/--textconv`, `tag`/`worktree` writes, `checkout -B`/`switch -C main`, and each global config path. The allow rows cover the legitimate flow the reviewer listed (`status`, `add -A && git -c user.name=… -c user.email=… commit`, `log`, `diff HEAD~1`, `branch -f slice/01 HEAD`, `git -C src log`) and every other command on the list. The tests set a temp `HOME` and `XDG_CONFIG_HOME`. 33 existing rows changed their expected reason to the allowlist reason. Seven of them were allowed before and are now denied on purpose: `git config` reads and `user.email` writes (use `git -c user.*=…` on commit instead), `git rebase -i`, `git submodule update`, and `update-ref`/`symbolic-ref` on the worker's own branch (use `branch -f`).
+
+`make ci` (exit 0): gofmt clean, go vet clean, `go test -race` all packages ok, e2e-v05 ok, aislamiento ok.
+
 ## Known gaps until step 7
 
 The gate reads only the command line it is given. These stay open until the worker box of roadmap step 7:
