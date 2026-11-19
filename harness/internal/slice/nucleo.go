@@ -439,6 +439,12 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if vnota != "" {
 		motivo = vnota
 	}
+	// Exit 127: la caja no encontró un comando. Es infraestructura, no el worker: no gasta una
+	// reparación ni cuenta para «sin progreso».
+	if infra := infraestructura(code, checks); infra != "" {
+		e.Recibo, e.Fase = nil, Implementando
+		return e, out, errors.Join(r.save(e), fmt.Errorf("%s; infraestructura (%s, exit 127): no cuenta como reparación; `orq check --caja` dice qué no ve la caja", motivo, infra))
+	}
 	firma := firmaDe(out + FalloDeChecks(checks))
 	sinProgreso := e.HeadFallo == head
 	if !sinProgreso && e.HeadFallo != "" && firma == e.FirmaFallo {
@@ -453,6 +459,20 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 		return e, out, r.bloquear(e, fmt.Sprintf("%s; %d verificaciones fallidas en %s", motivo, e.Fallos, e.Attempt()))
 	}
 	return e, out, errors.Join(r.save(e), fmt.Errorf("%s (reparación %d de %d)", motivo, e.Fallos, MaxFallos-1))
+}
+
+// infraestructura dice qué salió con 127 (comando no encontrado): el examen o un check; "" si nada.
+func infraestructura(code int, checks []ResultadoCheck) string {
+	var xs []string
+	if code == 127 {
+		xs = append(xs, "examen")
+	}
+	for _, c := range checks {
+		if c.Resultado == CheckFallo && c.Exit == 127 {
+			xs = append(xs, "check "+c.Nombre)
+		}
+	}
+	return strings.Join(xs, ", ")
 }
 
 // Causas de un intento nuevo: el worker falló, o el examen estaba mal y se corrigió.

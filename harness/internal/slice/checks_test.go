@@ -111,3 +111,38 @@ func TestCheckSinHerramientaEsInfraestructura(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// An exit-127 result (check or exam) is the box, not the worker: it fails verificar, but it does not
+// use up a repair and never reaches BLOQUEADO «sin progreso», however often it repeats.
+func TestInfraestructuraNoGastaReparacion(t *testing.T) {
+	for _, caso := range []struct {
+		nombre string
+		checks []config.Check
+		cmd    string
+	}{
+		{"check", []config.Check{{Nombre: "lint", Cmd: "orq_no_such_tool -l ."}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"}}, examen},
+		{"examen", nil, "test -f .ok && " + examen + " || orq_no_such_tool"},
+	} {
+		t.Run(caso.nombre, func(t *testing.T) {
+			r := repoDeJuguete(t)
+			r.Checks = caso.checks
+			e, _, err := r.Abrir("01", "total", "tests/s01.sh", caso.cmd, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Sano: "test -f total.txt"}, t0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			commitEn(t, e.Worktree, "total.txt", "170\n")
+			for i := range MaxFallos + 1 {
+				e, _, err = r.Verificar("", t0)
+				if err == nil || !strings.Contains(err.Error(), "infraestructura") || strings.Contains(err.Error(), "(reparación") {
+					t.Fatalf("run %d: err = %v", i, err)
+				}
+				if e.Fase != Implementando || e.Fallos != 0 || e.HeadFallo != "" {
+					t.Fatalf("run %d: fase %s fallos %d head %q", i, e.Fase, e.Fallos, e.HeadFallo)
+				}
+			}
+			if n := len(leerJSONL[Recibo](r.recibosPath())); n != MaxFallos+1 {
+				t.Fatalf("each run still leaves its failed receipt: %d", n)
+			}
+		})
+	}
+}
