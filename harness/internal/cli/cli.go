@@ -36,7 +36,8 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq config ver      configuración efectiva (terminal herdr|orca, agente/modelo/esfuerzo y cuenta por rol y
                       por dificultad de worker, recursos) y de dónde salió cada valor: defecto,
                       ~/.config/orq/config.json o <raíz>/.orq/config.json
-  orq init [--modo=mejora|nuevo] detecta modo y stack, instala hooks y lista skills
+  orq init [--modo=mejora|nuevo] detecta modo y stack, escribe los checks, instala hooks y lista skills
+  orq check                     corre lint, tipos, pruebas y guardias del proyecto aquí (el worker, antes de pedir verificación)
   orq skills [instalar [NOMBRE...]|fijar|verificar]   skills del proyecto por rol, solo en su .claude/skills;
                                  fijar guarda su huella; verificar avisa FALTA/DEP/CAMBIO/NUNCA
   orq skill ROL                  guía del rol (atena|orquestador|scout|worker|verificador) y sus skills
@@ -128,6 +129,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runInit(args[1:], stdout, stderr)
 	case "skills":
 		return runSkills(args[1:], stdout, stderr)
+	case "check":
+		return runCheck(stdout, stderr)
 	case "fase":
 		return runFase(stdout, stderr)
 	case "contexto":

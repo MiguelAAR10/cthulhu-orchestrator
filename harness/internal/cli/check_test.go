@@ -70,3 +70,54 @@ func TestInitSumaChecksSinPerderOtrasClaves(t *testing.T) {
 		t.Fatalf("config = %+v", c)
 	}
 }
+
+const checksMixtos = `{"checks": {"lint": {"cmd": "echo todo limpio"}, "types": {"cmd": "echo 'a.go:3: undefined: x'; exit 1"}, "tests": {"omitir": "sin script test"}}}`
+
+func TestCheckImprimeCadaResultado(t *testing.T) {
+	root := repoCLI(t)
+	escribirEn(t, root, ".orq/config.json", checksMixtos)
+	t.Chdir(root)
+	out, _, code := run(t, "check")
+	if code != 1 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	contiene(t, out, "lint  paso  · echo todo limpio", "types  fallo (exit 1)", "a.go:3: undefined: x",
+		"tests  omitido: sin script test", "1 pasan · 1 fallan · 1 omitidos (omitido no cuenta como pasado)")
+}
+
+func TestCheckSinBloque(t *testing.T) {
+	root := repoCLI(t)
+	t.Chdir(root)
+	_, errs, code := run(t, "check")
+	if code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	contiene(t, errs, "sin checks", "orq init")
+}
+
+func TestCheckEnClonLeeConfigDelProyecto(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	if _, errs, code := run(t, append(append([]string{}, abrirBase...), "--reporte", "out.tap", "--formato", "tap")...); code != 0 {
+		t.Fatalf("abrir: %d %s", code, errs)
+	}
+	run(t, "slice", "tomar", "w1")
+	wt := filepath.Join(filepath.Dir(root), "wt", "tienda-s01")
+	escribirEn(t, wt, "solo-en-clon", "x")
+	escribirEn(t, root, ".orq/config.json", `{"checks": {"lint": {"cmd": "test -f solo-en-clon"}, "types": {"cmd": "true"}, "tests": {"cmd": "true"}}}`)
+	t.Setenv("ORQ_ROOT", "")
+	t.Chdir(wt)
+	out, errs, code := run(t, "check")
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s%s", code, out, errs)
+	}
+	contiene(t, out, "lint  paso", "3 pasan · 0 fallan · 0 omitidos")
+}
+
+func TestGuiaWorkerPideOrqCheck(t *testing.T) {
+	raw, err := guias.ReadFile("guias/worker.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contiene(t, string(raw), "`orq check`", "until it passes", "Before REQUEST VERIFICATION")
+}
