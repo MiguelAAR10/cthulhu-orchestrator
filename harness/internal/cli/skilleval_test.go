@@ -85,3 +85,21 @@ func TestSkillEvalNoDisponible(t *testing.T) {
 		t.Fatalf("no se guarda nada: %q", out)
 	}
 }
+
+func TestSkillCompararCLI(t *testing.T) {
+	t.Setenv("ORQ_STATE", t.TempDir())
+	os.WriteFile(filepath.Join(os.Getenv("ORQ_STATE"), "skill-notas.jsonl"), []byte(
+		`{"skill":"a","hash":"aaaa1111","tipo":"go","nota":0.6,"fecha":"2026-11-19T10:00:00Z"}`+"\n"+
+			`{"skill":"a","hash":"bbbb2222","tipo":"go","nota":0.8,"fecha":"2026-11-19T11:00:00Z"}`+"\n"), 0o644)
+	out, errs, code := run(t, "skill", "comparar", "aaaa1111", "bbbb2222")
+	if code != 0 || !strings.HasPrefix(out, "conservar: nota 0.60 → 0.80 (+0.20 > margen 0.10)") {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	out, _, code = run(t, "skill", "comparar", "aaaa1111", "bbbb2222", "--margen", "0.5")
+	if code != 0 || !strings.HasPrefix(out, "descartar: nota 0.60 → 0.80 (+0.20 ≤ margen 0.50)") {
+		t.Fatalf("%d %q", code, out)
+	}
+	if _, _, code := run(t, "skill", "comparar", "aaaa1111"); code != 1 {
+		t.Fatal("sin el hash nuevo")
+	}
+}

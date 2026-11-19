@@ -71,7 +71,7 @@ func runSkillEval(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "orq skill eval:", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "%s %s tipo %s: nota %.2f en %d corridas · USD %.2f · claude %s%s\n", nombre, corto(hash), n.Tipo, n.Nota, n.Corridas, n.CostoUSD, n.Claude, parcial(n))
+	fmt.Fprintf(stdout, "%s %s tipo %s: nota %.2f en %d corridas · USD %.2f · claude %s%s\n", nombre, skilleval.Corto(hash), n.Tipo, n.Nota, n.Corridas, n.CostoUSD, n.Claude, parcial(n))
 	for _, c := range r.Casos {
 		fmt.Fprintf(stdout, "  %s %.2f\n", c.Nombre, c.Nota)
 	}
@@ -104,14 +104,33 @@ func runSkillNotas(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	for _, n := range ls {
-		fmt.Fprintf(stdout, "%s %s %s %.2f %d corridas USD %.2f claude %s %s%s\n", n.Skill, corto(n.Hash), n.Tipo, n.Nota, n.Corridas, n.CostoUSD, n.Claude, n.Fecha.Format(time.RFC3339), parcial(n))
+		fmt.Fprintf(stdout, "%s %s %s %.2f %d corridas USD %.2f claude %s %s%s\n", n.Skill, skilleval.Corto(n.Hash), n.Tipo, n.Nota, n.Corridas, n.CostoUSD, n.Claude, n.Fecha.Format(time.RFC3339), parcial(n))
 	}
 	return 0
 }
 
-func corto(h string) string {
-	if len(h) > 12 {
-		return h[:12]
+// runSkillComparar dice si la versión nueva de una skill se conserva o se descarta.
+func runSkillComparar(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("skill comparar", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	tipo := fs.String("tipo", "", "tipo de tarea de las dos notas")
+	margen := fs.Float64("margen", 0.1, "cuánto debe subir la nota para conservar la versión nueva")
+	if len(args) < 2 || fs.Parse(args[2:]) != nil {
+		fmt.Fprintln(stderr, "uso: orq skill comparar HASH_VIEJO HASH_NUEVO [--tipo T] [--margen 0.1]")
+		return 1
 	}
-	return h
+	ns, err := skilleval.Notas(state.Dir())
+	if err == nil {
+		var v skilleval.Veredicto
+		if v, err = skilleval.Comparar(ns, args[0], args[1], *tipo, *margen); err == nil {
+			que, cmp, cola := "descartar", "≤", ": el juez es ruidoso, la diferencia no prueba una mejora"
+			if v.Conservar {
+				que, cmp, cola = "conservar", ">", ""
+			}
+			fmt.Fprintf(stdout, "%s: nota %.2f → %.2f (%+.2f %s margen %.2f)%s\n", que, v.Viejo.Nota, v.Nuevo.Nota, v.Delta, cmp, *margen, cola)
+			return 0
+		}
+	}
+	fmt.Fprintln(stderr, "orq skill comparar:", err)
+	return 1
 }

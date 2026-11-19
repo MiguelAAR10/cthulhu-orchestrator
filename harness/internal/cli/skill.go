@@ -49,6 +49,8 @@ func runSkill(args []string, stdout, stderr io.Writer) int {
 			return runSkillEval(args[1:], stdout, stderr)
 		case "notas":
 			return runSkillNotas(args[1:], stdout, stderr)
+		case "comparar":
+			return runSkillComparar(args[1:], stdout, stderr)
 		}
 	}
 	if !slices.Contains(perfil.Roles, rol) {

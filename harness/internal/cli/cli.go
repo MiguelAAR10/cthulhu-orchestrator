@@ -44,6 +44,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq skill ROL                  guía del rol (atena|orquestador|scout|worker|verificador) y sus skills
   orq skill eval DIR --max-usd N [--tipo T]   nota de una skill con claude plugin eval (gasta dinero real)
   orq skill notas [--tipo T]     notas por skill y tipo, el hash más nuevo primero
+  orq skill comparar VIEJO NUEVO [--margen 0.1] [--tipo T]   conservar o descartar una edición por su nota
   orq fase                       T·Traducción, C·Contexto, A·Análisis, D1·Desarrollo, D2·Documentación
   orq contexto                   hook SessionStart: rol, fase, relevo y memoria
   orq doc                        ficha viva del proyecto (.orq/PROYECTO.md) con un modelo barato
