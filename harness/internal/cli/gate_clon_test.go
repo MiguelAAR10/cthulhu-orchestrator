@@ -65,6 +65,7 @@ func TestSliceDelOrquestadorSeNiegaEnUnWorker(t *testing.T) {
 		{"slice", "verificar"}, {"slice", "podar", "w-front"}, {"slice", "cerrar", "--aceptado"},
 		{"slice", "--slice", "01", "tomar", "w1"}, {"slice", "abrir", "02"}, {"slice", "examen", "x", "--aprobado", "y"},
 		{"slice", "aprobar", "01"}, {"slice", "tarjeta", "01", "--archivo", "t.md"},
+		{"historia", "pausar", "h"}, {"historia", "abrir", "h", "--titulo", "x"}, {"pausar", "x"}, {"reanudar"},
 	} {
 		_, errs, code := run(t, args...)
 		if code == 0 || !strings.Contains(errs, "belongs to the orchestrator") {

@@ -60,11 +60,14 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq relevo [--solo-archivo] ROL   escribe .orq/relevo-ROL.md y abre una sesión fresca
   orq slice abrir NN --titulo T --test RUTA --cmd "CMD" [--bundle a,b] [--sano "CMD"] [--alcance rutas] [--sin-scouts "motivo"]
          (--reporte F --formato tap|junit|gotest-json | --sin-conteo "motivo") [--permite-omitir]
-         [--ruta fix|slice] [--timeout S]
+         [--ruta fix|slice] [--timeout S] [--historia H]
                                  descubre, exige base sana y rojo por aserción; crea el clon del worker.
                                  Cuenta pruebas por defecto; el examen corre siempre en la caja, sobre una copia
                                  limpia del commit; --ruta fix = un worker, sin equipo ni plan
                                  (--aislado se acepta y no hace nada)
+  orq historia abrir H --titulo T   una historia grande; sus hijos: orq slice abrir NN --historia H
+  orq historia pausar H | reanudar H   en pausa no se lanzan workers de sus hijos; nada se destruye
+  orq pausar ["motivo"] | orq reanudar   lo mismo para todo el proyecto
   orq slice tarjeta [NN] [--archivo tarjeta.md]   pone o muestra la tarjeta de entendimiento: ## Historia (≤3 líneas),
                                  Fuera, Examen, Zonas, Preguntas (≤5 líneas cada una, ≤400 palabras); aprobada, se congela
   orq slice aprobar [NN]         el Owner, en su terminal, aprueba la tarjeta; sin ella no se lanza un worker (un fix no la pide)
@@ -129,6 +132,10 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		return runWatch(stdout, stderr)
 	case "status":
 		return runStatus(stdout, stderr)
+	case "historia":
+		return runHistoria(args[1:], stdout, stderr)
+	case "pausar", "reanudar":
+		return runPausa(args[0] == "pausar", args[1:], stdout, stderr)
 	case "halt":
 		return runHalt(args[1:], stdout, stderr)
 	case "config":
@@ -294,6 +301,13 @@ func runStatus(stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	p, errP := abrirProyecto()
+	if errP == nil {
+		alertasArriba(p, stdout)
+		if motivo, ok := p.Slices().PausaGlobal(); ok {
+			fmt.Fprintf(stdout, "PAUSA: %s · no se lanzan workers · orq reanudar\n", motivo)
+		}
+	}
 	fmt.Fprintf(stdout, "límites: %s\n", limits.DefaultPath())
 	fmt.Fprintf(stdout, "  max_workers=%d  quota_scratch=%.0f GB  protegidos=%s\n", *l.MaxWorkers, *l.Scratch.QuotaGB, strings.Join(l.Protected, ", "))
 	for p, min := range l.MinFreeGB {
@@ -310,7 +324,8 @@ func runStatus(stdout, stderr io.Writer) int {
 	} else {
 		fmt.Fprintln(stdout, "HALT: no")
 	}
-	if p, err := abrirProyecto(); err == nil {
+	if errP == nil {
+		slicesPorHistoria(p, stdout)
 		tarjetasPorAprobar(p, time.Now(), stdout)
 		esperanOwner(p, time.Now(), stdout)
 	}

@@ -49,6 +49,11 @@ type Skills struct {
 	Minimo *float64 `json:"minimo,omitempty"`
 }
 
+// Alertas tunes the drift alerts of orq status.
+type Alertas struct {
+	SinProgresoMin int `json:"sin_progreso_min"` // minutes without a commit or journal event before a worker is flagged
+}
+
 // Check es un comando del proyecto que decide si el código es correcto (lint, tipos, pruebas o una
 // guardia extra). Lleva el comando o, si el proyecto no lo tiene, por qué se omite: omitido no es pasado.
 type Check struct {
@@ -142,6 +147,7 @@ type Config struct {
 	Recursos Recursos                     `json:"recursos"`
 	Checks   map[string]Check             `json:"checks,omitempty"` // nombre → comando; ver ChecksEnOrden
 	Skills   Skills                       `json:"skills"`
+	Alertas  Alertas                      `json:"alertas"`
 
 	origen   map[string]string // clave con puntos → de dónde salió
 	archivos []Archivo
@@ -186,6 +192,7 @@ func Defecto() Config {
 			"alta":  {"claude": {Modelo: "opus", Esfuerzo: "high"}},
 		},
 		Recursos: Recursos{RAMPorAgenteGB: 1.5, ReservaRAMGB: 2, CPUPorAgente: 1, ReservaCPUs: 1, CargaMax: 1.5},
+		Alertas:  Alertas{SinProgresoMin: 30},
 	}
 }
 
@@ -407,6 +414,9 @@ func (c Config) validar() error {
 	}
 	if err := c.validarChecks(); err != nil {
 		return err
+	}
+	if c.Alertas.SinProgresoMin <= 0 {
+		return fmt.Errorf("alertas.sin_progreso_min debe ser mayor que 0, no %d", c.Alertas.SinProgresoMin)
 	}
 	if m := c.Skills.Minimo; m != nil && (*m < 0 || *m > 1) {
 		return fmt.Errorf("skills.minimo debe estar entre 0 y 1, no %v", *m)

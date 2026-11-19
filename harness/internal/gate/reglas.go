@@ -171,6 +171,9 @@ func soloOrquestador(c simple) bool {
 			a = append(a, s)
 		}
 	}
+	if len(a) > 0 && hay(a[:1], "pausar", "reanudar") {
+		return true
+	}
 	if len(a) < 2 {
 		return false
 	}
@@ -191,6 +194,8 @@ func soloOrquestador(c simple) bool {
 		}
 	case "halt":
 		return hay(a[1:], "--clear")
+	case "historia":
+		return hay(a[1:2], "abrir", "pausar", "reanudar")
 	}
 	return false
 }

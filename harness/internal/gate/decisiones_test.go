@@ -81,6 +81,10 @@ func TestDecisiones(t *testing.T) {
 		{bash("find . -name .git -exec rm -rf {} +"), destruye},
 		{bash(`orq sl""ice cerrar --aceptado`), soloOrq},
 		{bash(`o""rq halt --clear`), soloOrq},
+		{bash("orq historia pausar h"), soloOrq},
+		{bash("orq historia abrir h --titulo x"), soloOrq},
+		{bash("orq pausar almuerzo"), soloOrq},
+		{bash("orq reanudar"), soloOrq},
 		{bash(`cl""aude -p "haz otra cosa"`), lanza},
 		{bash("npx @anthropic-ai/claude-code -p hola"), lanza},
 		// estado y configuración del harness
