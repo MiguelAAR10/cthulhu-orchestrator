@@ -67,6 +67,8 @@ Until step 7, Codex workers run with no hook and no box: the pilot says so and u
 
 **Step 1b (added 2026-11-18):** `staticcheck` (pinned) in `make ci`; one attack catalog test (`TestAtaques`) with a row per known attack (audit, reviews, exam trap), all blocked; mutation testing of orq's critical packages (`gate`, `slice`, `sandbox`) with `gremlins` (pinned), report first with a baseline, then the score may not drop; surviving mutants there are killed or justified in writing. Dev tools live in `~/go/bin`; orq stays standard library only. Mutation on the worker's diff for built projects: step 5, as a receipt report.
 
+**Reorder (Owner, 2026-11-18):** the worker box (B6) moves to right after step 1b, as step 2, because four reviews each found a new way out of the command-text gate, and the box is also what lets workers share dependencies read-only (disk/RAM scout, `docs/harness-v2/working/research/disk-memory-2026-11-18.md`). Until the box lands, the gate stops mistakes, not deliberate escapes. B6 needs the Owner to run `claude setup-token` and place the token where orq reads it; never through chat. Measurement (2a) and later steps shift by one.
+
 **Frozen:** pub/sub bus and hive memory, second orchestrator, U1 `orq setup`, L1 translation, Orca adapter work, C6 and W1 as separate pieces (their useful parts are in 2b), full Q1 quality profile, mutation and held-out tests (until the pilot shows wrong acceptances), model-compacted memory and injected "instincts". Not claimed: catching cheaters as the core value; being the only verifier.
 
 ## Activities
