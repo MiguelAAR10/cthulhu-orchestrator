@@ -1220,3 +1220,35 @@ func TestMetricasRegistrosViejosSonSlice(t *testing.T) {
 		t.Fatalf("%+v", m)
 	}
 }
+
+// Worker code that rewrites the exam's bundle while the exam runs, so that the exam passes, is a
+// trap even though the committed bundle never changed (mutation report, step 1b).
+func TestExamenModificadoMientrasCorreBloquea(t *testing.T) {
+	r := repoConReporte(t, "sh ./app.sh && cmp -s total.txt tests/datos.txt\n")
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "app.sh", "echo 999 > tests/datos.txt; echo 999 > total.txt\n")
+	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "mientras corría") {
+		t.Fatalf("got %v", err)
+	}
+	if e, _ = r.Load(); e.Fase != Bloqueado {
+		t.Fatalf("fase %s", e.Fase)
+	}
+}
+
+// A report the worker committed does not count when the exam ends before writing its own: the old
+// report is deleted in the box before the exam runs (mutation report, step 1b).
+func TestReporteCommiteadoPorElWorkerNoCuenta(t *testing.T) {
+	r := repoConReporte(t, "[ -f app.sh ] && . ./app.sh\n"+tapReal)
+	e, _, err := abrirConReporte(r, Opciones{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "out.tap", "ok 1 total\n")
+	commitEn(t, e.Worktree, "app.sh", "exit 0\n")
+	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "0 pruebas") {
+		t.Fatalf("got %v", err)
+	}
+}
