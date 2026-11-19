@@ -55,6 +55,9 @@ func (p Proyecto) argsRol(ctx context.Context, a config.Agente, nombre string) [
 // fijaron; lo demás sale de la configuración. Repetirlo tras una interrupción no abre otra sesión.
 func (p Proyecto) LanzarRol(ctx context.Context, ses map[string]canal.Sesion, rol string, pedido config.Agente) (canal.Sesion, config.Agente, error) {
 	a := p.Cfg.ParaRol(rol, pedido)
+	if err := config.ValidarKind(a.Kind); err != nil {
+		return canal.Sesion{}, a, err
+	}
 	gen := ses[rol].Gen + 1
 	nombre := rol + "-" + orqdir.Slug(p.Root)
 	if gen > 1 {

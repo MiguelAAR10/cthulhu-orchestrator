@@ -25,7 +25,7 @@ import (
 
 // Agente es con qué corre un rol o un worker.
 type Agente struct {
-	Kind     string `json:"agente,omitempty"` // claude | codex
+	Kind     string `json:"agente,omitempty"` // claude
 	Modelo   string `json:"modelo,omitempty"`
 	Esfuerzo string `json:"esfuerzo,omitempty"`
 	// Entorno son variables de cuenta que el lanzador pone en el panel y que también usa la llamada
@@ -42,12 +42,56 @@ type Recursos struct {
 	CargaMax       float64 `json:"carga_max"`         // carga de 1 min por núcleo a partir de la cual no se lanza
 }
 
+// Check es un comando del proyecto que decide si el código es correcto (lint, tipos, pruebas o una
+// guardia extra). Lleva el comando o, si el proyecto no lo tiene, por qué se omite: omitido no es pasado.
+type Check struct {
+	Nombre string `json:"-"`
+	Cmd    string `json:"cmd,omitempty"`
+	Omitir string `json:"omitir,omitempty"`
+}
+
+// ChecksBase son los que todo bloque checks declara; cualquier otro nombre es una guardia extra.
+var ChecksBase = []string{"lint", "types", "tests"}
+
+var nombreCheck = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+// ChecksEnOrden devuelve lint, types y tests, y después las guardias extra por nombre.
+func (c Config) ChecksEnOrden() []Check {
+	var extra []string
+	for n := range c.Checks {
+		if !slices.Contains(ChecksBase, n) {
+			extra = append(extra, n)
+		}
+	}
+	sort.Strings(extra)
+	var out []Check
+	for _, n := range append(slices.Clone(ChecksBase), extra...) {
+		if ch, ok := c.Checks[n]; ok {
+			ch.Nombre = n
+			out = append(out, ch)
+		}
+	}
+	return out
+}
+
+// ValidarKind acepta solo los agentes que orq arranca. Codex no se usa nunca, en ningún rol.
+func ValidarKind(kind string) error {
+	switch {
+	case kind == "codex":
+		return errors.New(`agente "codex": Codex no se usa en ningún rol ni worker (regla del Owner, 2026-11-18); usa claude`)
+	case !slices.Contains(Kinds, kind):
+		return fmt.Errorf("agente %q: usa %s", kind, strings.Join(Kinds, "|"))
+	}
+	return nil
+}
+
 // Config es la configuración efectiva.
 type Config struct {
 	Terminal string                       `json:"terminal"` // herdr | orca
 	Roles    map[string]Agente            `json:"roles"`
 	Workers  map[string]map[string]Agente `json:"workers"` // dificultad → agente → modelo y esfuerzo
 	Recursos Recursos                     `json:"recursos"`
+	Checks   map[string]Check             `json:"checks,omitempty"` // nombre → comando; ver ChecksEnOrden
 
 	origen   map[string]string // clave con puntos → de dónde salió
 	archivos []Archivo
@@ -67,7 +111,7 @@ var (
 	// Dificultades de una tarea de worker.
 	Dificultades = []string{"baja", "media", "alta"}
 	// Kinds son las CLI de agente que orq sabe arrancar.
-	Kinds = []string{"claude", "codex"}
+	Kinds = []string{"claude"}
 )
 
 // OrigenDefecto marca un valor que ningún archivo cambió.
@@ -81,15 +125,15 @@ func Defecto() Config {
 			"atena":        {Kind: "claude", Modelo: "opus", Esfuerzo: "medium"},
 			"orquestador":  {Kind: "claude", Modelo: "sonnet", Esfuerzo: "medium"},
 			"planificador": {Kind: "claude", Modelo: "opus", Esfuerzo: "high"},
-			"astra":        {Kind: "codex", Modelo: "gpt-6-astra", Esfuerzo: "high"},
+			"astra":        {Kind: "claude", Modelo: "opus", Esfuerzo: "high"},
 			"verificador":  {Kind: "claude", Modelo: "sonnet", Esfuerzo: "medium"},
 			"scout":        {Kind: "claude", Modelo: "haiku", Esfuerzo: "medium"},
 			"escriba":      {Kind: "claude", Modelo: "haiku"},
 		},
 		Workers: map[string]map[string]Agente{
-			"baja":  {"claude": {Modelo: "haiku", Esfuerzo: "medium"}, "codex": {Modelo: "gpt-6-luna", Esfuerzo: "medium"}},
-			"media": {"claude": {Modelo: "sonnet", Esfuerzo: "medium"}, "codex": {Modelo: "gpt-6.1-sol", Esfuerzo: "medium"}},
-			"alta":  {"claude": {Modelo: "opus", Esfuerzo: "high"}, "codex": {Modelo: "gpt-6.1-sol", Esfuerzo: "high"}},
+			"baja":  {"claude": {Modelo: "haiku", Esfuerzo: "medium"}},
+			"media": {"claude": {Modelo: "sonnet", Esfuerzo: "medium"}},
+			"alta":  {"claude": {Modelo: "opus", Esfuerzo: "high"}},
 		},
 		Recursos: Recursos{RAMPorAgenteGB: 1.5, ReservaRAMGB: 2, CPUPorAgente: 1, ReservaCPUs: 1, CargaMax: 1.5},
 	}
@@ -270,8 +314,8 @@ func (c Config) validar() error {
 		if !slices.Contains(Roles, rol) {
 			return fmt.Errorf("roles.%s: rol desconocido; los roles son %s", rol, strings.Join(Roles, ", "))
 		}
-		if !slices.Contains(Kinds, a.Kind) {
-			return fmt.Errorf("roles.%s.agente %q: usa %s", rol, a.Kind, strings.Join(Kinds, "|"))
+		if err := ValidarKind(a.Kind); err != nil {
+			return fmt.Errorf("roles.%s: %w", rol, err)
 		}
 		if strings.TrimSpace(a.Modelo) == "" {
 			return fmt.Errorf("roles.%s.modelo vacío", rol)
@@ -290,8 +334,8 @@ func (c Config) validar() error {
 			return fmt.Errorf("workers.%s: dificultad desconocida; usa %s", dif, strings.Join(Dificultades, "|"))
 		}
 		for kind, a := range porKind {
-			if !slices.Contains(Kinds, kind) {
-				return fmt.Errorf("workers.%s.%s: agente desconocido; usa %s", dif, kind, strings.Join(Kinds, "|"))
+			if err := ValidarKind(kind); err != nil {
+				return fmt.Errorf("workers.%s.%s: %w", dif, kind, err)
 			}
 			if a.Kind != "" && a.Kind != kind {
 				return fmt.Errorf("workers.%s.%s.agente no se escribe: el agente es la clave", dif, kind)
@@ -311,6 +355,9 @@ func (c Config) validar() error {
 			}
 		}
 	}
+	if err := c.validarChecks(); err != nil {
+		return err
+	}
 	r := c.Recursos
 	switch {
 	case r.RAMPorAgenteGB <= 0:
@@ -321,6 +368,26 @@ func (c Config) validar() error {
 		return errors.New("recursos: una reserva no puede ser negativa")
 	case r.CargaMax <= 0:
 		return errors.New("recursos.carga_max debe ser mayor que 0")
+	}
+	return nil
+}
+
+func (c Config) validarChecks() error {
+	if len(c.Checks) == 0 {
+		return nil
+	}
+	for _, n := range ChecksBase {
+		if _, ok := c.Checks[n]; !ok {
+			return fmt.Errorf("falta checks.%s: el bloque checks declara lint, types y tests (con cmd u omitir)", n)
+		}
+	}
+	for n, ch := range c.Checks {
+		if !nombreCheck.MatchString(n) {
+			return fmt.Errorf("checks.%s: nombre inválido; usa minúsculas, cifras y guiones", n)
+		}
+		if (strings.TrimSpace(ch.Cmd) == "") == (strings.TrimSpace(ch.Omitir) == "") {
+			return fmt.Errorf("checks.%s: lleva cmd u omitir (el motivo), uno de los dos", n)
+		}
 	}
 	return nil
 }

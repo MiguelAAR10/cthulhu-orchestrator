@@ -10,6 +10,7 @@ import (
 
 	"orq/internal/agente"
 	"orq/internal/canal"
+	"orq/internal/config"
 	"orq/internal/gitx"
 	"orq/internal/limits"
 	"orq/internal/orqdir"
@@ -49,8 +50,8 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	if err := p.Dentro(); err != nil {
 		return "", false, err
 	}
-	if w.Agente != "claude" && w.Agente != "codex" {
-		return "", false, errors.New("--agente claude|codex")
+	if err := config.ValidarKind(w.Agente); err != nil {
+		return "", false, fmt.Errorf("--agente: %w", err)
 	}
 	l, err := limits.Load(limits.DefaultPath())
 	if err != nil {

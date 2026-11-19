@@ -179,7 +179,7 @@ func TestArranqueTardioSeAdoptaYRecibeElContratoUnaVez(t *testing.T) {
 	ctx := context.Background()
 	// El terminal venció pero el agente arrancó: Estado lo resuelve, el contrato se entrega.
 	term.ArrancaTarde = true
-	nombre, ya, err := p.LanzarWorker(ctx, PedidoWorker{Agente: "codex"})
+	nombre, ya, err := p.LanzarWorker(ctx, PedidoWorker{Agente: "claude"})
 	if err != nil || ya || len(term.Ops("arrancar")) != 1 || len(term.Ops("avisar")) != 1 {
 		t.Fatalf("%v %v %+v", ya, err, term.Llamadas)
 	}
@@ -337,5 +337,19 @@ func TestLanzarWorkerRespetaLaCapacidadDeLaMaquina(t *testing.T) {
 	p.Medir = maquinaDe(sysinfo.Maquina{MemTotalGB: 8, MemDisponibleGB: 1, CPUs: 8}, 1)
 	if _, ya, err := p.LanzarWorker(ctx, PedidoWorker{Agente: "claude"}); err != nil || !ya {
 		t.Fatalf("repetir con la máquina llena no debe fallar: %v %v", ya, err)
+	}
+}
+
+func TestCodexNoSeLanza(t *testing.T) {
+	p, term, _ := proyectoDePrueba(t, "")
+	ctx := context.Background()
+	if _, _, err := p.LanzarWorker(ctx, PedidoWorker{Agente: "codex"}); err == nil || !strings.Contains(err.Error(), "regla del Owner") {
+		t.Fatalf("worker codex: %v", err)
+	}
+	if _, _, err := p.LanzarRol(ctx, nil, "astra", config.Agente{Kind: "codex"}); err == nil || !strings.Contains(err.Error(), "regla del Owner") {
+		t.Fatalf("astra codex: %v", err)
+	}
+	if len(term.Ops("crear")) != 0 {
+		t.Fatalf("opened a pane: %+v", term.Llamadas)
 	}
 }

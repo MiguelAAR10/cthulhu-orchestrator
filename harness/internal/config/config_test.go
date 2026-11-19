@@ -31,7 +31,7 @@ func TestDefaultsIgualesAHoy(t *testing.T) {
 	roles := map[string][3]string{
 		"orquestador":  {"claude", "sonnet", "medium"},
 		"planificador": {"claude", "opus", "high"},
-		"astra":        {"codex", "gpt-6-astra", "high"},
+		"astra":        {"claude", "opus", "high"},
 		"atena":        {"claude", "opus", "medium"},
 	}
 	for rol, want := range roles {
@@ -42,19 +42,11 @@ func TestDefaultsIgualesAHoy(t *testing.T) {
 	}
 	workers := []struct{ kind, dif, modelo, esfuerzo string }{
 		{"claude", "", "sonnet", "medium"}, {"claude", "baja", "haiku", "medium"}, {"claude", "media", "sonnet", "medium"}, {"claude", "alta", "opus", "high"},
-		{"codex", "", "gpt-6.1-sol", "medium"}, {"codex", "baja", "gpt-6-luna", "medium"}, {"codex", "media", "gpt-6.1-sol", "medium"}, {"codex", "alta", "gpt-6.1-sol", "high"},
 	}
 	for _, w := range workers {
 		if m, e := c.Worker(w.kind, w.dif); m != w.modelo || e != w.esfuerzo {
 			t.Errorf("worker %s/%s = %s %s, antes %s %s", w.kind, w.dif, m, e, w.modelo, w.esfuerzo)
 		}
-	}
-	// Otro proveedor que el del rol, sin modelo: el de ese proveedor (antes: claude→opus, codex→gpt-6.1-sol).
-	if a := c.ParaRol("astra", Agente{Kind: "claude"}); a.Modelo != "opus" || a.Esfuerzo != "high" {
-		t.Errorf("astra con claude = %+v", a)
-	}
-	if a := c.ParaRol("orquestador", Agente{Kind: "codex"}); a.Modelo != "gpt-6.1-sol" {
-		t.Errorf("orquestador con codex = %+v", a)
 	}
 	if c.Rol("escriba").Modelo != "haiku" {
 		t.Errorf("escriba = %+v", c.Rol("escriba"))
@@ -71,7 +63,7 @@ func TestProyectoGanaAlUsuarioCampoPorCampoYGuardaElOrigen(t *testing.T) {
 		t.Fatal(err)
 	}
 	astra := c.Rol("astra")
-	if astra.Kind != "codex" || astra.Modelo != "m-proyecto" || astra.Esfuerzo != "low" {
+	if astra.Kind != "claude" || astra.Modelo != "m-proyecto" || astra.Esfuerzo != "low" {
 		t.Fatalf("astra = %+v", astra)
 	}
 	for clave, want := range map[string]string{
@@ -160,7 +152,7 @@ func TestExpandirGuias(t *testing.T) {
 	t.Setenv("ORQ_ESCRIBA_MODELO", "")
 	c, _ := CargarDe()
 	got := c.Expandir("plan con {{rol:planificador}}; astra {{rol:astra}}; {{workers}}")
-	for _, want := range []string{"plan con opus", "astra gpt-6-astra", "claude baja=haiku/medium", "codex baja=gpt-6-luna/medium"} {
+	for _, want := range []string{"plan con opus", "astra opus", "claude baja=haiku/medium"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("falta %q en %q", want, got)
 		}
@@ -178,7 +170,7 @@ func TestCuentaPorRolYPorDificultad(t *testing.T) {
 	ruta := escribir(t, filepath.Join(t.TempDir(), "c.json"), `{
 	  "roles": {"atena": {"entorno": {"CLAUDE_CONFIG_DIR": "~/.claude-alt"}},
 	            "planificador": {"entorno": {"CLAUDE_CONFIG_DIR": "/cuentas/principal"}},
-	            "astra": {"entorno": {"CODEX_HOME": "/cuentas/codex"}}},
+	            "astra": {"entorno": {"CLAUDE_CONFIG_DIR": "/cuentas/astra"}}},
 	  "workers": {"alta": {"claude": {"entorno": {"CLAUDE_CONFIG_DIR": "~/.claude-alt"}}}}}`)
 	c, err := CargarDe(ruta)
 	if err != nil {
@@ -197,13 +189,11 @@ func TestCuentaPorRolYPorDificultad(t *testing.T) {
 	if got := c.WorkerEntorno("claude", "alta")["CLAUDE_CONFIG_DIR"]; got != filepath.Join(home, ".claude-alt") {
 		t.Fatalf("worker alta = %q", got)
 	}
-	if len(c.WorkerEntorno("claude", "")) != 0 || len(c.WorkerEntorno("codex", "alta")) != 0 {
+	if len(c.WorkerEntorno("claude", "")) != 0 {
 		t.Fatal("la cuenta de una dificultad no se filtra a otra")
 	}
-	// Astra con --kind claude no hereda el CODEX_HOME del rol: usa la cuenta de claude para trabajo difícil.
-	otro := c.ParaRol("astra", Agente{Kind: "claude"})
-	if _, hay := otro.Entorno["CODEX_HOME"]; hay || otro.Entorno["CLAUDE_CONFIG_DIR"] == "" {
-		t.Fatalf("astra con claude = %v", otro.Entorno)
+	if got := c.ParaRol("astra", Agente{}).Entorno["CLAUDE_CONFIG_DIR"]; got != "/cuentas/astra" {
+		t.Fatalf("astra = %q", got)
 	}
 	if c.Origen("roles.atena.entorno.CLAUDE_CONFIG_DIR") != ruta {
 		t.Fatalf("origen = %s", c.Origen("roles.atena.entorno.CLAUDE_CONFIG_DIR"))
