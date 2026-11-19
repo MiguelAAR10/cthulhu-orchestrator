@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"orq/internal/app"
 	"orq/internal/canal"
 	"orq/internal/diario"
+	"orq/internal/slice"
 )
 
 // sliceVerdeCon opens slice 01 with extra flags, lets antes act in the worker clone, turns the exam
@@ -314,4 +316,19 @@ func TestVerificarCLIImprimeLosChecks(t *testing.T) {
 		t.Fatalf("verificar exit %d: %s", code, errs)
 	}
 	contiene(t, out, "checks: lint paso · types paso · tests omitido")
+}
+
+// A check the box could not run (exit 127) is infrastructure on the page, not a code failure.
+func TestDecidirExit127EsInfraestructura(t *testing.T) {
+	pd := &app.PaginaDecision{Pagina: &slice.Pagina{Alineacion: &slice.Alineacion{}, Estado: &slice.Estado{NN: "01",
+		Recibo: &slice.Recibo{Checks: []slice.ResultadoCheck{
+			{Nombre: "lint", Cmd: "gofmt -l .", Exit: 127, Resultado: slice.CheckFallo, Salida: "sh: gofmt: not found"},
+			{Nombre: "tests", Cmd: "go test ./...", Exit: 1, Resultado: slice.CheckFallo, Salida: "FAIL"},
+		}}}}}
+	var b strings.Builder
+	textoDecision(&b, "", seccionesDecision(pd))
+	contiene(t, b.String(), "!! lint infraestructura · exit 127 · gofmt -l . · la caja no ve el comando", "!! tests fallo · exit 1 · go test ./... · FAIL")
+	if strings.Contains(b.String(), "lint fallo") {
+		t.Fatalf("exit 127 shown as fallo:\n%s", b.String())
+	}
 }

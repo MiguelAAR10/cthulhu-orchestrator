@@ -76,6 +76,10 @@ func seccionesDecision(pd *app.PaginaDecision) []seccion {
 			checks.Lineas = append(checks.Lineas, alerta("%s omitido: %s (no cuenta como pasado)", c.Nombre, c.Motivo))
 		default:
 			primera, _, _ := strings.Cut(c.Salida, "\n")
+			if c.Exit == 127 {
+				checks.Lineas = append(checks.Lineas, alerta("%s infraestructura · exit 127 · %s · la caja no ve el comando: %s", c.Nombre, c.Cmd, primera))
+				continue
+			}
 			checks.Lineas = append(checks.Lineas, alerta("%s fallo · exit %d · %s · %s", c.Nombre, c.Exit, c.Cmd, primera))
 		}
 	}
