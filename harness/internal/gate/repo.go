@@ -141,7 +141,7 @@ func gitAjeno(c simple, raiz, rama string) (Decision, bool) {
 	case sub == "grep" && (conPrefijo(t, "-O", "--open-files-in-pager") || corta(t, 'O')):
 		return oculto("git grep --open-files-in-pager")
 	}
-	fuerza := hay(t, "-f", "--force", "-B", "-C", "--force-create") || corta(t, 'f') || corta(t, 'B') || corta(t, 'C')
+	fuerza := hay(t, "-f", "--force", "-B", "-C", "--force-create") || conPrefijo(t, "--force-create=") || corta(t, 'f') || corta(t, 'B') || corta(t, 'C')
 	switch {
 	case sub == "branch" && (hay(t, "-M", "-C") || corta(t, 'M') || corta(t, 'C')):
 		for _, x := range p {

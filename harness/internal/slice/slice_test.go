@@ -140,7 +140,7 @@ func TestFixtureTocadoEsTrampaYBloquea(t *testing.T) {
 
 func TestSinProgresoBloqueaYReintentarInvalidaRecibosViejos(t *testing.T) {
 	r := repoDeJuguete(t)
-	e := abrir(t, r)
+	abrir(t, r)
 	if _, _, err := r.Verificar("", t0); err == nil || strings.Contains(err.Error(), "BLOQUEADO") {
 		t.Fatalf("el primer fallo no debe bloquear: %v", err)
 	}
@@ -587,7 +587,7 @@ func TestPodarWorkerJuntado(t *testing.T) {
 func TestEquipoFrontBackTestEnUnSlice(t *testing.T) {
 	r := repoDeJuguete(t)
 	commitEn(t, r.Root, "tests/s01.sh", "cmp -s web/total.txt tests/datos.txt && grep -qx ok api/api.txt\n")
-	e, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
+	_, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -611,7 +611,7 @@ func TestEquipoFrontBackTestEnUnSlice(t *testing.T) {
 	os.MkdirAll(filepath.Join(back.Worktree, "web"), 0o755)
 	commitEn(t, back.Worktree, "web/hack.txt", "x\n") // back se sale de su zona
 	commitEn(t, test.Worktree, "tests/unit/t.sh", "true\n")
-	e, inf, err := r.Juntar("01")
+	_, inf, err := r.Juntar("01")
 	if err == nil || !strings.Contains(strings.Join(inf, "\n"), "w-back: tocó fuera de su zona") {
 		t.Fatalf("%v\n%s", err, strings.Join(inf, "\n"))
 	}
@@ -619,7 +619,7 @@ func TestEquipoFrontBackTestEnUnSlice(t *testing.T) {
 	Git(back.Worktree, "rm", "-q", "web/hack.txt")
 	Git(back.Worktree, "commit", "-qm", "deshace")
 	// lo neto ya queda dentro de su zona: se junta
-	if e, inf, err = r.Juntar("01"); err != nil {
+	if _, inf, err = r.Juntar("01"); err != nil {
 		t.Fatalf("%v\n%s", err, strings.Join(inf, "\n"))
 	}
 	if _, _, err := r.Verificar("01", t0); err != nil {
@@ -641,7 +641,6 @@ func TestEquipoFrontBackTestEnUnSlice(t *testing.T) {
 			t.Fatalf("falta %s en main", f)
 		}
 	}
-	_ = e
 }
 
 // La zona sigue con su worker: la tarea siguiente del plan reusa su worktree y suma rutas.
@@ -1219,5 +1218,37 @@ func TestMetricasRegistrosViejosSonSlice(t *testing.T) {
 	m := r.Metricas(time.Time{})
 	if m.PorRuta[RutaSlice].Aceptados != 1 || m.PorRuta[RutaFix].Aceptados != 0 || m.PorRuta[RutaSlice].HorasMedias != 2 {
 		t.Fatalf("%+v", m)
+	}
+}
+
+// Worker code that rewrites the exam's bundle while the exam runs, so that the exam passes, is a
+// trap even though the committed bundle never changed (mutation report, step 1b).
+func TestExamenModificadoMientrasCorreBloquea(t *testing.T) {
+	r := repoConReporte(t, "sh ./app.sh && cmp -s total.txt tests/datos.txt\n")
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "app.sh", "echo 999 > tests/datos.txt; echo 999 > total.txt\n")
+	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "mientras corría") {
+		t.Fatalf("got %v", err)
+	}
+	if e, _ = r.Load(); e.Fase != Bloqueado {
+		t.Fatalf("fase %s", e.Fase)
+	}
+}
+
+// A report the worker committed does not count when the exam ends before writing its own: the old
+// report is deleted in the box before the exam runs (mutation report, step 1b).
+func TestReporteCommiteadoPorElWorkerNoCuenta(t *testing.T) {
+	r := repoConReporte(t, "[ -f app.sh ] && . ./app.sh\n"+tapReal)
+	e, _, err := abrirConReporte(r, Opciones{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "out.tap", "ok 1 total\n")
+	commitEn(t, e.Worktree, "app.sh", "exit 0\n")
+	if _, _, err := r.Verificar("", t0); err == nil || !strings.Contains(err.Error(), "0 pruebas") {
+		t.Fatalf("got %v", err)
 	}
 }

@@ -74,6 +74,15 @@ func valorDe(w []palabra, corto, largo string) (palabra, bool) {
 		case strings.HasPrefix(x.s, corto) && len(x.s) > len(corto):
 			x.s = x.s[len(corto):]
 			return x, true
+		case len(corto) == 2 && len(x.s) > 2 && x.s[0] == '-' && x.s[1] != '-' && strings.IndexByte(x.s, corto[1]) > 0:
+			// grouped short options (-qB main, -qBmain): the value follows the letter
+			if rest := x.s[strings.IndexByte(x.s, corto[1])+1:]; rest != "" {
+				x.s = rest
+				return x, true
+			}
+			if i+1 < len(w) {
+				return w[i+1], true
+			}
 		}
 	}
 	return palabra{}, false

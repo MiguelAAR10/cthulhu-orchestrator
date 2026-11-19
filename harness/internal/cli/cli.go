@@ -8,6 +8,7 @@ import (
 	"orq/internal/slice"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -159,7 +160,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	case "skill", "--skill":
 		return runSkill(args[1:], stdout, stderr)
 	case "version":
-		fmt.Fprintln(stdout, Version)
+		fmt.Fprintln(stdout, versionLine(debug.ReadBuildInfo()))
 		return 0
 	default:
 		fmt.Fprint(stderr, usage)

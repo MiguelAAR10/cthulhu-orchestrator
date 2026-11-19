@@ -4,8 +4,9 @@
 # relevo sin duplicar → cierre interrumpido de verdad en cada etapa y retomado →
 # conteo obligatorio, rutas fix/slice, runner vigilado, examen siempre en copia aislada (sin --en-sitio),
 # el gate dentro del clon del worker y un slice de orq 1.0.0 rechazado.
-# Uso: validacion/e2e-v05.sh [carpeta-temporal]. No toca nada fuera de esa carpeta.
+# Uso: ORQ_CANDIDATO=/ruta/al/orq validacion/e2e-v05.sh [carpeta-temporal] (make ci lo hace). No toca nada fuera de esa carpeta.
 set -u
+GUARDA="$(cd "$(dirname "$0")" && pwd)/candidato.sh"
 BASE="${1:-$(mktemp -d)}"
 mkdir -p "$BASE" && cd "$BASE" || exit 1
 export ORQ_WORKTREES="$BASE/wt" ORQ_ROL="" HERDR_ENV="" HERDR_PANE_ID=""
@@ -19,6 +20,7 @@ echo '{"recursos":{"ram_por_agente_gb":0.01,"reserva_ram_gb":0,"cpu_por_agente":
 EOF
 mkdir -p "$BASE/bin" && printf '#!/bin/sh\nexit 1\n' > "$BASE/bin/claude" && chmod +x "$BASE/bin/claude"
 export PATH="$BASE/bin:$PATH"   # el escriba no responde: todo debe funcionar igual
+. "$GUARDA"; candidato "$(command -v orq)" || exit 1
 pasa=0; falla=0
 ok() { if [ "$1" = "$2" ]; then pasa=$((pasa+1)); echo "  ✓ $3"; else falla=$((falla+1)); echo "  ✗ $3 (esperaba $2, salió $1)"; fi; }
 q() { orq "$@" >/tmp/orq-e2e.$$ 2>&1; echo $?; }
