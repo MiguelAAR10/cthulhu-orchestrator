@@ -155,11 +155,18 @@ func (r Repo) copiaDe(sha string) (string, func(), error) {
 
 // correrEn corre cmd con sh dentro de la caja, en la copia dir, sin red.
 // La caja no ve $HOME: la toolchain de cada herramienta que nombra cmd (examen, --sano o check)
-// se monta de solo lectura.
+// se monta de solo lectura, y en un proyecto con checks.e2e, la carpeta de navegadores de Playwright.
 func (r Repo) correrEn(dir, cmd string, limite time.Duration) (string, int, bool, error) {
 	ro, vinc := r.depsEn(dir)
 	ro = append(ro, sandbox.RODe(sandbox.Herramientas(cmd))...)
-	return r.enCaja(sandbox.Spec{RW: []string{dir}, RO: ro, Vinculos: vinc, Cwd: dir, Env: entornoExamen()}, limite, nil, "sh", "-c", cmd)
+	env := entornoExamen()
+	if _, web := r.e2e(); web {
+		if nav := sandbox.Navegadores(); len(nav.RO) > 0 {
+			ro = append(ro, nav.RO...)
+			env["PLAYWRIGHT_BROWSERS_PATH"] = nav.Ruta
+		}
+	}
+	return r.enCaja(sandbox.Spec{RW: []string{dir}, RO: ro, Vinculos: vinc, Cwd: dir, Env: env}, limite, nil, "sh", "-c", cmd)
 }
 
 // MaxReporte acota lo que orq lee de un archivo que escribió el examen.

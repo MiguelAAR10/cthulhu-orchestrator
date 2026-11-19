@@ -90,6 +90,10 @@ func (r Repo) examen(e *Estado, sha string) (out string, code int, ok bool, cnt 
 	defer limpiar()
 	// El reporte anterior se borra dentro de la caja: la ruta la eligió quien escribió el examen.
 	cmd := e.Cmd
+	// Un examen de Playwright corre con el servidor de la app de checks.e2e arrancado en la caja.
+	if e2e, ok := r.e2e(); ok && strings.Contains(e.Cmd, "playwright") {
+		cmd = e2e.ConServidor(cmd)
+	}
 	if e.Reporte != "" {
 		cmd = "rm -f -- " + comillaSh(e.Reporte) + " 2>/dev/null\n" + e.Cmd
 	}

@@ -3,6 +3,7 @@ package slice
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -69,7 +70,7 @@ func TestReciboLlevaCadaCheck(t *testing.T) {
 			{Nombre: "arch", Cmd: "test -f total.txt", Exit: 0, Resultado: "paso"},
 		}
 		for i := range want {
-			if cs[i] != want[i] {
+			if !reflect.DeepEqual(cs[i], want[i]) {
 				t.Errorf("check %d = %+v, want %+v", i, cs[i], want[i])
 			}
 		}

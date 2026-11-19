@@ -2,6 +2,9 @@ package slice
 
 import (
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"orq/internal/config"
@@ -26,6 +29,10 @@ type ResultadoCheck struct {
 	Resultado string `json:"resultado"`
 	Motivo    string `json:"motivo,omitempty"`
 	Salida    string `json:"salida,omitempty"`
+	// Servidor es el servidor de la app que corrió delante del check (checks.e2e).
+	Servidor string `json:"servidor,omitempty"`
+	// Capturas son las capturas de pantalla que dejó la corrida, copiadas a .orq/capturas/.
+	Capturas []string `json:"capturas,omitempty"`
 }
 
 // Correr corre un comando de shell y devuelve su salida y su código; err solo si no pudo arrancar.
@@ -43,11 +50,11 @@ func CorrerChecks(cs []config.Check, correr Correr) ([]ResultadoCheck, error) {
 			out = append(out, ResultadoCheck{Nombre: c.Nombre, Resultado: CheckOmitido, Motivo: c.Omitir})
 			continue
 		}
-		salida, code, err := correr(c.Cmd)
+		salida, code, err := correr(c.Ejecutable())
 		if err != nil {
 			return out, fmt.Errorf("check %s no arrancó: %w", c.Nombre, err)
 		}
-		res := ResultadoCheck{Nombre: c.Nombre, Cmd: c.Cmd, Exit: code, Resultado: CheckPaso, Salida: primeras(salida, LineasCheck)}
+		res := ResultadoCheck{Nombre: c.Nombre, Cmd: c.Cmd, Exit: code, Resultado: CheckPaso, Salida: primeras(salida, LineasCheck), Servidor: c.Servidor}
 		if code != 0 {
 			res.Resultado = CheckFallo
 		}
@@ -97,6 +104,13 @@ func (r Repo) checksEn(e *Estado, sha string) ([]ResultadoCheck, error) {
 	if err != nil {
 		return rs, err
 	}
+	for i := range rs {
+		if rs[i].Nombre == config.E2E {
+			if rs[i].Capturas, err = r.guardarCapturas(dir, e.Attempt()); err != nil {
+				return rs, fmt.Errorf("capturas de %s: %w", config.E2E, err)
+			}
+		}
+	}
 	for _, c := range r.Checks {
 		if c.Interno() {
 			res, err := r.supresiones(c, e.SHARojo, sha)
@@ -107,4 +121,50 @@ func (r Repo) checksEn(e *Estado, sha string) ([]ResultadoCheck, error) {
 		}
 	}
 	return rs, nil
+}
+
+// MaxCapturas acota cuántas capturas de pantalla guarda el recibo de una corrida.
+const MaxCapturas = 20
+
+// guardarCapturas copia los .png que la corrida dejó en test-results/ (la carpeta de salida de
+// Playwright) a .orq/capturas/<intento>/ y devuelve sus rutas. No sigue enlaces: la copia la escribió el worker.
+func (r Repo) guardarCapturas(dir, attempt string) ([]string, error) {
+	var rels []string
+	filepath.WalkDir(filepath.Join(dir, "test-results"), func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.Type().IsRegular() && strings.HasSuffix(p, ".png") && len(rels) < MaxCapturas {
+			rel, _ := filepath.Rel(dir, p)
+			rels = append(rels, rel)
+		}
+		return nil
+	})
+	destino := filepath.Join(r.OrqDir, "capturas", strings.ReplaceAll(attempt, "/", "-"))
+	if err := os.RemoveAll(destino); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, rel := range rels {
+		raw, err := leerSeguro(dir, rel, MaxReporte)
+		if err != nil {
+			continue
+		}
+		p := filepath.Join(destino, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return out, err
+		}
+		if err := os.WriteFile(p, raw, 0o644); err != nil {
+			return out, err
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// e2e es el check de Playwright del proyecto, si lo declaró.
+func (r Repo) e2e() (config.Check, bool) {
+	for _, c := range r.Checks {
+		if c.Nombre == config.E2E {
+			return c, true
+		}
+	}
+	return config.Check{}, false
 }

@@ -565,3 +565,31 @@ func (c Config) Expandir(texto string) string {
 	}
 	return strings.ReplaceAll(texto, "{{workers}}", c.TablaWorkers())
 }
+
+// servidorSh arranca el servidor de la app en su propio grupo de procesos, espera hasta 60 s a que
+// abra 127.0.0.1:puerto, corre el comando y al salir mata al grupo. Sale con el código del comando.
+const servidorSh = `orq_log=$(mktemp)
+setsid sh -c %[1]s >"$orq_log" 2>&1 </dev/null &
+orq_srv=$!
+trap 'kill -TERM -- -$orq_srv 2>/dev/null' EXIT
+orq_n=0
+until bash -c ': </dev/tcp/127.0.0.1/%[2]d' 2>/dev/null; do
+	orq_n=$((orq_n+1))
+	if [ $orq_n -gt 240 ] || ! kill -0 $orq_srv 2>/dev/null; then
+		echo "orq: el servidor de checks.e2e no abrió 127.0.0.1:%[2]d"; tail -n 20 "$orq_log"; exit 1
+	fi
+	sleep 0.25
+done
+%[3]s
+`
+
+// Ejecutable es el script que corre el check: Cmd, o Cmd con el servidor de la app arrancado antes.
+func (ch Check) Ejecutable() string { return ch.ConServidor(ch.Cmd) }
+
+// ConServidor envuelve cmd con el servidor del check, si lo tiene.
+func (ch Check) ConServidor(cmd string) string {
+	if ch.Servidor == "" {
+		return cmd
+	}
+	return fmt.Sprintf(servidorSh, "'"+strings.ReplaceAll(ch.Servidor, "'", `'\''`)+"'", ch.Puerto, cmd)
+}

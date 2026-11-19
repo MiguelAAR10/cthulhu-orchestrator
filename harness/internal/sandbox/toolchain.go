@@ -266,3 +266,30 @@ func Sondear(h Herramienta) (Visto, error) {
 	}
 	return s, nil
 }
+
+// Navegadores es la carpeta de navegadores de Playwright ($PLAYWRIGHT_BROWSERS_PATH o
+// ~/.cache/ms-playwright), montada de solo lectura con la misma lista de prohibidos que las toolchains.
+func Navegadores() Herramienta {
+	home, _ := os.UserHomeDir()
+	home = filepath.Clean(home)
+	d := os.Getenv("PLAYWRIGHT_BROWSERS_PATH")
+	if d == "" {
+		d = filepath.Join(home, ".cache", "ms-playwright")
+	}
+	d = filepath.Clean(d)
+	h := Herramienta{Nombre: "navegadores de playwright", Ruta: d}
+	if fi, err := os.Stat(d); err != nil || !fi.IsDir() {
+		h.Motivo = fmt.Sprintf("no hay navegadores de Playwright en %s: corre `npx playwright install chromium`", d)
+		return h
+	}
+	if !bajo(d, home) || d == home {
+		h.Motivo = fmt.Sprintf("los navegadores de Playwright están en %s, fuera de $HOME: súmalo a sandbox.ro en limits.json", d)
+		return h
+	}
+	if p := tocaProhibido(d, home, prohibidos(home)); p != "" {
+		h.Motivo = fmt.Sprintf("los navegadores de Playwright están en %s, que nunca entra en la caja (%s)", d, p)
+		return h
+	}
+	h.RO = []string{d}
+	return h
+}

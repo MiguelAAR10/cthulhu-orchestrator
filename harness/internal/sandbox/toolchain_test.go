@@ -103,3 +103,25 @@ func TestHerramientasSiguenCadaEnlace(t *testing.T) {
 		t.Fatalf("hop into ~/.config: %+v", hs)
 	}
 }
+
+// The Playwright browsers dir is bound read-only through the same deny list as the toolchains.
+func TestNavegadores(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	t.Setenv("HOME", home)
+	t.Setenv("ORQ_STATE", filepath.Join(home, ".local", "state", "orq"))
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "")
+	cache := filepath.Join(home, ".cache", "ms-playwright")
+	if h := Navegadores(); h.Motivo == "" || !strings.Contains(h.Motivo, cache) || len(h.RO) != 0 {
+		t.Fatalf("missing dir: %+v", h)
+	}
+	os.MkdirAll(cache, 0o755)
+	if h := Navegadores(); h.Motivo != "" || !slices.Equal(h.RO, []string{cache}) || h.Ruta != cache {
+		t.Fatalf("default dir: %+v", h)
+	}
+	malo := filepath.Join(home, ".config", "pw")
+	os.MkdirAll(malo, 0o755)
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", malo)
+	if h := Navegadores(); len(h.RO) != 0 || !strings.Contains(h.Motivo, "nunca entra en la caja") {
+		t.Fatalf("denied dir: %+v", h)
+	}
+}

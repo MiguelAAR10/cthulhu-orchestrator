@@ -132,3 +132,14 @@ func TestE2EServidorValido(t *testing.T) {
 		t.Fatalf("valid e2e: %v %+v", err, c.Checks)
 	}
 }
+
+func TestEjecutableSinServidor(t *testing.T) {
+	ch := Check{Nombre: E2E, Cmd: "npx playwright test"}
+	if ch.Ejecutable() != "npx playwright test" {
+		t.Fatalf("got %q", ch.Ejecutable())
+	}
+	ch.Servidor, ch.Puerto = "npm run dev", 3000
+	if x := ch.Ejecutable(); !strings.Contains(x, "setsid sh -c 'npm run dev'") || !strings.Contains(x, "/dev/tcp/127.0.0.1/3000") || !strings.HasSuffix(x, "\nnpx playwright test\n") {
+		t.Fatalf("got %s", x)
+	}
+}
