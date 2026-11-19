@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"orq/internal/canal"
+	"orq/internal/config"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
 	"orq/internal/perfil"
@@ -59,6 +60,10 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "modo: %s (%d archivos de código) · stack: %s\n", pf.Modo, pf.Fuentes, strings.Join(append([]string{"-"}, pf.Senales...)[min(1, len(pf.Senales)):], ", "))
+	if err := escribirChecks(p.Root, stdout); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	if nuevas, distintas := instalarSkillsOrq(p.Root); len(nuevas)+len(distintas) > 0 {
 		if len(nuevas) > 0 {
 			fmt.Fprintf(stdout, "skills de orq en el repo: %s\n", strings.Join(nuevas, ", "))
@@ -82,6 +87,46 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, hookSettings)
 	}
 	return runSkills(nil, stdout, stderr)
+}
+
+// escribirChecks suma a <repo>/.orq/config.json el bloque checks detectado, sin tocar las demás claves.
+// Si el bloque ya existe es del Owner: no se pisa.
+func escribirChecks(root string, stdout io.Writer) error {
+	ruta := config.RutaProyecto(root)
+	capa := map[string]json.RawMessage{}
+	if raw, err := os.ReadFile(ruta); err == nil {
+		if err := json.Unmarshal(raw, &capa); err != nil {
+			return fmt.Errorf("orq init: %s: %w", ruta, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if _, ok := capa["checks"]; ok {
+		fmt.Fprintf(stdout, "checks ya definidos en %s: no se tocaron\n", ruta)
+		return nil
+	}
+	cs := perfil.Checks(root)
+	raw, err := json.Marshal(cs)
+	if err != nil {
+		return err
+	}
+	capa["checks"] = raw
+	out, err := json.MarshalIndent(capa, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := orqdir.WriteAtomic(ruta, append(out, '\n')); err != nil {
+		return err
+	}
+	for _, ch := range (config.Config{Checks: cs}).ChecksEnOrden() {
+		if ch.Cmd != "" {
+			fmt.Fprintf(stdout, "check %s: %s\n", ch.Nombre, ch.Cmd)
+		} else {
+			fmt.Fprintf(stdout, "check %s omitido: %s\n", ch.Nombre, ch.Omitir)
+		}
+	}
+	fmt.Fprintf(stdout, "checks en %s: edítalos ahí; `orq check` los corre\n", ruta)
+	return nil
 }
 
 // ---------- skills ----------
