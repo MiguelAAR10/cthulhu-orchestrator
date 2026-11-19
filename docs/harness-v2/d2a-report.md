@@ -187,3 +187,7 @@ Notes:
 1. `orq slice abrir` refuses a red whose exam exits 126/127 ("falta una herramienta"), also with `--sin-conteo`. Test: `slice.TestAbrirRechazaRojoDeHerramientaFaltante`. The round-2 exit-127 test now uses an exam that is red at open and 127 later.
 2. `verificar` refuses when the worker's head equals `SHARojo` ("no ha commiteado nada"), with no receipt and no change of state. Test: `slice.TestVerificarSinTrabajoSeRechaza`.
 3. `orq init --help` / `-h` prints usage and changes nothing. Test: `cli.TestInitHelpNoCambiaNada` (no `.orq/` or `.claude/` created).
+
+## Close (orchestrator, 2026-11-19)
+Integrated as 7be03d7 after 3 review rounds (`reviews/d2a-review*.md`; the Owner lifted the cost cap). `make ci` on 7be03d7 with the candidate (`modified=false`): exit 0, e2e 86/0, aislamiento 14/0. Orchestrator check: the review-3 repro (`abrir … --cmd "checktool …" --sin-conteo`, tool missing) is refused with "el examen sale con 127: falta una herramienta… no es un rojo"; no slice is created. Review 3 also confirmed a real end-to-end slice reaches VERIFICADO with no manual sandbox.ro and real gofmt/go vet/go test at exit 0, and that the deny list holds across symlink hops.
+Known limits: the box mounts all of `~/.local/lib` read-only (not only the toolchain). A deleted project test is a warning on the page, not a refusal.
