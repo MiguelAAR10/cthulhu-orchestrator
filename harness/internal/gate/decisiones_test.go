@@ -292,6 +292,15 @@ func TestDecisiones(t *testing.T) {
 		{bash("git diff --output tests/aceptacion/a_test.go"), salida},
 		{bash("git log -1 --format=x --output=/x/state/s.json"), salida},
 		{bash("git diff --output /x/state/s.json"), salida},
+		// review 7: quoted, escaped and other subcommands' spellings of --output
+		{bash(`git log --"output"=x`), salida},
+		{bash(`git log --out\put=x`), salida},
+		{bash("git rev-list --output=x HEAD"), salida},
+		{bash("git reflog --output=x"), salida},
+		// inspector report §3 #3: the contract ref, through git or straight into main's .git
+		{bash("git -C /x/repo update-ref refs/orq/contrato/01 HEAD"), propio},
+		{bash("git update-ref refs/orq/contrato/01 HEAD"), lista},
+		{bash("echo x > /x/repo/.git/refs/orq/contrato/01"), puntoGit},
 		{bash("git show --outp=x.patch HEAD"), salida},
 		{bash("git log -1 --format=x > x.txt"), ""},
 		{bash("git reflog"), ""},
