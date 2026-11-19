@@ -212,3 +212,12 @@ The gate reads only the command line it is given. These stay open until the work
 - **Interpreters.** `python x.py`, `node x.js`, `go run`, and also inline code (`python -c`, `node -e`). For inline code the gate checks only that it does not name a protected path. It does not stop the code from running git, `orq` or `os.symlink`.
 - **Anything run outside the parsed command line.** Values read at run time (`$(cat f)`, files, stdin) are denied when they are the command word or a path, but not when they are data a program acts on. Programs that run other programs from their own config (an editor, a pager or a tool configured in a file the gate does not see) are also missed. So is a `.git` created by a program the gate does not model (`tar x`, `unzip`, `git init/clone` into a subdirectory). After creation, git is still denied there by `gitEntre`, but a program that talks to the main repository directly is not stopped.
 - **The binary refusal relies on cwd.** A program that `chdir`s out of the clone before it execs `orq` (for example `python -c 'os.chdir("/main"); os.execv(...)'`) is not refused. That is the interpreter gap again.
+
+## Close (orchestrator, 2026-11-18)
+Step 1 closed on integrated commit fdf8149 after reviews 1–8 (`docs/harness-v2/reviews/`). `make ci` on that revision, run by the orchestrator with the candidate binary built into a temp dir: exit 0 — gofmt and vet clean, `go test -race` all 21 packages ok, e2e-v05 86 pass / 0 fail, aislamiento 14 pass / 0 fail / 0 pending. Skipped: `TestPrepararDeps` (needs the box) and the herdr test.
+
+Known limits that remain (the gate stops mistakes, not deliberate escapes; containment will be tested in step 2):
+- Scripts, interpreters and anything run outside the parsed command line.
+- Hooks in the worker clone's own `.git` run on `git commit`.
+- Dynamic words in `git commit`: value-taking commit options the gate does not model (`-t`, `-S`, `-u`, `--template`, `--trailer`, `--cleanup`, `--fixup`, `--squash`, …) let a later dynamic word act as a commit option (review 8). No path to the main repo, contract, exam or state was found through it.
+- The installed `orq` and the candidate both print `1.0.0`; fixed first in step 1b.
