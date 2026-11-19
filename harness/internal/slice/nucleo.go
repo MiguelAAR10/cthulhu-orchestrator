@@ -220,7 +220,7 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 	}
 	host, _ := os.Hostname()
 	e := &Estado{Esquema: EsquemaActual, NN: nn, Intento: 1, Fase: Implementando, Titulo: titulo, Test: test, Bundle: bundle, Cmd: cmd,
-		Sano: o.Sano, Alcance: o.Alcance, Base: base, SHARojo: sha, Rama: rama, Worktree: wt, Procedencia: "clon", Host: host,
+		Sano: o.Sano, Alcance: o.Alcance, Demo: o.Demo, Base: base, SHARojo: sha, Rama: rama, Worktree: wt, Procedencia: "clon", Host: host,
 		Abierto: now.UTC().Truncate(time.Second), Huella: huella, SalidaRojo: cola(out, 20),
 		Reporte: o.Reporte, Formato: o.Formato, Omitir: o.PermiteOmitir, TimeoutSeg: o.Timeout,
 		SinConteo: o.SinConteo, Vigilados: r.vigiladosEn(sha, cmd, bundle)}

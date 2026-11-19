@@ -97,6 +97,7 @@ type Estado struct {
 	Equipo      []Worker   `json:"equipo,omitempty"`    // workers en paralelo dentro del slice
 	Motivo      string     `json:"motivo,omitempty"`    // por qué está bloqueado
 	Alcance     []string   `json:"alcance,omitempty"`   // rutas que la historia justifica tocar
+	Demo        []string   `json:"demo,omitempty"`      // hasta 3 pasos para ver el resultado funcionando
 }
 
 func (e *Estado) ID() string      { return fmt.Sprintf("S-%s", e.NN) }
@@ -334,6 +335,7 @@ type Opciones struct {
 	Ruta             string   // fix|slice; vacío = slice
 	Timeout          int      // segundos; 0 = 600
 	Alcance          []string // rutas que la historia justifica; fuera de ellas, alarma de desalineación
+	Demo             []string // pasos para ver el resultado funcionando; la página de decisión los muestra
 }
 
 func (e *Estado) limite() time.Duration {

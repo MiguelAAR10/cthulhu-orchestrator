@@ -76,6 +76,7 @@ const usage = `orq ` + Version + ` · harness de orquestador-2
   orq slice juntar [--slice NN]  integra lo commiteado de cada worker del equipo; rechaza lo que salga
                                  de su zona o toque el examen; luego orq slice verificar
   orq slice recibo               el recibo vigente
+  orq slice decidir [NN] [--html RUTA]   una página para aceptar o rechazar un slice verificado
   orq slice contrato [--worker N] [--alcance "..."] [--suite "cmd"] [--presupuesto "..."]
                                  el contrato del worker con los datos reales del slice
   orq sesion ver | abrir planificador|astra | cerrar NOMBRE | reenviar NOMBRE
