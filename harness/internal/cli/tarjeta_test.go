@@ -107,3 +107,61 @@ func TestStatusTarjetasPrimero(t *testing.T) {
 	out, _, _ = run(t, "status")
 	contiene(t, out, "tarjetas por aprobar: ninguna")
 }
+
+// seccionDe returns the lines of one section of the text decision page.
+func seccionDe(out, titulo string) string {
+	_, s, _ := strings.Cut(out, "\n== "+titulo+" (")
+	s, _, _ = strings.Cut(s, "\n== ")
+	return s
+}
+
+func aprobada(t *testing.T) func(wt string) {
+	return func(wt string) {
+		if _, errs, code := conTarjeta(t, "01", tarjetaCLI); code != 0 {
+			t.Fatal(errs)
+		}
+		if _, errs, code := run(t, "slice", "aprobar", "01"); code != 0 {
+			t.Fatal(errs)
+		}
+	}
+}
+
+func TestDecidirMuestraTarjeta(t *testing.T) {
+	sliceVerdeCon(t, nil, aprobada(t))
+	out, _, code := run(t, "slice", "decidir", "01")
+	if code != 0 {
+		t.Fatal(out)
+	}
+	contiene(t, out, "== Historia (tarjeta del slice)", "El total suma 170.", "== Tarjeta (tarjeta del slice · aprobada ")
+	tj := seccionDe(out, "Tarjeta")
+	contiene(t, tj, "fuera: otros totales", "examen: tests/s01.sh compara total.txt con 170", "zonas: total.txt", "preguntas: ninguna")
+	if strings.Contains(tj, "!!") {
+		t.Fatalf("sin desvíos no hay alertas en la tarjeta:\n%s", tj)
+	}
+}
+
+func TestDecidirTarjetaExamenYZonasTrasAprobar(t *testing.T) {
+	sliceVerdeCon(t, nil, func(wt string) {
+		aprobada(t)(wt)
+		commitClon(t, wt, "tests/extra.sh", "true\n")
+		if _, errs, code := run(t, "slice", "examen", "tests/extra.sh", "--aprobado", "req ATN-9"); code != 0 {
+			t.Fatalf("examen: %d %s", code, errs)
+		}
+		commitClon(t, wt, "total.txt.bak", "x\n")
+	})
+	out, _, code := run(t, "slice", "decidir", "01")
+	if code != 0 {
+		t.Fatal(out)
+	}
+	tj := seccionDe(out, "Tarjeta")
+	contiene(t, tj, "!! examen cambiado tras aprobar la tarjeta", "tests/extra.sh", "req ATN-9", "!! fuera de las zonas de la tarjeta: total.txt.bak")
+	if strings.Contains(tj, "fuera de las zonas de la tarjeta: total.txt\n") {
+		t.Fatalf("total.txt está en su zona:\n%s", tj)
+	}
+}
+
+func TestDecidirSinTarjetaAvisa(t *testing.T) {
+	sliceVerdeCon(t, nil, nil)
+	out, _, _ := run(t, "slice", "decidir", "01")
+	contiene(t, seccionDe(out, "Tarjeta"), "!! sin tarjeta aprobada")
+}

@@ -18,6 +18,9 @@ type Pagina struct {
 	Avisos     []string        // desvíos de la página misma, p. ej. la punta ya no es el commit verificado
 	// DiffDefiniciones es el diff, del rojo al verificado, de los archivos que definen lo que corre un check.
 	DiffDefiniciones string
+	// Con la tarjeta aprobada: exámenes cambiados después de aprobarla y archivos tocados fuera de sus zonas.
+	ExamenTrasAprobar []diario.Evento
+	FueraDeTarjeta    []string
 }
 
 // Pagina arma la página de decisión del slice nn; solo existe para un slice VERIFICADO.
@@ -71,6 +74,16 @@ func (r Repo) Pagina(nn string) (*Pagina, error) {
 	for _, ev := range evs {
 		if ev.Tipo == "examen" && ev.Slice == e.NN && !ev.TS.Before(e.Abierto) {
 			pg.Examen = append(pg.Examen, ev)
+			if e.Tarjeta.EstaAprobada() && ev.TS.After(e.Tarjeta.Aprobada) {
+				pg.ExamenTrasAprobar = append(pg.ExamenTrasAprobar, ev)
+			}
+		}
+	}
+	if e.Tarjeta.EstaAprobada() {
+		for _, f := range a.Cambiados {
+			if !slices.Contains(e.Bundle, f) && !slices.ContainsFunc(e.Tarjeta.Zonas, func(z string) bool { return dentro(z, f) }) {
+				pg.FueraDeTarjeta = append(pg.FueraDeTarjeta, f)
+			}
 		}
 	}
 	return pg, nil

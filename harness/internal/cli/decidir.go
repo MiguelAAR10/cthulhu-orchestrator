@@ -60,6 +60,7 @@ func seccionesDecision(pd *app.PaginaDecision) []seccion {
 		historia.Lineas = append(historia.Lineas, alerta("%s", av))
 	}
 	out = append(out, historia)
+	out = append(out, seccionTarjeta(pd))
 
 	pruebas := seccion{Titulo: "Pruebas", Fuente: "recibo, sin conteo del runner"}
 	if rec.Contado {

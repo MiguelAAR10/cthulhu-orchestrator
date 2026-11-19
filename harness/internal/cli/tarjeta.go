@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"orq/internal/app"
+	"orq/internal/diario"
 	"orq/internal/slice"
 )
 
@@ -122,4 +124,45 @@ func tarjetasPorAprobar(p proyecto, now time.Time, stdout io.Writer) {
 	for _, e := range ab {
 		fmt.Fprintf(stdout, "  %s «%s» lista hace %s · lee: orq slice tarjeta %s · aprueba: orq slice aprobar %s\n", e.ID(), e.Titulo, edad(now.Sub(e.Tarjeta.Lista)), e.NN, e.NN)
 	}
+}
+
+// seccionTarjeta muestra en la página de decisión la tarjeta que aprobó el Owner y marca lo que se
+// apartó de ella después: un examen cambiado o un archivo fuera de sus zonas.
+func seccionTarjeta(pd *app.PaginaDecision) seccion {
+	e := pd.Estado
+	tj := e.Tarjeta
+	s := seccion{Titulo: "Tarjeta", Fuente: "tarjeta del slice"}
+	switch {
+	case !tj.EstaAprobada() && e.RutaEfectiva() == slice.RutaFix:
+		s.Lineas = append(s.Lineas, normal("ruta fix: sin tarjeta"))
+		return s
+	case !tj.EstaAprobada():
+		s.Lineas = append(s.Lineas, alerta("sin tarjeta aprobada: el Owner no aprobó cómo se entendió la historia"))
+		return s
+	}
+	s.Fuente += " · aprobada " + tj.Aprobada.Local().Format("2006-01-02 15:04")
+	for _, x := range []struct {
+		nombre string
+		lineas []string
+	}{{"fuera", tj.Fuera}, {"examen", tj.Examen}, {"zonas", tj.Zonas}, {"preguntas", tj.Preguntas}} {
+		s.Lineas = append(s.Lineas, normal("%s: %s", x.nombre, strings.Join(x.lineas, " · ")))
+	}
+	for _, ev := range pd.ExamenTrasAprobar {
+		s.Lineas = append(s.Lineas, alerta("examen cambiado tras aprobar la tarjeta (%s): %s · aprobado: %s", ev.TS.Local().Format("2006-01-02 15:04"), archivosDe(ev), ev.Detalle))
+	}
+	for _, f := range pd.FueraDeTarjeta {
+		s.Lineas = append(s.Lineas, alerta("fuera de las zonas de la tarjeta: %s", f))
+	}
+	return s
+}
+
+// archivosDe lista los archivos de un evento de examen del diario.
+func archivosDe(ev diario.Evento) string {
+	var fs []string
+	if xs, ok := ev.Datos["archivos"].([]any); ok {
+		for _, x := range xs {
+			fs = append(fs, fmt.Sprint(x))
+		}
+	}
+	return strings.Join(fs, ", ")
 }
