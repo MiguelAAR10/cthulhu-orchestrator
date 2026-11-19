@@ -121,3 +121,8 @@ Fixes for `reviews/d3b-review.md`. Each has a test that failed before the fix.
 2. **Hash at launch.** `Ordenar` takes the hash of each skill as installed (`skilleval.Hash` of `.claude/skills/<name>`, the same function `skill eval` uses) and counts only rows with that hash; otherwise "sin nota". Test: eval v1, eval v2, revert to v1 gives v1's own score; an edited, unevaluated v3 is "sin nota" (`TestLanzarUsaLaNotaDelHashInstalado`, `TestOrdenarSoloCuentaElHashInstalado`).
 3. **Bad notes line.** New `LeerNotas` returns good rows plus the bad lines. Launch warns on stderr and goes on, even if the file cannot be read. `Notas` (used by `orq skill notas`/`comparar`) still fails on a bad line. Test: `TestLanzarSigueConUnaLineaRotaEnLasNotas`.
 4. **`orq skill eval .`** resolves the directory with `filepath.Abs` before taking the name. Test: `TestSkillEvalPuntoUsaElNombreDeLaCarpeta`.
+
+## Close (orchestrator, 2026-11-19)
+Integrated as 49fbac8 after 1 review round (`reviews/d3b-review.md`) and its fix (4ea140d). `make ci` on 49fbac8 with the candidate (`modified=false`): exit 0, e2e 86/0, aislamiento 14/0. Orchestrator check: the fix's tests for the reviewer's repros fail on the pre-fix code (8238520) — `TestLanzarUsaLaNotaDelHashInstalado`, `TestLanzarSigueConUnaLineaRotaEnLasNotas`, `TestSkillEvalPuntoUsaElNombreDeLaCarpeta`; the `skilleval` package tests do not build against the old API — and pass on 49fbac8.
+Real run by the reviewer: the account has `claude plugin eval`; a one-case skill scored 1.00 for USD 0.05.
+Open for the Owner: the score margin once judge noise is measured; whether the task type is sealed on the card.
