@@ -277,20 +277,44 @@ func saleArchivo(t []string) bool {
 	return false
 }
 
-// dinamicaAntes returns the first word before `--` whose value the gate cannot read (a variable,
-// $(...), backticks, arithmetic) or a glob that can expand to an option (it starts with a glob
-// character or `-`). Such a word could become --output or a reflog subcommand. After `--` git
-// takes every word as a path, so those are not checked.
+// dinamicaAntes returns the first word before `--` that could become an option or subcommand: one
+// whose value the gate cannot read (a variable, $(...), backticks, arithmetic) or a glob that
+// starts with a glob character or `-`. After `--` git takes every word as a path, so those are
+// not checked. A dynamic word that is the value of a value-taking option (-m "$x", --format="$f")
+// is data, not an option, and is allowed.
 func dinamicaAntes(w []palabra) string {
-	for _, x := range w {
+	for i, x := range w {
 		if x.s == "--" {
 			return ""
 		}
-		if x.dyn || x.glob && (strings.HasPrefix(x.s, "-") || strings.ContainsAny(x.s[:1], "*?[")) {
-			return x.s
+		if !(x.dyn || x.glob && (strings.HasPrefix(x.s, "-") || strings.ContainsAny(x.s[:1], "*?["))) {
+			continue
 		}
+		if i > 0 && !w[i-1].dyn && valorGit[w[i-1].s] || valorAdjunto(x.s) {
+			continue
+		}
+		return x.s
 	}
 	return ""
+}
+
+// valorGit are the options whose next word is their value.
+var valorGit = conjunto("-m", "--message", "-F", "--file", "--author", "--format", "-S", "-G", "--grep")
+
+// valorAdjunto says whether a word starts with a literal value-taking option joined to its value
+// (--message=..., -S...), so the dynamic part that follows is only that option's value.
+func valorAdjunto(s string) bool {
+	for _, p := range []string{"--message=", "--file=", "--author=", "--format=", "--grep="} {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	for _, p := range []string{"-m", "-F", "-S", "-G"} {
+		if strings.HasPrefix(s, p) && len(s) > 2 && s[2] != '-' {
+			return true
+		}
+	}
+	return false
 }
 
 // reflogLeer says whether the first positional of `git reflog` only reads: show, list, exists or a
