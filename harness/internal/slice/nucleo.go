@@ -94,11 +94,7 @@ func (r Repo) examen(e *Estado, sha string) (out string, code int, ok bool, cnt 
 	if e.Reporte != "" {
 		cmd = "rm -f -- " + comillaSh(e.Reporte) + " 2>/dev/null\n" + cmd
 	}
-	// Un examen de Playwright corre con el servidor de la app de checks.e2e arrancado en la caja.
-	if e2e, ok := r.e2e(); ok && strings.Contains(e.Cmd, "playwright") {
-		cmd = e2e.ConServidor(cmd)
-	}
-	out, code, ok, err = r.correrEn(dir, cmd, e.limite())
+	out, code, ok, err = r.correrEn(dir, r.conServidor(cmd), e.limite())
 	if err != nil {
 		return out, code, false, nil, false, err
 	}
@@ -124,8 +120,17 @@ func (r Repo) sanoEn(sha, cmd string) (string, bool, error) {
 		return "", false, err
 	}
 	defer limpiar()
-	out, _, ok, err := r.correrEn(dir, cmd, TimeoutDefecto)
+	out, _, ok, err := r.correrEn(dir, r.conServidor(cmd), TimeoutDefecto)
 	return out, ok, err
+}
+
+// conServidor arranca delante de cmd el servidor de la app de checks.e2e, si lo hay. Va con todo examen
+// y toda base sana, no solo los que nombran playwright: `npm run test:e2e` también lo necesita.
+func (r Repo) conServidor(cmd string) string {
+	if e2e, ok := r.e2e(); ok {
+		return e2e.ConServidor(cmd)
+	}
+	return cmd
 }
 
 // Abrir descubre antes de crear, exige base sana y aceptación roja (las dos en la caja, sobre una

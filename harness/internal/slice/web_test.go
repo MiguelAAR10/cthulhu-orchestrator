@@ -83,10 +83,12 @@ func TestE2EEnLaCaja(t *testing.T) {
 }
 
 func TestE2EServidorQueNoAbre(t *testing.T) {
-	homeWeb(t, `echo "boom: falta .env"; exit 2`, pwStub)
+	home := homeWeb(t, devStub, pwStub)
 	r := repoDeJuguete(t)
 	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"}, e2eStub}
 	e := abrir(t, r)
+	// The server dies after abrir (abrir's --sano runs behind it too).
+	os.WriteFile(filepath.Join(home, ".local", "bin", "npm"), []byte("#!/bin/sh\necho \"boom: falta .env\"; exit 2\n"), 0o755)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
 	t1 := time.Now()
 	e, _, err := r.Verificar("", t0)
@@ -196,5 +198,29 @@ func TestTestOnlyNoVerifica(t *testing.T) {
 				t.Fatalf("err = %v", err)
 			}
 		})
+	}
+}
+
+// npmStub runs `npm run dev` as devStub and `npm run test:e2e` as `npx playwright test`.
+const npmStub = `if [ "$1 $2" = "run dev" ]; then touch dev-arrancado; exec python3 -m http.server 4173 --bind 127.0.0.1; fi
+[ "$1 $2" = "run test:e2e" ] || exit 64
+shift 2
+exec npx playwright test "$@"`
+
+// Review repro 2: an exam (and --sano) through an npm script gets the server of checks.e2e too.
+func TestExamenNpmScriptArrancaServidor(t *testing.T) {
+	homeWeb(t, npmStub, pwStub+"\ncmp -s total.txt tests/datos.txt")
+	r := repoDeJuguete(t)
+	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"}, e2eStub}
+	e, out, err := r.Abrir("01", "total", "tests/s01.sh", "npm run test:e2e", Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Sano: "test -f dev-arrancado"}, t0)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "servidor y navegadores ok") {
+		t.Fatalf("the red did not come from the assertion:\n%s", out)
+	}
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if e, out, err = r.Verificar("", t0); err != nil || e.Fase != Verificado {
+		t.Fatalf("%v %s\n%s", err, e.Fase, out)
 	}
 }
