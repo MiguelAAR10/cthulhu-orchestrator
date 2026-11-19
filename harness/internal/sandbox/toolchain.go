@@ -7,11 +7,16 @@ package sandbox
 // that holds or sits inside credentials, agent config or orq's state.
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"orq/internal/limits"
 	"orq/internal/state"
@@ -206,4 +211,58 @@ func NoCorren(hs []Herramienta) string {
 		}
 	}
 	return strings.Join(xs, "; ")
+}
+
+// Visto es lo que vio una herramienta corriendo dentro de una caja real.
+type Visto struct {
+	Ruta   string // dónde la encontró command -v en la caja; "" si no la encontró
+	Linea  string // la primera línea de su --version (o version)
+	Exit   int    // 126 o 127: la caja no la puede ejecutar; -1: cortada
+	Salida string
+}
+
+// Corre dice si la sonda llegó a ejecutar la herramienta.
+func (s Visto) Corre() bool { return s.Ruta != "" && s.Exit >= 0 && s.Exit != 126 && s.Exit != 127 }
+
+// sondaSh: command -v y luego --version; si falla sin ser 126/127, prueba `version` (go).
+const sondaSh = `p=$(command -v "$1") || { echo "$1: no está en el PATH de la caja"; exit 127; }
+echo "$p"
+out=$("$1" --version </dev/null 2>&1); c=$?
+if [ $c -ne 0 ] && [ $c -lt 126 ]; then o=$("$1" version </dev/null 2>&1) && { out=$o; c=0; }; fi
+printf '%s\n' "$out"
+exit $c`
+
+// Sondear corre h dentro de una caja real, sin red, con su toolchain montada como al verificar.
+func Sondear(h Herramienta) (Visto, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	c, err := Command(ctx, Spec{RO: h.RO, Env: map[string]string{"LANG": "C.UTF-8"}}, "sh", "-c", sondaSh, "sonda", h.Nombre)
+	if err != nil {
+		return Visto{}, err
+	}
+	var buf bytes.Buffer
+	c.Stdout, c.Stderr = &buf, &buf
+	errRun := c.Run()
+	s := Visto{Salida: strings.TrimSpace(buf.String())}
+	var ee *exec.ExitError
+	switch {
+	case ctx.Err() != nil:
+		s.Exit = -1
+	case errRun == nil:
+	case errors.As(errRun, &ee):
+		s.Exit = ee.ExitCode()
+	default:
+		return s, errRun
+	}
+	lineas := strings.Split(s.Salida, "\n")
+	if s.Exit != 127 || filepath.IsAbs(lineas[0]) {
+		s.Ruta, lineas = lineas[0], lineas[1:]
+	}
+	for _, l := range lineas {
+		if l = strings.TrimSpace(l); l != "" {
+			s.Linea = l
+			break
+		}
+	}
+	return s, nil
 }

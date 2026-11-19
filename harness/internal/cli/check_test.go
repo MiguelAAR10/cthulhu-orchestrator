@@ -131,25 +131,40 @@ func TestGuiaWorkerPideOrqCheck(t *testing.T) {
 	contiene(t, string(raw), "`orq check`", "until it passes", "Before REQUEST VERIFICATION")
 }
 
-// orq check --caja says per check whether the box can run it, with what it binds; nothing runs.
+// orq check --caja probes the real box for each check's tool and reports what the probe saw.
 func TestCheckCajaInforma(t *testing.T) {
 	root := repoCLI(t)
 	t.Setenv("ORQ_STATE", t.TempDir())
+	t.Setenv("ORQ_LIMITS", filepath.Join(t.TempDir(), "limits.json"))
 	home := filepath.Join(t.TempDir(), "home")
-	real := filepath.Join(home, ".local", "lib", "fake", "bin", "faketool")
+	lib := filepath.Join(home, ".local", "lib")
+	// ~/.local/bin/faketool -> ~/.local/lib/fake/bin/faketool, ~/.local/lib/fake -> fake-1.0
+	real := filepath.Join(lib, "fake-1.0", "bin", "faketool")
 	os.MkdirAll(filepath.Dir(real), 0o755)
-	os.WriteFile(real, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	os.WriteFile(real, []byte("#!/bin/sh\necho faketool v1.0\n"), 0o755)
+	os.Symlink("fake-1.0", filepath.Join(lib, "fake"))
+	bin := filepath.Join(home, ".local", "bin")
+	os.MkdirAll(bin, 0o755)
+	os.Symlink(filepath.Join(lib, "fake", "bin", "faketool"), filepath.Join(bin, "faketool"))
+	// rota: its interpreter lives where the box never looks, so it only fails when it runs.
+	os.MkdirAll(filepath.Join(home, "opt"), 0o755)
+	os.Symlink("/bin/sh", filepath.Join(home, "opt", "interp"))
+	os.WriteFile(filepath.Join(bin, "rota"), []byte("#!"+filepath.Join(home, "opt", "interp")+"\necho no\n"), 0o755)
 	os.MkdirAll(filepath.Join(home, ".config", "x"), 0o755)
 	os.WriteFile(filepath.Join(home, ".config", "x", "cfgtool"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
 	t.Setenv("HOME", home)
-	t.Setenv("PATH", filepath.Dir(real)+":"+filepath.Join(home, ".config", "x")+":"+os.Getenv("PATH"))
-	escribirEn(t, root, ".orq/config.json", `{"checks": {"lint": {"cmd": "faketool -l ."}, "types": {"cmd": "cfgtool"}, "tests": {"cmd": "nosuchtool run"}}}`)
+	t.Setenv("PATH", bin+":"+filepath.Join(home, ".config", "x")+":"+os.Getenv("PATH"))
+	escribirEn(t, root, ".orq/config.json", `{"checks": {"lint": {"cmd": "faketool -l ."}, "types": {"cmd": "cfgtool"}, "tests": {"cmd": "nosuchtool run"}, "arch": {"cmd": "rota"}}}`)
 	t.Chdir(root)
 	out, _, code := run(t, "check", "--caja")
 	if code != 1 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	contiene(t, out, "lint  corre en la caja · monta "+filepath.Join(home, ".local", "lib", "fake"),
+	contiene(t, out, "lint  corre en la caja: faketool → "+filepath.Join(bin, "faketool")+" · faketool v1.0 · monta "+bin+", "+lib,
+		"arch  no corre en la caja: la sonda de rota sale ",
 		"types  no corre en la caja: cfgtool está en "+filepath.Join(home, ".config", "x")+", que nunca entra en la caja",
 		"tests  no corre en la caja: nosuchtool no está en el PATH del host")
+	if strings.Contains(out, "arch  corre") {
+		t.Fatalf("a static answer for rota:\n%s", out)
+	}
 }

@@ -59,7 +59,7 @@ type CheckCaja struct {
 	Herramientas []sandbox.Herramienta
 }
 
-// ChecksCaja dice, sin correr nada, si cada check del proyecto puede correr en la caja.
+// ChecksCaja dice qué herramientas nombra cada check del proyecto y qué montaría la caja para ellas.
 func ChecksCaja(cwd string) ([]CheckCaja, error) {
 	_, _, cs, err := checksDe(cwd)
 	if err != nil {

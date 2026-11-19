@@ -48,7 +48,8 @@ func runCheck(stdout, stderr io.Writer) int {
 	return 0
 }
 
-// runCheckCaja informa, por check, si la caja de la verificación ve sus herramientas. Sale 1 si alguno no.
+// runCheckCaja corre, por check, una sonda de cada herramienta dentro de la caja real de orq slice
+// verificar (command -v y su versión) e informa lo que vio. Sale 1 si alguna no corre.
 func runCheckCaja(stdout, stderr io.Writer) int {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -67,11 +68,35 @@ func runCheckCaja(stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "%s  no corre en la caja: %s\n", c.Nombre, no)
 			continue
 		}
+		var vistas, fallas []string
+		for _, h := range c.Herramientas {
+			s, err := sandbox.Sondear(h)
+			switch {
+			case err != nil:
+				fallas = append(fallas, fmt.Sprintf("la sonda de %s no arrancó: %v", h.Nombre, err))
+			case !s.Corre():
+				fallas = append(fallas, fmt.Sprintf("la sonda de %s sale %d: %s", h.Nombre, s.Exit, s.Linea))
+			default:
+				v := h.Nombre + " → " + s.Ruta
+				if s.Linea != "" {
+					v += " · " + s.Linea
+				}
+				if s.Exit != 0 {
+					v += fmt.Sprintf(" (exit %d)", s.Exit)
+				}
+				vistas = append(vistas, v)
+			}
+		}
+		if len(fallas) > 0 {
+			code = 1
+			fmt.Fprintf(stdout, "%s  no corre en la caja: %s\n", c.Nombre, strings.Join(fallas, "; "))
+			continue
+		}
 		monta := "nada fuera del sistema"
 		if ro := sandbox.RODe(c.Herramientas); len(ro) > 0 {
 			monta = strings.Join(ro, ", ")
 		}
-		fmt.Fprintf(stdout, "%s  corre en la caja · monta %s\n", c.Nombre, monta)
+		fmt.Fprintf(stdout, "%s  corre en la caja: %s · monta %s\n", c.Nombre, strings.Join(vistas, "; "), monta)
 	}
 	return code
 }
