@@ -430,7 +430,7 @@ func TestCierreNoQuitaWorktreeConProcesoVivo(t *testing.T) {
 
 func TestMetricasDelCiclo(t *testing.T) {
 	r := repoDeJuguete(t)
-	if m := r.Metricas(time.Time{}); m.Aceptados != 0 || m.HorasMedias != 0 {
+	if m := r.Metricas(time.Time{}, t0); m.Aceptados != 0 || m.HorasMedias != 0 {
 		t.Fatalf("%+v", m)
 	}
 	e := abrir(t, r)
@@ -440,7 +440,7 @@ func TestMetricasDelCiclo(t *testing.T) {
 	commitEn(t, e.Worktree, "total.txt", "170\n")
 	r.Verificar("", t0)
 	r.Cerrar("", true, "", t0.Add(2*time.Hour))
-	m := r.Metricas(time.Time{})
+	m := r.Metricas(time.Time{}, t0)
 	if m.Aceptados != 1 || m.Intentos != 2 || m.Verificaciones != 3 || m.FallosSinProgreso != 1 || m.VerdesALaPrimera != 0 {
 		t.Fatalf("%+v", m)
 	}
@@ -1200,7 +1200,7 @@ func TestMetricasPorRuta(t *testing.T) {
 	cerrar("02", "fix", false, 3)
 	cerrar("03", "fix", true, 5) // empezó como fix, terminó como slice
 	cerrar("04", "", false, 8)
-	m := r.Metricas(time.Time{})
+	m := r.Metricas(time.Time{}, t0)
 	if m.Aceptados != 4 || m.Ascendidos != 1 {
 		t.Fatalf("%+v", m)
 	}
@@ -1215,7 +1215,7 @@ func TestMetricasRegistrosViejosSonSlice(t *testing.T) {
 	r := repoDeJuguete(t)
 	appendJSON(r.logPath(), map[string]any{"nn": "01", "intento": 1, "titulo": "viejo", "resultado": "aceptado",
 		"abierto": t0, "cerrado": t0.Add(2 * time.Hour)})
-	m := r.Metricas(time.Time{})
+	m := r.Metricas(time.Time{}, t0)
 	if m.PorRuta[RutaSlice].Aceptados != 1 || m.PorRuta[RutaFix].Aceptados != 0 || m.PorRuta[RutaSlice].HorasMedias != 2 {
 		t.Fatalf("%+v", m)
 	}

@@ -115,3 +115,53 @@ func TestSumarExamenAnota(t *testing.T) {
 		t.Fatalf("examen: %+v", ev)
 	}
 }
+
+// diarioFijo writes the fixture journal of TestMetricasDecisionDesdeDiario and returns its `now`.
+func diarioFijo(t *testing.T, orqDir string) time.Time {
+	t.Helper()
+	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	dia := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)
+	h := func(hh, mm int) time.Time {
+		return dia.Add(time.Duration(hh)*time.Hour + time.Duration(mm)*time.Minute)
+	}
+	evs := []diario.Evento{
+		{TS: h(10, 0), Tipo: "verificacion", Slice: "01", Resultado: "paso"},
+		{TS: h(10, 6), Tipo: "decision", Slice: "01", Resultado: "aceptado"},
+		{TS: h(10, 0), Tipo: "verificacion", Slice: "02", Resultado: "paso"},
+		{TS: h(10, 20), Tipo: "decision", Slice: "02", Resultado: "rechazado", Detalle: "no es lo pedido"},
+		{TS: h(9, 0), Tipo: "verificacion", Slice: "03", Resultado: "fallo"},
+		{TS: h(10, 0), Tipo: "verificacion", Slice: "03", Resultado: "paso"},
+		{TS: h(10, 10), Tipo: "decision", Slice: "03", Resultado: "aceptado"},
+		{TS: h(10, 0), Tipo: "verificacion", Slice: "04", Resultado: "paso"},
+		{TS: h(10, 30), Tipo: "fase", Slice: "04", De: Verificado, A: Implementando},
+		{TS: h(11, 0), Tipo: "verificacion", Slice: "04", Resultado: "paso"},
+		{TS: h(11, 4), Tipo: "decision", Slice: "04", Resultado: "aceptado"},
+		{TS: now.Add(-48 * time.Hour), Tipo: "verificacion", Slice: "05", Resultado: "paso"},
+		{TS: now.Add(-time.Hour), Tipo: "verificacion", Slice: "06", Resultado: "paso"},
+		{TS: h(8, 0), Tipo: "intento", Slice: "07", Intento: 2, Datos: map[string]any{"causa": CausaWorker}},
+		{TS: h(8, 0), Tipo: "intento", Slice: "08", Intento: 2, Datos: map[string]any{"causa": CausaExamen}},
+		{TS: h(8, 30), Tipo: "intento", Slice: "08", Intento: 3, Datos: map[string]any{"causa": CausaExamen}},
+	}
+	for _, e := range evs {
+		if err := diario.Anotar(diario.Ruta(orqDir), e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return now
+}
+
+func TestMetricasDecisionDesdeDiario(t *testing.T) {
+	r := Repo{OrqDir: t.TempDir()}
+	now := diarioFijo(t, r.OrqDir)
+	m := r.Metricas(time.Time{}, now)
+	if m.Decididos != 4 || m.DecisionMinMediana != 8 || m.SinDecidir24h != 1 {
+		t.Fatalf("decididos %d, mediana %v, sin decidir %d", m.Decididos, m.DecisionMinMediana, m.SinDecidir24h)
+	}
+	if m.IntentosPorCausa[CausaWorker] != 1 || m.IntentosPorCausa[CausaExamen] != 2 {
+		t.Fatalf("causas %v", m.IntentosPorCausa)
+	}
+	desde := time.Date(2026, 11, 18, 10, 7, 0, 0, time.UTC)
+	if m := r.Metricas(desde, now); m.Decididos != 3 {
+		t.Fatalf("since 10:07 only 3 decisions count, got %d", m.Decididos)
+	}
+}
