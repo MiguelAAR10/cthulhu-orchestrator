@@ -1,6 +1,6 @@
 # Attack index
 
-One line per attack found so far in `reviews/step1-review*.md` and `working/inspector/informe*.md` (plus the final review of step 1, in `step1-report.md`). Each line points at the test that reproduces it, or says it is a limit and which review or report section accepted it. `harness/internal/attacks_test.go:TestAttackIndex` checks that every referenced file, test function, row fragment and shell case label exists.
+One line per attack found so far in `reviews/step1-review*.md` and `working/inspector/informe*.md` (plus the final review of step 1, in `step1-report.md`, and the mutation report of step 1b, lines M-n). Each line points at the test that reproduces it, or says it is a limit and which review or report section accepted it. `harness/internal/attacks_test.go:TestAttackIndex` checks that every referenced file, test function, row fragment and shell case label exists.
 
 Reading a reference: `file:TestName` is a Go test; `file:TestName/fragment` is a row of a table test (the gate tables have no subtests, so the fragment is a literal piece of the row's source, usually its command); `validacion/*.sh:label` is a case of a shell suite run by `make ci`.
 
@@ -41,6 +41,9 @@ Limits: until the worker box of step 2, the gate stops mistakes, not deliberate 
 - **R7b-1** step1-review-7b.md MUST-FIX 1 · `git log -1 -m $O`, `-F $O`, `--format "$O"`, `log -1 -m *` write a path through the global option-value exception → `harness/internal/gate/decisiones_test.go:TestDecisiones/O=--output=/p; git log -1 -m $O`, `harness/internal/gate/decisiones_test.go:TestDecisiones/git log -1 -F $O`, `harness/internal/gate/decisiones_test.go:TestDecisiones/git log -1 -m *`
 - **R7b-2** step1-review-7b.md new · `X=-f; git branch -m "$X" slice/02` replaces another worker's branch → `harness/internal/gate/decisiones_test.go:TestDecisiones/X=-f; git branch -m "$X" slice/02`
 - **R7b-3** step1-review-7b.md fix direction · `git commit -m -m $O` → `harness/internal/gate/decisiones_test.go:TestDecisiones/git commit -m -m $O`
+- **M-1** step1b-report.md, mutation of `gitAjeno` · grouped short options and the `=` long form move another branch: `git checkout -qB main`, `git switch -qC main`, `git checkout -qBmain`, `git switch --force-create=main` → `harness/internal/gate/decisiones_test.go:TestDecisiones/git checkout -qB main`, `harness/internal/gate/decisiones_test.go:TestDecisiones/git switch -qC main`, `harness/internal/gate/decisiones_test.go:TestDecisiones/git checkout -qBmain`, `harness/internal/gate/decisiones_test.go:TestDecisiones/git switch --force-create=main`
+- **M-2** step1b-report.md, mutation of `examen` · worker code rewrites the exam's bundle while the exam runs → `harness/internal/slice/slice_test.go:TestExamenModificadoMientrasCorreBloquea`
+- **M-3** step1b-report.md, mutation of `examen` · a passing report committed by the worker counts when the exam ends before writing its own → `harness/internal/slice/slice_test.go:TestReporteCommiteadoPorElWorkerNoCuenta`
 - **R8-1** step1-review-8.md · a dynamic word becomes a `git commit` option (`-tm "$O"`, `-Sm`, `--template`, `--trailer`, `--cleanup`, `--fixup`) → limit until step 2 (accepted: review 8 orchestrator classification; step1-report.md "Close")
 - **RF-5** step1-report.md "Known gaps" · hooks in the clone's own `.git` run on `git commit` → limit until step 2 (accepted: step1-report.md "Close"; reviews 6 and 7, "needs the step 2 box")
 
