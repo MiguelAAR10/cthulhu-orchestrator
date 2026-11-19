@@ -104,6 +104,7 @@ Fixes for `reviews/d1-review.md`, each repro a test seen failing first:
 3. The page's "Archivos" diffs red→`rec.Head`; if the clone tip differs, `!!` names both commits (`TestPaginaArchivosSonDelCommitVerificado`).
 4. The story uses the `historia` whose attempt is this slice's; without a link and with more than one slice open the page raises `!! story may belong to another slice` (`TestDecidirHistoriaVinculadaYAviso`, `...SinVinculoConVariosAbiertosAvisa`).
 5. The `verificacion` stamp is `now` plus the time the run took (`TestVerificacionSelloDespuesDeLaCorrida`); `TestSellosDelCiclo` now allows that drift.
+6. The page computes `Fuera` for `rec.Head` itself with the same rule `Alinear` uses (`Estado.fueraDeAlcance`), so a file the verified commit added out of scope stays flagged after a later clone commit deletes it (`TestPaginaFueraEsDelCommitVerificado`).
 6. Hints in `slice/slice.go` and `app/relevo.go` include `--causa worker|examen`.
 
 `gofmt -l harness` empty, `go vet ./...`, `go test -race ./...` and `make ci` (exit 0) pass. `internal/gate` and `internal/sandbox` untouched.

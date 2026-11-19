@@ -266,3 +266,29 @@ func TestVerificacionSelloDespuesDeLaCorrida(t *testing.T) {
 		t.Fatalf("stamp %v must include the run time after %v", v, t0)
 	}
 }
+
+// Review 2: Fuera is computed for rec.Head itself, so a file the verified commit added outside the scope
+// is flagged even when a later clone commit deleted it.
+func TestPaginaFueraEsDelCommitVerificado(t *testing.T) {
+	r := repoDeJuguete(t)
+	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}, Sano: "test -f total.txt"}, t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(e.Worktree, "fuera.txt"), []byte("x\n"), 0o644)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if _, _, err := r.Verificar("", t0.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	Git(e.Worktree, "rm", "-q", "fuera.txt")
+	if _, err := Git(e.Worktree, "commit", "-qm", "borra"); err != nil {
+		t.Fatal(err)
+	}
+	pg, err := r.Pagina("01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(pg.Alineacion.Fuera, "fuera.txt") {
+		t.Fatalf("fuera.txt not flagged: Fuera=%v Cambiados=%v", pg.Alineacion.Fuera, pg.Alineacion.Cambiados)
+	}
+}

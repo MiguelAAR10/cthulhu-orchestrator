@@ -50,13 +50,12 @@ func (r Repo) Pagina(nn string) (*Pagina, error) {
 	}
 	if fs, err := r.tocadas(e.SHARojo, rec.Head); err == nil {
 		a.Cambiados = fs
-		var fuera []string
-		for _, f := range a.Fuera {
-			if slices.Contains(fs, f) {
-				fuera = append(fuera, f)
+		a.Fuera = nil // recomputed for rec.Head itself, not filtered from the clone tip's list
+		for _, f := range fs {
+			if e.fueraDeAlcance(f) {
+				a.Fuera = append(a.Fuera, f)
 			}
 		}
-		a.Fuera = fuera
 	}
 	evs, err := diario.Leer(diario.Ruta(r.OrqDir))
 	if err != nil {

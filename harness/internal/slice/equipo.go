@@ -289,9 +289,6 @@ func (r Repo) Alinear(nn string) (*Estado, *Alineacion, error) {
 	if e == nil {
 		return nil, nil, errors.New("no hay slice abierto")
 	}
-	permitido := append([]string{e.Test}, e.Bundle...)
-	permitido = append(permitido, e.Alcance...)
-	acotado := len(e.Alcance) > 0
 	// Each branch is read at its clone's tip when there is a clone: the main repo only learns of a
 	// worker's commits when they are brought in, and drift must show before that.
 	type fuente struct{ rama, clon, nombre string }
@@ -300,8 +297,6 @@ func (r Repo) Alinear(nn string) (*Estado, *Alineacion, error) {
 		fuentes[0].clon = e.Worktree
 	}
 	for _, w := range e.Equipo {
-		permitido = append(permitido, w.Rutas...)
-		acotado = acotado || len(w.Rutas) > 0
 		fuentes = append(fuentes, fuente{w.Rama, w.Worktree, w.Nombre})
 	}
 	a := &Alineacion{}
@@ -327,17 +322,7 @@ func (r Repo) Alinear(nn string) (*Estado, *Alineacion, error) {
 			}
 			visto[f] = true
 			a.Cambiados = append(a.Cambiados, f)
-			if !acotado {
-				continue
-			}
-			ok := false
-			for _, p := range permitido {
-				if dentro(p, f) {
-					ok = true
-					break
-				}
-			}
-			if !ok {
+			if e.fueraDeAlcance(f) {
 				a.Fuera = append(a.Fuera, f)
 			}
 		}
@@ -349,6 +334,27 @@ func (r Repo) Alinear(nn string) (*Estado, *Alineacion, error) {
 		a.Avisos = append(a.Avisos, fmt.Sprintf("%d archivos cambiados: ya no es un slice delgado", len(a.Cambiados)))
 	}
 	return e, a, nil
+}
+
+// fueraDeAlcance dice si el archivo f cae fuera de lo que el slice justifica: el examen, el bundle, el
+// alcance y las zonas de cada worker. Sin alcance ni zonas declarados nada queda fuera.
+func (e *Estado) fueraDeAlcance(f string) bool {
+	permitido := append([]string{e.Test}, e.Bundle...)
+	permitido = append(permitido, e.Alcance...)
+	acotado := len(e.Alcance) > 0
+	for _, w := range e.Equipo {
+		permitido = append(permitido, w.Rutas...)
+		acotado = acotado || len(w.Rutas) > 0
+	}
+	if !acotado {
+		return false
+	}
+	for _, p := range permitido {
+		if dentro(p, f) {
+			return false
+		}
+	}
+	return true
 }
 
 // podable: la rama del worker ya está dentro del slice (o ya no existe). Su trabajo no se pierde.
