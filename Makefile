@@ -6,7 +6,7 @@ STATE   ?= $(HOME)/.local/state/orq
 STATICCHECK_VERSION := 2025.1.1
 STATICCHECK ?= $(HOME)/go/bin/staticcheck
 
-.PHONY: build test lint ci install limits status
+.PHONY: build test lint mutation ci install limits status
 
 build:
 	cd harness && $(GO) build -trimpath -o ../dist/orq ./cmd/orq
@@ -19,6 +19,17 @@ lint:
 	@$(STATICCHECK) -version 2>/dev/null | grep -q '^staticcheck $(STATICCHECK_VERSION) ' || \
 	{ echo "lint needs staticcheck $(STATICCHECK_VERSION). install: go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)"; exit 1; }
 	cd harness && $(STATICCHECK) ./internal/gate/... ./internal/slice/...
+
+# mutation reports, without failing on survivors, which mutants of the four critical decisions the
+# tests miss: who is a worker, the worker git allowlist, the exam fingerprint, the bundle descent.
+# Not part of ci; 10 minutes at most.
+MUTAR = internal/gate/gate.go:IsWorker internal/gate/repo.go:gitAjeno \
+	internal/slice/slice.go:huellaDe internal/slice/nucleo.go:examen internal/slice/nucleo.go:Verificar \
+	internal/slice/clones.go:ingerir internal/slice/caja.go:esAncestro
+mutation:
+	@set -e; tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/orq-mut.XXXXXX"); trap 'rm -rf "$$tmp"' EXIT; mkdir -p "$$tmp/state" "$$tmp/wt"; \
+	export ORQ_STATE="$$tmp/state" ORQ_LIMITS="$$tmp/limits.json" ORQ_WORKTREES="$$tmp/wt" ORQ_CONFIG="$$tmp/config.json" ORQ_SIN_DOC=1; \
+	cd harness && $(GO) run ./tools/mutar -t 10m -j 6 $(MUTAR)
 
 # ci runs every suite. Every step gets its own ORQ_STATE, ORQ_LIMITS, ORQ_WORKTREES and ORQ_CONFIG
 # under a temp dir and its own orq binary there: nothing reads or writes the installed orq or its state.
