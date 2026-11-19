@@ -69,6 +69,30 @@ Until step 7, Codex workers run with no hook and no box: the pilot says so and u
 
 **Reorder (Owner, 2026-11-18):** the worker box (B6) moves to right after step 1b, as step 2, because four reviews each found a new way out of the command-text gate, and the box is also what lets workers share dependencies read-only (disk/RAM scout, `docs/harness-v2/working/research/disk-memory-2026-11-18.md`). Until the box lands, the gate stops mistakes, not deliberate escapes. B6 needs the Owner to run `claude setup-token` and place the token where orq reads it; never through chat. Measurement (2a) and later steps shift by one.
 
+## Milestone direction (Owner, 2026-11-18 evening)
+
+Next relevant progress: "this real agent completed this task inside the intended boundary, this result was accepted, this other one was rejected, here is the evidence".
+
+**Close step 1.** Each review is pinned to a commit. Findings are classified as (a) blocks the gate's intended scope → fix now; (b) needs the step 2 box → documented limit; (c) can wait. A fix gets a review focused on that finding and its effects, not a new general audit. Containment is not called solved before step 2 proves it.
+
+**Step 1b, bounded.** (1) `orq version` prints the build's VCS revision and dirty flag, and `make ci` asserts every suite runs the candidate binary it just built (today candidate and installed both print `1.0.0`). (2) The attack catalog is an index (`docs/harness-v2/attacks.md`): one line per attack found so far → the test that reproduces it. (3) Lint and mutation only where they catch a named risk before step 2: `staticcheck` (pinned) for ignored errors and dead branches in `gate`/`slice`; mutation on the few critical decisions (`IsWorker`, worker git allowlist, exam fingerprint check, bundle descendant check) with a hard time limit, report only. No open-ended quality campaign.
+
+**Step 2 exit tests (box), positive and negative, with decoy files, no real secrets:**
+1. The whole agent process tree and its tools run inside the boundary (bwrap namespaces; checked from inside and outside).
+2. The agent can edit and test code in its clone.
+3. It cannot modify the authorized contract, the protected state, or the controller's integration branch — decoys outside the clone must be unreadable or unwritable, and the ref the controller treats as authorized lives where the worker has no write path.
+4. The bundle is received as a code proposal and checked against the expected base and scope.
+5. A valid result advances; an invalid one is rejected with a reproducible reason.
+6. Repeating critical operations or losing a reply causes neither a duplicate merge nor a blind relaunch.
+
+**Technical trial at the end of step 2** (not product validation, not recovery, not parallelism): a throwaway repo, one real worker, one bounded functional change: launch → implement → return → independent verify → result; plus one known variant that must be rejected. Record time, attempts, Owner interventions and observable cost from this first run.
+
+**Credential, prepared before asking the Owner,** tested with a dummy value: which account and config; where it is stored locally; how it reaches Claude Code inside the box; how it is kept out of logs, reports and commits; which network the agent needs and what stays blocked. Then a minimal procedure for the Owner to authenticate and store it from his own terminal. Respect existing account configs. A model credential never grants authority to close or merge in orq.
+
+**Reporting.** Each report states: concrete result available; evaluated commit; binary path and revision; checks passed, failed, skipped, pending; remaining blocker; next test. Future capabilities are written "will be tested in step N", never "tested". The Owner passphrase (step 3) must say which decision it represents and how it binds to the change; a phrase in chat never replaces Owner identity nor turns pending evidence into approved evidence.
+
+**Models:** Opus builds and reviews, Sonnet for small mechanical work and scouts, Fable plans only on request, never Codex. Reviews keep author/reviewer separation, clear criteria and executable reproductions.
+
 **Frozen:** pub/sub bus and hive memory, second orchestrator, U1 `orq setup`, L1 translation, Orca adapter work, C6 and W1 as separate pieces (their useful parts are in 2b), full Q1 quality profile, mutation and held-out tests (until the pilot shows wrong acceptances), model-compacted memory and injected "instincts". Not claimed: catching cheaters as the core value; being the only verifier.
 
 ## Activities
