@@ -180,6 +180,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	case "doc":
 		return runDoc(stdout, stderr)
 	case "doctor":
+		if identidad.EsOrq2() && len(args) == 2 && args[1] == "--ram" {
+			return runDoctorRAM(stdout)
+		}
 		return runDoctor(stdout, stderr)
 	case "up":
 		return runUp(args[1:], stdout, stderr)
@@ -266,7 +269,11 @@ func runGate(stdin io.Reader, stderr io.Writer) int {
 	if err != nil {
 		// Sin límites válidos solo se bloquean lanzamientos; el resto de herramientas sigue.
 		if p.ToolName == "Agent" || p.ToolName == "Task" || p.ToolName == "Bash" {
-			fmt.Fprintf(stderr, "orq: %v. Crea el archivo (ver templates/limits.json) para poder lanzar workers.\n", err)
+			plantilla := "templates/limits.json"
+			if identidad.EsOrq2() {
+				plantilla = "templates/limits-orq2.json"
+			}
+			fmt.Fprintf(stderr, "orq: %v. Crea el archivo (ver %s) para poder lanzar workers.\n", err, plantilla)
 			return 2
 		}
 		// Aun sin límites, el examen y el paquete del slice siguen protegidos.
@@ -286,8 +293,21 @@ func runGate(stdin io.Reader, stderr io.Writer) int {
 	env.Capacidad = func(cwd string, vivos int) (string, error) {
 		return app.CapacidadPara(gate.CheckoutPrincipal(cwd), l, vivos, medir)
 	}
+	// orq2: an allowed launch with little RAM left carries one warning line; it never refuses.
+	if identidad.EsOrq2() {
+		env.AvisoRAM = func() string {
+			m, err := medir.Maquina()
+			if err != nil {
+				return ""
+			}
+			return app.AvisoRAM(l, m)
+		}
+	}
 	d := gate.Evaluate(p, l, env)
 	if d.Allow {
+		if d.Aviso != "" {
+			fmt.Fprintln(stderr, d.Aviso)
+		}
 		return 0
 	}
 	fmt.Fprintln(stderr, d.Reason)
@@ -311,6 +331,11 @@ func runWatch(stdout, stderr io.Writer) int {
 	}
 	for p, gb := range r.Snapshot.DiskFreeGB {
 		fmt.Fprintf(stdout, "libre %-6s %.0f GB (mínimo %.0f, crítico %.0f)\n", p, gb, l.MinFreeGB[p], *l.Scratch.CriticalFreeGB)
+	}
+	if m, err := sysinfo.LeerMaquina(); err == nil {
+		if a := app.AvisoRAM(l, m); a != "" {
+			fmt.Fprintln(stdout, a)
+		}
 	}
 	if r.Halt != "" {
 		fmt.Fprintf(stdout, "HALT escrito: %s\n", r.Halt)
@@ -371,6 +396,9 @@ func runStatus(stdout, stderr io.Writer) int {
 	}
 	m := c.Maquina
 	fmt.Fprintf(stdout, "máquina: RAM %.1f GB disponibles de %.1f · CPU %d núcleos, carga %.1f\n", m.MemDisponibleGB, m.MemTotalGB, m.CPUs, m.Carga1)
+	if a := app.AvisoRAM(l, m); a != "" {
+		fmt.Fprintln(stdout, a)
+	}
 	fmt.Fprintf(stdout, "  presupuesto por agente: %.1f GB y %.1f núcleos · reserva: %.1f GB y %.1f núcleos · carga máxima %.1f por núcleo\n",
 		cfg.Recursos.RAMPorAgenteGB, cfg.Recursos.CPUPorAgente, cfg.Recursos.ReservaRAMGB, cfg.Recursos.ReservaCPUs, cfg.Recursos.CargaMax)
 	fmt.Fprintf(stdout, "capacidad: %s\n", c.Resumen())
