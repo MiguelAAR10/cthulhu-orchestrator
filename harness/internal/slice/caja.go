@@ -249,6 +249,13 @@ func SondaUvDe(cmd string) string {
 			}
 			j := i + 2
 			for j < len(f) && strings.HasPrefix(f[j], "-") {
+				if f[j] == "--" {
+					j++
+					break
+				}
+				if uvConValor[f[j]] {
+					j++ // el valor del flag no es la herramienta
+				}
 				j++
 			}
 			if j == len(f) {
@@ -258,6 +265,19 @@ func SondaUvDe(cmd string) string {
 		}
 	}
 	return ""
+}
+
+// uvConValor son los flags de `uv run` que toman el valor en la palabra siguiente.
+var uvConValor = map[string]bool{
+	"--with": true, "--with-editable": true, "--with-requirements": true, "--directory": true, "--project": true,
+	"--python": true, "-p": true, "--group": true, "--only-group": true, "--no-group": true, "--extra": true,
+	"--no-extra": true, "--package": true, "--env-file": true, "--index": true, "--default-index": true,
+	"--index-url": true, "--extra-index-url": true, "--find-links": true, "-f": true, "--cache-dir": true,
+	"--config-file": true, "--color": true, "--python-platform": true, "--index-strategy": true,
+	"--keyring-provider": true, "--resolution": true, "--prerelease": true, "--exclude-newer": true,
+	"--link-mode": true, "--refresh-package": true, "--upgrade-package": true, "-P": true,
+	"--reinstall-package": true, "--config-setting": true, "-C": true, "--allow-insecure-host": true,
+	"--python-preference": true, "--no-binary-package": true, "--no-build-package": true,
 }
 
 // SondarUv corre la sonda de un check uv dentro de la caja, en una copia limpia de HEAD del repo
