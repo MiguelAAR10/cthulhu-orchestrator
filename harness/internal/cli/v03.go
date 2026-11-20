@@ -242,7 +242,7 @@ func escribirChecks(root string, web bool, stdout io.Writer) error {
 		}
 		return nil
 	}
-	cs := perfil.Checks(root)
+	cs := perfil.ChecksPara(root, identidad.EsOrq2())
 	if e2e.Cmd != "" {
 		cs[config.E2E] = e2e
 	}
