@@ -5,6 +5,7 @@ import (
 
 	"orq/internal/config"
 	"orq/internal/gate"
+	"orq/internal/identidad"
 	"orq/internal/limits"
 	"orq/internal/recursos"
 	"orq/internal/sysinfo"
@@ -22,9 +23,18 @@ func MedirReal() Medir {
 		Maquina: sysinfo.LeerMaquina,
 		Vivos: func(l limits.Limits) ([]sysinfo.Proc, error) {
 			procs, err := sysinfo.ListProcs()
-			return sysinfo.Workers(procs, l.WorkerProcessName, gate.IsWorker), err
+			return sysinfo.Workers(procs, l.WorkerProcessName, EsWorkerContable()), err
 		},
 	}
+}
+
+// EsWorkerContable is the predicate that counts workers for max_workers. orq2 counts only its own
+// clones (gate.EsWorkerPropio); orq keeps the 1.0.0 rule (gate.IsWorker: any linked worktree).
+func EsWorkerContable() func(cwd string) bool {
+	if identidad.EsOrq2() {
+		return gate.EsWorkerPropio
+	}
+	return gate.IsWorker
 }
 
 // Capacidad mide la máquina y aplica las reglas de recursos de la configuración.

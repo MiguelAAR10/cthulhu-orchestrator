@@ -262,3 +262,23 @@ func IsWorker(dir string) bool {
 		}
 	}
 }
+
+// EsWorkerPropio is orq2's counting question, narrower than IsWorker: true only if some .git
+// directory upward holds the marker of a clone orq made. A linked worktree (another tool's agent)
+// does not count, and neither does a directory that cannot be placed. It only sets the head count
+// for max_workers; IsWorker stays the gate's security question.
+func EsWorkerPropio(dir string) bool {
+	if !filepath.IsAbs(dir) {
+		return false
+	}
+	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+		if info, err := os.Lstat(filepath.Join(d, ".git")); err == nil && info.IsDir() {
+			if _, err := os.Lstat(filepath.Join(d, ".git", orqdir.MarcaClon)); !os.IsNotExist(err) {
+				return true
+			}
+		}
+		if filepath.Dir(d) == d {
+			return false
+		}
+	}
+}
