@@ -123,7 +123,7 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "memoria compactada: %d → %d líneas (copia previa: %s)\n", len(items), len(res), bak)
 		return 0
 	}
-	fmt.Fprint(stderr, usage)
+	fmt.Fprint(stderr, uso())
 	return 1
 }
 
@@ -271,7 +271,7 @@ func runMsg(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprint(stderr, usage)
+	fmt.Fprint(stderr, uso())
 	return 1
 }
 
@@ -889,7 +889,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprint(stderr, usage)
+	fmt.Fprint(stderr, uso())
 	return 1
 }
 

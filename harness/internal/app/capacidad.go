@@ -5,6 +5,7 @@ import (
 
 	"orq/internal/config"
 	"orq/internal/gate"
+	"orq/internal/identidad"
 	"orq/internal/limits"
 	"orq/internal/recursos"
 	"orq/internal/sysinfo"
@@ -22,9 +23,18 @@ func MedirReal() Medir {
 		Maquina: sysinfo.LeerMaquina,
 		Vivos: func(l limits.Limits) ([]sysinfo.Proc, error) {
 			procs, err := sysinfo.ListProcs()
-			return sysinfo.Workers(procs, l.WorkerProcessName, gate.IsWorker), err
+			return sysinfo.Workers(procs, l.WorkerProcessName, EsWorkerContable()), err
 		},
 	}
+}
+
+// EsWorkerContable is the predicate that counts workers for max_workers. orq2 counts only its own
+// clones (gate.EsWorkerPropio); orq keeps the 1.0.0 rule (gate.IsWorker: any linked worktree).
+func EsWorkerContable() func(cwd string) bool {
+	if identidad.EsOrq2() {
+		return gate.EsWorkerPropio
+	}
+	return gate.IsWorker
 }
 
 // Capacidad mide la máquina y aplica las reglas de recursos de la configuración.
@@ -38,7 +48,7 @@ func Capacidad(cfg config.Config, l limits.Limits, m Medir) (recursos.Capacidad,
 	if err != nil {
 		return recursos.Capacidad{}, vivos, err
 	}
-	return recursos.Calcular(cfg.Recursos, *l.MaxWorkers, len(vivos), maq), vivos, nil
+	return recursos.Calcular(cfg.Recursos, l.TopeWorkers(), len(vivos), maq), vivos, nil
 }
 
 // CapacidadPara es la consulta del gate: con vivos ya contados, ¿cabe uno más en el proyecto de root?
@@ -52,7 +62,7 @@ func CapacidadPara(root string, l limits.Limits, vivos int, m Medir) (string, er
 	if err != nil {
 		return "", err
 	}
-	if c := recursos.Calcular(cfg.Recursos, *l.MaxWorkers, vivos, maq); !c.Cabe() {
+	if c := recursos.Calcular(cfg.Recursos, l.TopeWorkers(), vivos, maq); !c.Cabe() {
 		return c.Motivo(), nil
 	}
 	return "", nil

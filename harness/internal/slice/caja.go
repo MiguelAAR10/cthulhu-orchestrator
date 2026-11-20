@@ -223,3 +223,58 @@ func huellaSegura(dir string, bundle []string, cmd string) (string, error) {
 	}
 	return huellaDe(bundle, datos, cmd), nil
 }
+
+// HerramientasUv son las palabras que cmd corre con `uv run`: salen del .venv, no del PATH del host.
+func HerramientasUv(cmd string) []string {
+	var out []string
+	for _, t := range strings.FieldsFunc(cmd, func(r rune) bool { return r == '&' || r == '|' || r == ';' }) {
+		if s := SondaUvDe(t); s != "" {
+			f := strings.Fields(s)
+			out = append(out, f[len(f)-2])
+		}
+	}
+	return out
+}
+
+// SondaUvDe es la sonda de un check que usa `uv run`: el prefijo del propio comando hasta la
+// herramienta inclusive, más --version (PYTHONPATH=src uv run --offline --no-sync pytest --version).
+// Mira el primer tramo (separado por &&, ||, ; o |) que tiene `uv run`. "" si no hay herramienta.
+func SondaUvDe(cmd string) string {
+	tramos := strings.FieldsFunc(cmd, func(r rune) bool { return r == '&' || r == '|' || r == ';' })
+	for _, t := range tramos {
+		f := strings.Fields(t)
+		for i := 0; i+1 < len(f); i++ {
+			if f[i] != "uv" || f[i+1] != "run" {
+				continue
+			}
+			j := i + 2
+			for j < len(f) && strings.HasPrefix(f[j], "-") {
+				j++
+			}
+			if j == len(f) {
+				return ""
+			}
+			return strings.Join(f[:j+1], " ") + " --version"
+		}
+	}
+	return ""
+}
+
+// SondarUv corre la sonda de un check uv dentro de la caja, en una copia limpia de HEAD del repo
+// principal y con su .venv montado solo lectura, igual que el examen. Prueba que uv se ve, que el
+// .venv llega y que la herramienta está instalada en él; no que resuelva cada import del proyecto.
+// linea es la primera línea de la salida; ok si salió 0.
+func (r Repo) SondarUv(cmd string) (sonda, linea string, ok bool, err error) {
+	sonda = SondaUvDe(cmd)
+	if sonda == "" {
+		return "", "", false, fmt.Errorf("no encuentro la herramienta tras `uv run` en %q", cmd)
+	}
+	dir, limpiar, err := r.copiaDe("HEAD")
+	if err != nil {
+		return sonda, "", false, err
+	}
+	defer limpiar()
+	out, _, ok, err := r.correrEn(dir, sonda, 60*time.Second)
+	linea, _, _ = strings.Cut(strings.TrimSpace(out), "\n")
+	return sonda, strings.TrimSpace(linea), ok, err
+}

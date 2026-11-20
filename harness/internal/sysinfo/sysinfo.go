@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -90,10 +91,15 @@ func parentPID(pid int) (int, bool) {
 }
 
 // DirSizeBytes suma archivos regulares sin seguir symlinks y cuenta hardlinks una vez.
+// Los hijos de primer nivel de root se recorren en paralelo (hasta tamanoParalelo a la vez), con un
+// solo mapa de inodos: el total es el mismo que el de un recorrido en serie.
 func DirSizeBytes(root string) (int64, error) {
-	seen := map[uint64]bool{}
-	var total int64
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	var (
+		mu    sync.Mutex
+		seen  = map[uint64]bool{}
+		total int64
+	)
+	sumar := func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // directorio ilegible: se omite, no se aborta
 		}
@@ -104,6 +110,8 @@ func DirSizeBytes(root string) (int64, error) {
 		if err != nil {
 			return nil
 		}
+		mu.Lock()
+		defer mu.Unlock()
 		if st, ok := info.Sys().(*syscall.Stat_t); ok && st.Nlink > 1 {
 			if seen[st.Ino] {
 				return nil
@@ -112,9 +120,39 @@ func DirSizeBytes(root string) (int64, error) {
 		}
 		total += info.Size()
 		return nil
-	})
-	return total, err
+	}
+	hijos, err := os.ReadDir(root)
+	if err != nil {
+		// No es un directorio legible (un archivo, o no existe): el recorrido en serie decide.
+		err := filepath.WalkDir(root, sumar)
+		return total, err
+	}
+	trabajo := make(chan string)
+	var wg sync.WaitGroup
+	for range tamanoParalelo {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for p := range trabajo {
+				filepath.WalkDir(p, sumar)
+			}
+		}()
+	}
+	for _, h := range hijos {
+		p := filepath.Join(root, h.Name())
+		if h.IsDir() {
+			trabajo <- p
+		} else {
+			sumar(p, h, nil)
+		}
+	}
+	close(trabajo)
+	wg.Wait()
+	return total, nil
 }
+
+// tamanoParalelo acota los recorridos simultáneos de DirSizeBytes.
+const tamanoParalelo = 8
 
 // Usan devuelve los procesos cuyo directorio de trabajo está dentro de dir (sin contar el propio).
 func Usan(procs []Proc, dir string) []Proc {

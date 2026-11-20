@@ -47,11 +47,15 @@ type Env struct {
 	// Capacidad dice si la máquina (RAM, CPU, carga) admite un agente más con vivos corriendo.
 	// Devuelve "" si cabe, o el motivo. nil = no se mira la máquina (pruebas del resto de reglas).
 	Capacidad func(cwd string, vivos int) (motivo string, err error)
+	// AvisoRAM returns a warning line for an allowed launch, or "". nil = no warning (orq).
+	AvisoRAM func() string
 }
 
 type Decision struct {
 	Allow  bool
 	Reason string
+	// Aviso is a warning that rides on an allowed launch; it never turns it into a refusal.
+	Aviso string
 }
 
 func allow() Decision                  { return Decision{Allow: true} }
@@ -153,7 +157,10 @@ func evaluateLaunch(p Payload, l limits.Limits, env Env) Decision {
 	if err != nil {
 		return deny("orq: no pude contar workers (%v). Sin dato no hay lanzamiento.", err)
 	}
-	if n >= *l.MaxWorkers {
+	if l.MaxWorkers == nil && env.Capacidad == nil {
+		return deny("orq: limits.json no trae max_workers y no hay medición de la máquina. Sin dato no hay lanzamiento.")
+	}
+	if l.MaxWorkers != nil && n >= *l.MaxWorkers {
 		return deny("orq: hay %d worker(s) vivos y el tope es %d. Cierra paneles antes de lanzar otro.", n, *l.MaxWorkers)
 	}
 	if env.Capacidad != nil {
@@ -165,7 +172,11 @@ func evaluateLaunch(p Payload, l limits.Limits, env Env) Decision {
 			return deny("orq: %s.", motivo)
 		}
 	}
-	return allow()
+	d := allow()
+	if env.AvisoRAM != nil {
+		d.Aviso = env.AvisoRAM()
+	}
+	return d
 }
 
 // resolver devuelve la ruta absoluta y limpia, con los enlaces simbólicos resueltos
@@ -253,6 +264,26 @@ func IsWorker(dir string) bool {
 			if !info.IsDir() {
 				return true
 			}
+			if _, err := os.Lstat(filepath.Join(d, ".git", orqdir.MarcaClon)); !os.IsNotExist(err) {
+				return true
+			}
+		}
+		if filepath.Dir(d) == d {
+			return false
+		}
+	}
+}
+
+// EsWorkerPropio is orq2's counting question, narrower than IsWorker: true only if some .git
+// directory upward holds the marker of a clone orq made. A linked worktree (another tool's agent)
+// does not count, and neither does a directory that cannot be placed. It only sets the head count
+// for max_workers; IsWorker stays the gate's security question.
+func EsWorkerPropio(dir string) bool {
+	if !filepath.IsAbs(dir) {
+		return false
+	}
+	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+		if info, err := os.Lstat(filepath.Join(d, ".git")); err == nil && info.IsDir() {
 			if _, err := os.Lstat(filepath.Join(d, ".git", orqdir.MarcaClon)); !os.IsNotExist(err) {
 				return true
 			}

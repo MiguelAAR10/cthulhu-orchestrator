@@ -25,7 +25,7 @@ func instalarSkillsOrq(root string) (nuevas, distintas []string) {
 	ents, _ := orqSkills.ReadDir("orqskills")
 	for _, d := range ents {
 		raw, _ := orqSkills.ReadFile("orqskills/" + d.Name() + "/SKILL.md")
-		raw = []byte(identidad.Skills(identidad.Texto(string(raw))))
+		raw = []byte(identidad.Skills(identidad.Texto(skillOrq2(d.Name(), string(raw)))))
 		nombre := identidad.Skills(d.Name())
 		dst := filepath.Join(root, ".claude", "skills", nombre, "SKILL.md")
 		actual, err := os.ReadFile(dst)
@@ -79,6 +79,9 @@ func runSkill(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
+	if rol == "orquestador" && identidad.EsOrq2() {
+		g = []byte(astraPorRol(string(g), cfg.Rol("astra").Kind))
+	}
 	// Los modelos de la guía salen de la configuración, no del texto.
 	fmt.Fprint(stdout, identidad.Skills(cfg.Expandir(string(g))))
 	if p.Root != "" {
@@ -109,4 +112,12 @@ func nunca() []string {
 	}
 	slices.Sort(n)
 	return n
+}
+
+// astraCodex es lo que la guía de orq dice de Astra; orq2 no supone Codex: manda el rol.
+const astraCodex = "({{rol:astra}}; `--kind claude` if no Codex quota)"
+
+// astraPorRol cambia, para orq2, la frase de Astra por el agente y modelo del rol astra.
+func astraPorRol(g, kind string) string {
+	return strings.Replace(g, astraCodex, "("+kind+" {{rol:astra}}: the agent and model the astra role sets in `orq config ver`)", 1)
 }

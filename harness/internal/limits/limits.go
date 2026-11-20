@@ -38,6 +38,19 @@ type Limits struct {
 	MaxSlices int `json:"max_slices,omitempty"`
 	// Sandbox es opcional: sin él la caja solo ve el conjunto base.
 	Sandbox Sandbox `json:"sandbox,omitempty"`
+	// AvisoRAMGB: orq2 warns when available RAM is at or below it; absent = AvisoRAMPorDefecto.
+	AvisoRAMGB *float64 `json:"aviso_ram_gb,omitempty"`
+}
+
+// AvisoRAMPorDefecto is the RAM warning in GB when limits.json does not set aviso_ram_gb.
+const AvisoRAMPorDefecto = 5.0
+
+// AvisoRAM is aviso_ram_gb, or AvisoRAMPorDefecto if absent. It only warns; it never refuses.
+func (l Limits) AvisoRAM() float64 {
+	if l.AvisoRAMGB == nil {
+		return AvisoRAMPorDefecto
+	}
+	return *l.AvisoRAMGB
 }
 
 // DefaultPath respeta ORQ_LIMITS para pruebas y usa ~/.config/orq/limits.json por defecto.
@@ -80,7 +93,7 @@ func (l Limits) validate() error {
 	switch {
 	case len(l.MinFreeGB) == 0:
 		return fmt.Errorf("falta min_free_gb")
-	case l.MaxWorkers == nil:
+	case l.MaxWorkers == nil && !identidad.EsOrq2():
 		return fmt.Errorf("falta max_workers")
 	case l.StateMaxAgeHours == nil:
 		return fmt.Errorf("falta state_max_age_hours")
@@ -92,6 +105,18 @@ func (l Limits) validate() error {
 		return fmt.Errorf("falta scratch.critical_free_gb")
 	}
 	return nil
+}
+
+// SinTope es el tope de workers cuando limits.json no trae max_workers (solo orq2): no hay tope por
+// cabeza y deciden RAM, CPU y carga.
+const SinTope = -1
+
+// TopeWorkers es max_workers, o SinTope si falta (solo orq2 lo permite).
+func (l Limits) TopeWorkers() int {
+	if l.MaxWorkers == nil {
+		return SinTope
+	}
+	return *l.MaxWorkers
 }
 
 func expandHome(p, home string) string {

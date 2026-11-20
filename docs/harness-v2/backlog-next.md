@@ -34,3 +34,5 @@ Status: **Later**. Nothing here enters scope until the stop rule passes. The sto
 | K5 | Scripts and interpreters can hide commands from the gate (frozen box, step 2) | Damage outside a clone |
 | K6 | D5: second provider | The Owner names it (never Codex without his explicit word) |
 | K7 | `make ci` stalled once in `go test -race` with no child process (2026-11-19 21:00, under low free RAM) | If it reproduces |
+| K8 | `depsEn` binds only the root `node_modules`: Real State's `dashboard/` (pnpm, `node_modules` in a subfolder) cannot run its checks in the box (pilot-fixes P2) | A dashboard story needs a check |
+| K9 | The uv probe (`check --caja`) runs the tool by name: if the `.venv` script cannot run in the box (shebang outside the mounts) a same-named tool on a mounted host dir (`~/.local/bin/pytest`) answers instead. Seen only in a clone whose `.venv` was a symlink to another checkout; the real checkout binds `.venv` at its own path | A probe says "corre" and the check then fails with ImportError |

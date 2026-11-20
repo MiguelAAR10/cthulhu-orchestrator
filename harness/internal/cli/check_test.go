@@ -185,3 +185,34 @@ func TestInitHelpNoCambiaNada(t *testing.T) {
 		}
 	}
 }
+
+// orq2 check --caja on a uv check: two static refusals, then the real probe in a copy of HEAD with
+// the main .venv bound read-only.
+func TestCheckCajaUv(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	t.Setenv("ORQ_STATE", t.TempDir())
+	t.Setenv("ORQ_LIMITS", filepath.Join(t.TempDir(), "limits.json"))
+	home := filepath.Join(t.TempDir(), "home")
+	bin := filepath.Join(home, ".local", "bin")
+	os.MkdirAll(bin, 0o755)
+	os.WriteFile(filepath.Join(bin, "uv"), []byte("#!/bin/sh\ntest -d .venv || { echo 'no venv'; exit 3; }\necho \"$4 9.9.9\"\n"), 0o755)
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", bin+":/usr/local/go/bin:/usr/bin:/bin")
+	escribirEn(t, root, ".orq/config.json", `{"checks": {"lint": {"cmd": "true"}, "types": {"cmd": "uv run --offline mypy src"}, "tests": {"cmd": "PYTHONPATH=src uv run --offline --no-sync pytest -q"}}}`)
+	t.Chdir(root)
+	out, _, code := run(t, "check", "--caja")
+	if code != 1 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	contiene(t, out, "types  no corre en la caja: uv sincroniza en la caja y no hay red; usa `uv run --offline --no-sync`",
+		"tests  no corre en la caja: falta .venv; corre `uv sync` en el checkout principal")
+	os.MkdirAll(filepath.Join(root, ".venv"), 0o755)
+	out, _, code = run(t, "check", "--caja")
+	contiene(t, out, "tests  corre en la caja: uv → "+filepath.Join(bin, "uv"),
+		"sonda `PYTHONPATH=src uv run --offline --no-sync pytest --version` → pytest 9.9.9 (no prueba que resuelva cada import: eso lo prueba el check)",
+		"monta "+bin+", "+filepath.Join(root, ".venv"))
+	if code != 1 || !strings.Contains(out, "types  no corre") {
+		t.Fatalf("types must still refuse:\n%s", out)
+	}
+}
