@@ -38,6 +38,19 @@ type Limits struct {
 	MaxSlices int `json:"max_slices,omitempty"`
 	// Sandbox es opcional: sin él la caja solo ve el conjunto base.
 	Sandbox Sandbox `json:"sandbox,omitempty"`
+	// AvisoRAMGB: orq2 warns when available RAM is at or below it; absent = AvisoRAMPorDefecto.
+	AvisoRAMGB *float64 `json:"aviso_ram_gb,omitempty"`
+}
+
+// AvisoRAMPorDefecto is the RAM warning in GB when limits.json does not set aviso_ram_gb.
+const AvisoRAMPorDefecto = 5.0
+
+// AvisoRAM is aviso_ram_gb, or AvisoRAMPorDefecto if absent. It only warns; it never refuses.
+func (l Limits) AvisoRAM() float64 {
+	if l.AvisoRAMGB == nil {
+		return AvisoRAMPorDefecto
+	}
+	return *l.AvisoRAMGB
 }
 
 // DefaultPath respeta ORQ_LIMITS para pruebas y usa ~/.config/orq/limits.json por defecto.

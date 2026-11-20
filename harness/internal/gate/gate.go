@@ -47,11 +47,15 @@ type Env struct {
 	// Capacidad dice si la máquina (RAM, CPU, carga) admite un agente más con vivos corriendo.
 	// Devuelve "" si cabe, o el motivo. nil = no se mira la máquina (pruebas del resto de reglas).
 	Capacidad func(cwd string, vivos int) (motivo string, err error)
+	// AvisoRAM returns a warning line for an allowed launch, or "". nil = no warning (orq).
+	AvisoRAM func() string
 }
 
 type Decision struct {
 	Allow  bool
 	Reason string
+	// Aviso is a warning that rides on an allowed launch; it never turns it into a refusal.
+	Aviso string
 }
 
 func allow() Decision                  { return Decision{Allow: true} }
@@ -168,7 +172,11 @@ func evaluateLaunch(p Payload, l limits.Limits, env Env) Decision {
 			return deny("orq: %s.", motivo)
 		}
 	}
-	return allow()
+	d := allow()
+	if env.AvisoRAM != nil {
+		d.Aviso = env.AvisoRAM()
+	}
+	return d
 }
 
 // resolver devuelve la ruta absoluta y limpia, con los enlaces simbólicos resueltos
