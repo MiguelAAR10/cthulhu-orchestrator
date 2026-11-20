@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>orq2 · Ruta de cierre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna de lectura, franja "te toca" arriba, fases como pista vertical numerada (el orden es real). */
+:root{
+  --paper:#f2f1ed; --pen:#121212; --soft:#5d5b55; --rule:#121212; --tint:#e4e2dc;
+  --alert:#c1121f; --ok:#2f6b3a; --wait:#9a6a00; --shadow:#121212;
+  --f-display:"Pixelify Sans", "IBM Plex Mono", monospace;
+  --f-body:"IBM Plex Sans", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0a0a09; --pen:#e9e7e1; --soft:#a6a39b; --rule:#e9e7e1; --tint:#1b1a18;
+  --alert:#ff4d5a; --ok:#6cc27a; --wait:#e0b040; --shadow:#e9e7e1; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0a0a09; --pen:#e9e7e1; --soft:#a6a39b; --rule:#e9e7e1; --tint:#1b1a18;
+  --alert:#ff4d5a; --ok:#6cc27a; --wait:#e0b040; --shadow:#e9e7e1; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--pen);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px}
+.wrap{max-width:900px;margin:0 auto;display:grid;gap:40px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;letter-spacing:.01em;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,5vw,42px);line-height:1.05}
+h2{font-size:22px;border-bottom:3px solid var(--rule);padding-bottom:6px;margin-bottom:14px}
+h3{font-size:17px}
+p{margin:0;max-width:68ch}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+code{background:var(--tint);padding:1px 5px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+header{display:grid;gap:10px}
+.lead{font-size:17px;max-width:62ch}
+/* franja te toca */
+.toca{border:3px solid var(--alert);box-shadow:6px 6px 0 var(--shadow);padding:16px 18px;display:grid;gap:10px;background:var(--paper)}
+.toca h2{border:0;padding:0;margin:0;color:var(--alert)}
+.toca ol{margin:0;padding-left:20px;display:grid;gap:6px}
+/* estado */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.cell{border:2px solid var(--rule);padding:12px;display:grid;gap:4px;align-content:start;min-width:0}
+.cell .k{font-family:var(--f-mono);font-size:12px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em}
+.cell .v{font-family:var(--f-display);font-size:22px;line-height:1.1}
+.cell p{font-size:13.5px;color:var(--soft)}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:11.5px;padding:1px 7px;border:2px solid currentColor;font-weight:500;white-space:nowrap}
+.pill.red{color:var(--alert)} .pill.ok{color:var(--ok)} .pill.wait{color:var(--wait)} .pill.dim{color:var(--soft)}
+/* tablas */
+.tbl{overflow-x:auto;border:2px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:620px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--tint)}
+th{font-family:var(--f-mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;background:var(--tint)}
+tr:last-child td{border-bottom:0}
+/* fases */
+.fases{display:grid;gap:0;counter-reset:f}
+.fase{display:grid;grid-template-columns:56px 1fr;gap:16px;padding:18px 0;border-top:2px solid var(--rule)}
+.fase:last-child{border-bottom:2px solid var(--rule)}
+.num{font-family:var(--f-display);font-size:34px;line-height:1}
+.fase .body{display:grid;gap:8px;min-width:0}
+.fase .meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.fase ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.fase .done{font-size:13.5px;color:var(--soft)}
+.fase .done b{color:var(--pen)}
+.fase.now .num{color:var(--alert)}
+/* peligros */
+.risks{display:grid;gap:10px}
+.risk{display:grid;grid-template-columns:110px 1fr;gap:12px;border-left:6px solid var(--alert);padding:8px 12px;background:var(--tint)}
+.risk.m{border-left-color:var(--wait)}
+.risk .lvl{font-family:var(--f-mono);font-size:12px;text-transform:uppercase}
+@media (max-width:560px){.risk{grid-template-columns:1fr}.fase{grid-template-columns:36px 1fr}.num{font-size:24px}}
+.ci{display:grid;gap:10px}
+.bars{display:grid;gap:6px;font-family:var(--f-mono);font-size:13px}
+.bar{display:grid;grid-template-columns:150px 1fr 64px;gap:10px;align-items:center}
+.bar .track{height:14px;background:var(--tint);position:relative}
+.bar .fill{position:absolute;inset:0 auto 0 0;background:var(--pen)}
+.bar .fill.hot{background:var(--alert)}
+.bar span:last-child{text-align:right;font-variant-numeric:tabular-nums}
+footer{font-size:13px;color:var(--soft);display:grid;gap:4px}
+:focus-visible{outline:3px solid var(--alert);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">orq2 · harness-v2 · actualizado el 20 nov 2026, 18:40 Lima</span>
+  <h1>Ruta de cierre de orq2</h1>
+  <p class="lead">Primero lo funcional. Tú escribes la historia de usuario y orq2 la entrega solo, con la evidencia de que funciona. Todo lo demás espera.</p>
+</header>
+
+<section class="toca" aria-labelledby="valor">
+  <h2 id="valor">El valor final del producto</h2>
+  <p><b>Tú das una historia de usuario. orq2 la entrega integrada en la rama principal, sin que tengas que vigilarla.</b> Al final te muestra una página con qué cambió, una demo y las pruebas que lo demuestran. Tu único trabajo es la historia. Aprobar y decidir pasan a ser automáticos cuando el proyecto se configura en modo <b>piloto autónomo</b>.</p>
+  <p>Para que eso sea seguro, el candado deja de ser "el Owner escribe <code>aprobar</code>" y pasa a ser que tres cosas sean confiables:</p>
+  <ol>
+    <li><b>La historia.</b> Una sesión repregunta contra el código antes de congelarla: "dices esto, pero el código dice esto otro".</li>
+    <li><b>El examen.</b> Prueba todo lo que la historia toca, no solo Python.</li>
+    <li><b>La memoria.</b> Solo guarda como hecho lo que trae evidencia verificada.</li>
+  </ol>
+</section>
+
+<section aria-labelledby="usar">
+  <h2 id="usar">Cuándo empezamos a usarlo: v2.0 se cierra con lo que ya existe</h2>
+  <p>No se construye nada nuevo antes de usarlo. La v2.0 queda <b>lista para usar</b> cuando se cumplen estas cinco condiciones, y casi todas son integrar lo que ya está hecho:</p>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>Condición</th><th>Estado</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Fusionar <code>v2/build</code> y <code>v2/review-fixes</code>, pasar una revisión Opus y la CI completa, instalar con <code>make install2</code> y borrar el binario viejo</td><td><span class="pill wait">hecho, falta integrar</span></td></tr>
+      <tr><td>2</td><td>La tarjeta, en lenguaje simple, se ve en una página HTML antes de aprobarla</td><td><span class="pill wait">P9 hecho · HTML pequeño</span></td></tr>
+      <tr><td>3</td><td>El examen corre los checks de cada carpeta que la historia toca, o la página dice cuáles corrieron a mano</td><td><span class="pill wait">a mano en S-01</span></td></tr>
+      <tr><td>4b</td><td>Respaldar <code>.orq/</code> antes de cerrar S-01, porque el cierre borra el canal (hallazgo de Astra). Verificarlo y arreglarlo como P-item</td><td><span class="pill red">nuevo</span></td></tr>
+      <tr><td>4</td><td>En la memoria, ningún "confirmado" sin evidencia, y m12 reemplazado con <code>mem add --reemplaza</code></td><td><span class="pill ok">ya existe, se aplica como regla</span></td></tr>
+      <tr><td>5</td><td>S-01 llega a <code>main</code> y se decide desde la página de decisión</td><td><span class="pill red">pendiente</span></td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:10px">La autonomía va a la <b>v2.1</b>: modo piloto autónomo, despachador y su equipo, identificador de proyecto, repreguntador y memoria verificada en código. El orden lo deciden los datos que salgan del uso real, no las ideas. La arquitectura que proponen Fable y Astra queda como insumo para esa versión.</p>
+</section>
+
+<section aria-labelledby="medir">
+  <h2 id="medir">Qué medimos en cada historia</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Criterio</th><th>Medida</th><th>De dónde sale</th></tr></thead>
+    <tbody>
+      <tr><td>Valor de producto</td><td>Una métrica del producto antes y después (en S-01: conversaciones con clínicas)</td><td>La define Atena en la historia y se ve en la página de decisión</td></tr>
+      <tr><td>Tu tiempo</td><td>Minutos activos tuyos: explicar, aprobar, empujar, decidir</td><td>Tu nota, una línea por historia</td></tr>
+      <tr><td>Velocidad</td><td>Historia → tarjeta → aprobada → worker → verificada → en main</td><td>Horas del <code>diario.jsonl</code> y <code>orq2 metricas</code></td></tr>
+      <tr><td>RAM y CPU</td><td>Pico de RAM, RAM libre mínima, número de agentes vivos y carga, cada 30 s</td><td>Script de muestreo fuera de orq2 (<code>free</code>, <code>ps</code>, <code>uptime</code>) a un CSV, más <code>orq2 doctor --ram</code></td></tr>
+      <tr><td>Costo</td><td>Dólares y tokens por rol</td><td>Línea de costo de cada panel</td></tr>
+      <tr><td>Eficiencia</td><td>Scouts lanzados, reparaciones, correcciones del examen, tiempo de pruebas</td><td><code>canal.jsonl</code> y el recibo</td></tr>
+      <tr><td>Memoria</td><td>Hechos reutilizados, hechos falsos encontrados, citas correctas de 3 revisadas</td><td>Revisión de 10 min al cerrar cada historia</td></tr>
+      <tr><td>Calidad</td><td>¿Decidiste desde la página sin abrir el diff? ¿Defectos nuevos del harness?</td><td>Tu respuesta (sí/no) y la lista de P-items</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:10px"><b>Comparación honesta:</b> una historia parecida hecha con un solo agente y la CI normal del proyecto. Si orq2 no ahorra tus minutos, se deja de ampliar.</p>
+</section>
+
+<section aria-labelledby="arq">
+  <h2 id="arq">Arquitectura: lo que dicen Fable y Astra</h2>
+  <p><b>En qué coinciden:</b> orq2 hoy no reacciona a eventos. Los anota y nadie los lee: cada comando relee los archivos y decide. Por eso S-01 se quedó quieta. Según Fable, el 88 % del tiempo de reloj de S-01 fue nadie haciendo nada.</p>
+  <p><b>Tu idea del bus, revisada:</b> los expertos acertaron al rechazar <i>la forma</i>, con agentes suscritos y memoria de colmena, porque multiplica el costo y duplica acciones. Pero se quedaron cortos en <i>la función</i>, que era real. La propuesta de los dos es que <b>el diario sea el bus</b> y que <b>un despachador residente</b>, un proceso de código y no un modelo, lo lea en bucle: compara cómo debería estar todo con cómo está y hace lo que falta. Es el patrón de los controladores de Kubernetes. Cada tarea tomada lleva un arriendo con latido: si nadie da señales de vida, vuelve a la cola. Los agentes reciben trabajo por asignación, uno a la vez, nunca por suscripción.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Principio</th><th>Qué significa aquí</th><th>Cuándo</th></tr></thead>
+    <tbody>
+      <tr><td>Diario como bus (event log)</td><td>Cada evento lleva número de orden, proyecto, causa y origen</td><td>v2.1, paso 1</td></tr>
+      <tr><td>Reconciliación por nivel</td><td>Si se pierde un aviso, la siguiente vuelta lo ve igual</td><td>v2.1</td></tr>
+      <tr><td>Arriendo con latido (lease)</td><td>Ningún trabajo queda "en curso" a nombre de una sesión muerta</td><td>v2.1</td></tr>
+      <tr><td>Idempotencia</td><td>Repetir aprobar, lanzar o cerrar da un solo resultado</td><td>v2.1, con prueba de cortes</td></tr>
+      <tr><td>Durabilidad</td><td>fsync en escrituras atómicas y guarda contra líneas cortadas</td><td>v2.1, paso 2</td></tr>
+      <tr><td>Fallar cerrado</td><td>En <code>main</code>, el examen y las aprobaciones, ante la duda se bloquea y se escala</td><td>ya en parte</td></tr>
+      <tr><td>Un solo escritor por proyecto</td><td>Un despachador por proyecto, con candado de instancia única</td><td>v2.1</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:10px"><b>Lo que ninguno haría:</b> bus con agentes suscritos, base de datos o cola externa, búsqueda semántica, un segundo orquestador hecho con un modelo o un servidor.</p>
+  <h3 style="margin-top:16px">Hallazgos de Astra que tocan la v2.0 (sin verificar todavía)</h3>
+  <div class="risks" style="margin-top:8px">
+    <div class="risk"><span class="lvl">Crítico</span><p><b>Al cerrar un slice se borra el canal completo del proyecto</b> (<code>cli/proyecto.go:683</code>), y con él los mensajes que necesitamos para medir. Mitigación barata para S-01: respaldar <code>.orq/</code> antes de cerrar. Arreglo: P-item con prueba en rojo.</p></div>
+    <div class="risk"><span class="lvl">Crítico</span><p><b>Al fusionar no se vuelven a correr los checks</b> y el tablero no se prueba (<code>slice/cierre.go:308</code>). Es la condición 3: se corre a mano y se muestra en la página.</p></div>
+    <div class="risk m"><span class="lvl">Alto</span><p><b>Si el estado no se puede leer, <code>CerrarWorker</code> responde éxito</b> (<code>app/integrar.go:27</code>), y algunos comandos dicen "listo" aunque guardar haya fallado.</p></div>
+    <div class="risk m"><span class="lvl">Alto</span><p><b>Ventanas de caída</b> entre Git, JSON y diario al aprobar y al cerrar. Son raras con una historia a la vez y bloqueantes para el modo autónomo.</p></div>
+  </div>
+</section>
+
+<section aria-labelledby="hoy">
+  <h2 id="hoy">Dónde estamos hoy</h2>
+  <div class="grid">
+    <div class="cell"><span class="k">Historia S-01</span><span class="v">Aprobada, parada</span><p>Aprobada ayer a las 23:49. Lleva 17 h 46 min sin worker: <b>nadie repartió el trabajo</b>. Es justo el hueco del equipo de orquestación.</p></div>
+    <div class="cell"><span class="k">Binario</span><span class="v">El viejo, se borra</span><p><code>~/bin/orq2</code> sigue en 24f2438. Lo reemplaza la v2 corregida con <code>make install2</code>, no con <code>make install</code> como decía el veredicto.</p></div>
+    <div class="cell"><span class="k">Carriles</span><span class="v">6, 0 fusionados</span><p>Que haya muchos no es problema si son de proyectos distintos. Lo que falta es saber de qué proyecto es cada uno.</p></div>
+    <div class="cell"><span class="k">Memoria</span><span class="v">No confiable</span><p>Tiene 1 hecho falso (m12). Además, de 3 citas que Astra revisó, 2 apuntan a líneas equivocadas.</p></div>
+  </div>
+</section>
+
+<section aria-labelledby="astra">
+  <h2 id="astra">Qué dice Astra (gpt-6.2-astra, evaluación independiente)</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Tema</th><th>Opinión de Astra</th><th>Evidencia</th></tr></thead>
+    <tbody>
+      <tr><td>Veredicto</td><td>Va bien encaminado y la base sirve: el acuerdo sellado se comprueba antes de lanzar y el código exacto se vuelve a probar antes de integrar. Falta demostrar que entrega una historia cuando dejas de mirarlo.</td><td><code>app/workers.go:70</code>, <code>slice/cierre.go:275</code></td></tr>
+      <tr><td>Dónde se perdió el tiempo</td><td>De historia a tarjeta: 17 min. De tarjeta a aprobada: 2 h 04 min (la tarjeta traía códigos HTTP y nombres internos). De aprobada a hoy: 17 h 46 min sin worker.</td><td><code>diario.jsonl:14-15</code></td></tr>
+      <tr><td>El examen no cubre todo</td><td>La tarjeta promete un tablero web, pero el examen solo corre Python. Las pruebas, los tipos y el lint del tablero no se ejecutan.</td><td><code>tarjeta-s01.md:19</code>, <code>slices/01.json:6</code></td></tr>
+      <tr><td>"Aceptado" sin llegar a main</td><td>orq2 registra la decisión antes de publicar. La publicación espera si <code>main</code> tiene cambios locales, y en Real State los tiene (<code>.gitignore</code>).</td><td><code>slice/cierre.go:107,156</code></td></tr>
+      <tr><td>El examen ya respondió una pregunta abierta</td><td>El examen cuenta a un prospecto "interesado" como "pidió visita", cuando esa era una de las preguntas de la tarjeta.</td><td><code>test_s01…py:333</code></td></tr>
+      <tr><td>Memoria</td><td>m13 corrige a m12 en texto libre, sin <code>--reemplaza</code>, así que las dos siguen vigentes. Hay 2 de 3 citas con la línea mal. La skill ya existe en <code>.opencode/skills/dante-os/</code> y el plan proponía crear otra.</td><td><code>memoria.jsonl:12-13</code></td></tr>
+      <tr><td>Proyecto real</td><td>Lo primero que se rompe son los proyectos con varias carpetas y stacks: los checks salen de la raíz y la caja monta solo el <code>node_modules</code> de la raíz. Con <code>dashboard/</code> ya pasó.</td><td><code>perfil/checks.go:25</code>, <code>slice/caja.go:102</code></td></tr>
+      <tr><td>CI</td><td>Durante el desarrollo, correr solo la prueba del cambio y dejar la CI completa para el candidato integrado.</td><td>medición de hoy</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:10px">Astra asumía que tú decides cada historia. Con tu nueva dirección de modo autónomo, sus hallazgos sobre el examen incompleto y la memoria pasan de importantes a <b>bloqueantes</b>: si nadie mira, nada los atrapa.</p>
+</section>
+
+<section aria-labelledby="ruta">
+  <h2 id="ruta">El orden: lo funcional primero</h2>
+  <div class="fases">
+
+    <div class="fase now"><div class="num">1</div><div class="body">
+      <div class="meta"><h3>v2 corregida e instalada</h3><span class="pill red">hoy · ~2 h</span><span class="pill dim">yo integro · Opus revisa</span></div>
+      <ul>
+        <li>Hacer commit de la investigación. <code>v2/tui</code> se borra porque es una copia del panel.</li>
+        <li>Fusionar <code>v2/build</code> y después <code>v2/review-fixes</code>. Probar el tope de 12 workers y también el caso sin tope.</li>
+        <li>Revisión Opus nueva, CI completa una sola vez, prueba en un clon que tenga <code>.venv</code> y las dependencias del tablero, y <code>make install2</code>. El binario viejo desaparece.</li>
+      </ul>
+      <p class="done"><b>Listo cuando:</b> <code>orq2 version</code> diga <code>2.0.0-pilot</code>.</p>
+    </div></div>
+
+    <div class="fase"><div class="num">2</div><div class="body">
+      <div class="meta"><h3>S-01 hasta main, como prueba de la mecánica</h3><span class="pill wait">hoy–mañana</span></div>
+      <ul>
+        <li>Revivir los roles, lanzar T1 y vigilar que arranque.</li>
+        <li>Correr también las pruebas del tablero sobre el mismo commit.</li>
+        <li>Resolver qué significa "pidió visita" y dejar a salvo el cambio local de <code>.gitignore</code>.</li>
+        <li>Esta vez decides tú, porque el modo autónomo todavía no existe. Se anotan tus minutos.</li>
+      </ul>
+      <p class="done"><b>Listo cuando:</b> el commit de S-01 está en <code>main</code> y verificado en Git.</p>
+    </div></div>
+
+    <div class="fase"><div class="num">3</div><div class="body">
+      <div class="meta"><h3>v2.1 · Lo que hace segura la autonomía</h3><span class="pill dim">después de usarlo · en el orden que digan los datos</span></div>
+      <ul>
+        <li><b>Identificador de proyecto.</b> Cada orquestador sabe de qué proyecto es y qué sesiones le pertenecen. Las de otros proyectos no se cuentan ni se tocan.</li>
+        <li><b>Equipo de orquestación.</b> Un despachador reparte el balón: lanza al worker apenas se aprueba, detecta cuándo alguien se atasca o no para, y decide quién retoma. El Planner y Astra forman parte del equipo. Esto habría evitado las 17 h perdidas de S-01.</li>
+        <li><b>Memoria con evidencia.</b> Fusionar <code>v2/memoria</code>, que verifica citas. Una decisión se guarda solo después de que el evento ocurrió, y lo que no trae evidencia entra como hipótesis.</li>
+        <li><b>Repreguntador de la historia.</b> Mientras se escribe la historia, una sesión con scouts la contrasta con el código y te devuelve las diferencias.</li>
+        <li><b>Examen completo.</b> Un check por cada carpeta y stack que la historia toca (Python y tablero), corrido en la caja.</li>
+        <li><b>Modo al iniciar.</b> En <code>orq2 init</code> se elige entre "piloto autónomo" (aprueba y decide con las recomendaciones) o "con Owner".</li>
+      </ul>
+    </div></div>
+
+    <div class="fase"><div class="num">4</div><div class="body">
+      <div class="meta"><h3>S-02 en adelante: usarlo y medir</h3><span class="pill dim">empieza apenas cierra S-01</span></div>
+      <ul>
+        <li>Tú escribes la historia y recibes la página final con la demo. Se mide el tiempo de punta a punta y tus minutos.</li>
+        <li>Cada historia deja hasta 3 líneas verificadas en la skill que el proyecto ya tiene.</li>
+      </ul>
+    </div></div>
+
+    <div class="fase"><div class="num">5</div><div class="body">
+      <div class="meta"><h3>Extras, después</h3><span class="pill dim">congelado</span></div>
+      <ul>
+        <li>Panel que se actualiza solo, pantalla para elegir modelos y cuentas, cuota, mascotas, TUI y servidor local.</li>
+        <li>Mientras tanto, los modelos se ven y se cambian con <code>orq2 config</code>: hoy Atena usa Opus, el Planner Opus, el Orquestador Sonnet, y los workers Haiku, Sonnet u Opus según la dificultad.</li>
+      </ul>
+    </div></div>
+
+  </div>
+</section>
+
+<section aria-labelledby="ci" class="ci">
+  <h2 id="ci">Por qué tardaba <code>make ci</code></h2>
+  <p>Lo medí hoy: <code>go test -race ./...</code> sobre <code>v2/review-fixes</code>, con 10 CPU y 12 GB libres, tardó <b>4 min 24 s</b>. Casi todo ese tiempo se va en un solo paquete, <code>internal/slice</code>, que tardó 4 min 5 s. Ese paquete crea clones de git y corre exámenes reales en la caja. Los otros 21 paquetes tardan entre 1 y 14 s cada uno.</p>
+  <div class="bars" role="img" aria-label="Tiempo por paquete en segundos">
+    <div class="bar"><span>internal/slice</span><span class="track"><span class="fill hot" style="width:100%"></span></span><span>245 s</span></div>
+    <div class="bar"><span>internal/cli</span><span class="track"><span class="fill" style="width:26.5%"></span></span><span>65 s</span></div>
+    <div class="bar"><span>internal/app</span><span class="track"><span class="fill" style="width:11.3%"></span></span><span>28 s</span></div>
+    <div class="bar"><span>internal</span><span class="track"><span class="fill" style="width:5.7%"></span></span><span>14 s</span></div>
+    <div class="bar"><span>otros 20 paquetes</span><span class="track"><span class="fill" style="width:2.3%"></span></span><span>≤ 6 s</span></div>
+  </div>
+  <p><b>La causa:</b> las 115 pruebas de <code>internal/slice</code> corren una detrás de otra, porque ninguna usa <code>t.Parallel()</code>, y eso con 10 CPU disponibles. Las más lentas levantan Playwright, servidores o la caja de verdad: <code>TestFocoNoSaltaElExamen</code> 37 s, <code>TestE2EServidorQueNoAbre</code> 21 s, <code>TestTestOnlyNoVerifica</code> 20 s y otras seis de 14–16 s. Solo 4 de los 11 archivos cambian variables de entorno, que es lo que impide correr en paralelo. Los otros 7 se pueden paralelizar ya.</p>
+  <p><b>Propuesta:</b> dos niveles. <code>make rapido</code> corre gofmt, vet y <code>go test</code> sin <code>-race</code>, solo de los paquetes que cambiaron, y es lo que corren los builders en cada commit. <code>make ci</code> completo (race, e2e y aislamiento) corre una sola vez, antes de instalar. Además, quitar del camino caliente las pruebas lentas que usan <code>sleep</code> real o lanzan procesos (marcarlas con <code>testing.Short</code>) y no correr CI cuando quedan pocos GB de RAM libres, porque ahí se trabó una vez (K7).</p>
+</section>
+
+<section aria-labelledby="peligros">
+  <h2 id="peligros">Peligros</h2>
+  <div class="risks">
+    <div class="risk"><span class="lvl">Alto</span><p><b>Autonomía con un examen incompleto.</b> Si el examen no prueba el tablero, orq2 puede aceptar algo roto y nadie lo ve.</p></div>
+    <div class="risk"><span class="lvl">Alto</span><p><b>Memoria que da fe de sí misma.</b> Hoy el agente que escribe el hecho es el mismo que dice "confirmado". Así nació m12.</p></div>
+    <div class="risk"><span class="lvl">Alto</span><p><b>Nadie reparte el trabajo.</b> Sin despachador, una historia aprobada se queda quieta, como S-01 con 17 h 46 min.</p></div>
+    <div class="risk"><span class="lvl">Alto</span><p><b>"Aceptado" que nunca llega a main.</b> Hay que verificar el commit publicado, no el evento del diario.</p></div>
+    <div class="risk m"><span class="lvl">Medio</span><p><b>Sesiones de otros proyectos.</b> Sin identificador se cuentan o se tocan por error. Ya pasó una vez (P6).</p></div>
+    <div class="risk m"><span class="lvl">Medio</span><p><b>Adelantar los extras.</b> Son lindos de construir, pero no acercan el valor final.</p></div>
+  </div>
+</section>
+
+<footer>
+  <span>Fuentes: evaluación de Astra (<code>astra-evaluacion.md</code>), <code>git log</code> de los 6 carriles, <code>integration-verdict.md</code>, <code>closing-plan.md</code>, <code>pilot-log.md</code>, <code>research/interface-research.md</code> y <code>.orq/diario.jsonl</code> de Real State.</span>
+  <span>Lo marcado como propuesta todavía no está construido.</span>
+</footer>
+
+</div>
+
+</body>
+</html>

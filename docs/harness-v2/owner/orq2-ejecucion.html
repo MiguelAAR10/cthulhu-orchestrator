@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>orq2 · Plan de ejecución</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna; arriba "ahora mismo", luego el método (pipeline), fase 1 y fase 2 paso a paso, después el bucle tipo Kubernetes y el orden de la v2.1. */
+:root{
+  --paper:#f2f1ed; --pen:#121212; --soft:#5d5b55; --rule:#121212; --tint:#e4e2dc;
+  --alert:#c1121f; --ok:#2f6b3a; --wait:#9a6a00; --shadow:#121212;
+  --f-display:"Pixelify Sans","IBM Plex Mono",monospace;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0a0a09; --pen:#e9e7e1; --soft:#a6a39b; --rule:#e9e7e1; --tint:#1b1a18;
+  --alert:#ff4d5a; --ok:#6cc27a; --wait:#e0b040; --shadow:#e9e7e1; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0a0a09; --pen:#e9e7e1; --soft:#a6a39b; --rule:#e9e7e1; --tint:#1b1a18;
+  --alert:#ff4d5a; --ok:#6cc27a; --wait:#e0b040; --shadow:#e9e7e1; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--pen);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px}
+.wrap{max-width:920px;margin:0 auto;display:grid;gap:44px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,5vw,42px);line-height:1.05}
+h2{font-size:22px;border-bottom:3px solid var(--rule);padding-bottom:6px;margin-bottom:14px}
+h3{font-size:17px}
+p{margin:0;max-width:70ch}
+section{display:grid;gap:12px}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--tint);padding:1px 5px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+.lead{font-size:17px}
+.now{border:3px solid var(--alert);box-shadow:6px 6px 0 var(--shadow);padding:16px 18px;display:grid;gap:10px}
+.now h2{border:0;padding:0;margin:0;color:var(--alert)}
+.now ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:11.5px;padding:1px 7px;border:2px solid currentColor;font-weight:500;white-space:nowrap}
+.pill.red{color:var(--alert)} .pill.ok{color:var(--ok)} .pill.wait{color:var(--wait)} .pill.dim{color:var(--soft)}
+.diagram{border:2px solid var(--rule);padding:12px;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:640px;height:auto}
+svg .box{fill:var(--paper);stroke:var(--pen);stroke-width:2}
+svg .box.hot{stroke:var(--alert);stroke-width:3}
+svg .box.tint{fill:var(--tint)}
+svg text{fill:var(--pen);font-family:var(--f-mono);font-size:13px}
+svg text.t{font-family:var(--f-display);font-size:15px}
+svg text.s{fill:var(--soft);font-size:11.5px}
+svg text.r{fill:var(--alert)}
+svg .ln{stroke:var(--pen);stroke-width:2;fill:none}
+svg .ln.hot{stroke:var(--alert)}
+svg .ln.dash{stroke-dasharray:5 4}
+svg .ah{fill:var(--pen)} svg .ah.hot{fill:var(--alert)}
+.steps{display:grid;gap:0;border-top:2px solid var(--rule)}
+.step{display:grid;grid-template-columns:64px 1fr;gap:14px;padding:14px 0;border-bottom:1px solid var(--tint)}
+.step .n{font-family:var(--f-display);font-size:20px}
+.step .b{display:grid;gap:6px;min-width:0}
+.step .m{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.step .gate{font-size:13.5px;color:var(--soft)} .step .gate b{color:var(--pen)}
+.step pre{margin:0;background:var(--tint);padding:8px 10px;overflow-x:auto;font-family:var(--f-mono);font-size:12.5px;line-height:1.5}
+.tbl{overflow-x:auto;border:2px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:640px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--tint)}
+th{font-family:var(--f-mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;background:var(--tint)}
+tr:last-child td{border-bottom:0}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.rule{border:2px solid var(--rule);padding:12px;display:grid;gap:4px;align-content:start}
+.rule b{font-family:var(--f-display);font-weight:500;font-size:16px}
+.rule span{font-size:13.5px;color:var(--soft)}
+.k8s{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.k8s div{border-left:6px solid var(--pen);background:var(--tint);padding:10px 12px;display:grid;gap:2px}
+.k8s .k{font-family:var(--f-mono);font-size:12px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em}
+@media (max-width:560px){.step{grid-template-columns:44px 1fr}}
+footer{font-size:13px;color:var(--soft)}
+a{color:var(--pen)}
+:focus-visible{outline:3px solid var(--alert);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header style="display:grid;gap:10px">
+  <span class="eyebrow">orq2 · plan de ejecución · 20 nov 2026 · complementa la <a href="orq2-ruta.html">Ruta de cierre</a></span>
+  <h1>Cómo lo construimos y en qué orden</h1>
+  <p class="lead">Va en tres tramos. Primero dejamos la v2.0 corregida e instalada. Después llevamos S-01 hasta <code>main</code>, midiéndolo todo. Recién entonces construimos la v2.1, con un despachador inspirado en los controladores de Kubernetes. Cada paso tiene un control que hay que pasar antes de seguir.</p>
+</header>
+
+<section class="now" aria-labelledby="ahora">
+  <h2 id="ahora">Lo que sigue ahora mismo</h2>
+  <ol>
+    <li><b>Tú:</b> dime "sí, Real State" y yo arranco la fase 1. Hasta la instalación no te necesito.</li>
+    <li><b>Yo, hoy:</b> pasos 1.1 a 1.4. Ordeno, fusiono, hago que un Opus revise y corro la CI.</li>
+    <li><b>Te aviso</b> antes de instalar (paso 1.6) y antes de lanzar el worker de S-01 (paso 2.3).</li>
+    <li><b>Tú, mañana:</b> respondes qué significa "pidió visita" y decides S-01 desde la página. Unos 15 minutos en total.</li>
+  </ol>
+</section>
+
+<section aria-labelledby="metodo">
+  <h2 id="metodo">El método: cada cambio pasa por la misma línea</h2>
+  <div class="diagram" role="img" aria-label="Línea de construcción: prueba en rojo, Opus construye, revisión nueva, CI rápida, CI completa, prueba en clon, instalar entre historias">
+    <svg viewBox="0 0 900 190" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah hot" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+      <rect class="box tint" x="10" y="40" width="112" height="64"/><text class="t" x="20" y="66">Prueba roja</text><text class="s" x="20" y="88">falla primero</text>
+      <rect class="box" x="140" y="40" width="112" height="64"/><text class="t" x="150" y="66">Opus construye</text><text class="s" x="150" y="88">su worktree</text>
+      <rect class="box" x="270" y="40" width="112" height="64"/><text class="t" x="280" y="66">Revisión nueva</text><text class="s" x="280" y="88">otro Opus, limpio</text>
+      <rect class="box" x="400" y="40" width="112" height="64"/><text class="t" x="410" y="66">CI rápida</text><text class="s" x="410" y="88">en cada commit</text>
+      <rect class="box" x="530" y="40" width="112" height="64"/><text class="t" x="540" y="66">CI completa</text><text class="s" x="540" y="88">una vez, -race</text>
+      <rect class="box" x="660" y="40" width="112" height="64"/><text class="t" x="670" y="66">Prueba clon</text><text class="s" x="670" y="88">Real State copia</text>
+      <rect class="box hot" x="790" y="40" width="100" height="64"/><text class="t r" x="800" y="66">install2</text><text class="s" x="800" y="88">entre historias</text>
+      <path class="ln" d="M122,72 H138" marker-end="url(#a)"/><path class="ln" d="M252,72 H268" marker-end="url(#a)"/>
+      <path class="ln" d="M382,72 H398" marker-end="url(#a)"/><path class="ln" d="M512,72 H528" marker-end="url(#a)"/>
+      <path class="ln" d="M642,72 H658" marker-end="url(#a)"/><path class="ln hot" d="M772,72 H788" marker-end="url(#ar)"/>
+      <path class="ln dash hot" d="M716,104 V150 H196 V108" marker-end="url(#ar)"/>
+      <text class="s r" x="330" y="168">cualquier rojo: vuelve al builder · el binario instalado no cambia</text>
+      <text class="s" x="10" y="24">un commit por cambio · nada de --force, rebase ni -D · fusión con --no-ff</text>
+    </svg>
+  </div>
+  <div class="rules">
+    <div class="rule"><b>Quién hace qué</b><span>Opus construye. Otro Opus nuevo revisa. Yo integro: fusiono, corro la CI e instalo. No se usan Fable ni Codex.</span></div>
+    <div class="rule"><b>Máx. 2 carriles de código</b><span>Por proyecto, al mismo tiempo. Los carriles de otros proyectos no cuentan.</span></div>
+    <div class="rule"><b>Parar se verifica</b><span>Toda orden de parar se comprueba con <code>git log</code>. Nunca se da por cumplida.</span></div>
+    <div class="rule"><b>Instalar entre historias</b><span>Nunca a mitad de una verificación. Siempre queda anotado qué commit está instalado.</span></div>
+  </div>
+</section>
+
+<section aria-labelledby="f1">
+  <h2 id="f1">Fase 1 · v2.0 corregida e instalada <span class="pill red">hoy · ~2 h</span></h2>
+  <div class="steps">
+    <div class="step"><div class="n">1.1</div><div class="b">
+      <div class="m"><h3>Ordenar</h3><span class="pill dim">yo · 10 min</span></div>
+      <p>Commit de <code>research/interface-research.md</code> y de los informes de Astra y Fable en <code>docs/harness-v2/research/</code>. En <code>cthulhu-mem</code> quito las copias de planes sin seguimiento. Borro <code>v2/tui</code>, que no tiene nada propio. Escribo una línea en el backlog por cada carril en pausa (<code>panel</code>, <code>locks</code>, <code>memoria</code>).</p>
+      <p class="gate"><b>Control:</b> <code>git status</code> limpio en todos los checkouts.</p>
+    </div></div>
+    <div class="step"><div class="n">1.2</div><div class="b">
+      <div class="m"><h3>Fusionar v2/build</h3><span class="pill dim">yo · 10 min</span></div>
+      <pre>git merge --no-ff v2/build      # P1–P9 + P12</pre>
+      <p class="gate"><b>Control:</b> sin conflictos (en <code>harness-v2</code> solo hubo docs) y <code>go test ./...</code> en verde.</p>
+    </div></div>
+    <div class="step"><div class="n">1.3</div><div class="b">
+      <div class="m"><h3>Fusionar v2/review-fixes</h3><span class="pill dim">builder Opus · 30 min</span></div>
+      <p>El builder primero fusiona <code>harness-v2</code> en su rama y resuelve allí <code>limits.go</code> y <code>skill.go</code>. La regla: se respeta F7 y "sin tope" se expresa con <code>SinTope</code>. Después yo hago <code>--no-ff</code>.</p>
+      <p class="gate"><b>Control:</b> pruebas del tope de 12, del caso sin tope y del <code>max_workers</code> negativo rechazado.</p>
+    </div></div>
+    <div class="step"><div class="n">1.4</div><div class="b">
+      <div class="m"><h3>Revisión Opus + CI completa</h3><span class="pill dim">revisor Opus · 30 min</span></div>
+      <p>La revisión cubre solo <code>git diff 75bb0be..harness-v2 -- harness/</code>. Comprueba F1–F7 uno por uno y confirma que la salida de <code>orq</code> 1.0.0 no cambia. En paralelo corro <code>make ci</code> una vez (≈5 min), con 8 GB o más de RAM libre.</p>
+      <p class="gate"><b>Control:</b> revisión sin hallazgos altos y CI en verde. Cualquier rojo vuelve al builder.</p>
+    </div></div>
+    <div class="step"><div class="n">1.5</div><div class="b">
+      <div class="m"><h3>Prueba en un clon de Real State</h3><span class="pill dim">yo · 15 min</span></div>
+      <p>Uso un clon desechable con su <code>.venv</code>, su config <code>.orq</code> y las dependencias de <code>dashboard/</code>, como corrigió Astra. Corro el candidato como <code>orq2</code>: <code>version</code>, <code>doctor</code>, <code>check --caja</code> y una tarjeta con exceso de topes.</p>
+      <p class="gate"><b>Control:</b> dice <code>2.0.0-pilot</code>, <code>doctor</code> sale limpio y aparecen todas las violaciones en una sola pasada.</p>
+    </div></div>
+    <div class="step"><div class="n">1.6</div><div class="b">
+      <div class="m"><h3>Instalar y borrar el viejo</h3><span class="pill red">te aviso antes</span></div>
+      <pre>make install2          # reemplaza ~/bin/orq2 (24f2438) de forma atómica</pre>
+      <p class="gate"><b>Listo cuando:</b> <code>~/bin/orq2 version</code> dice <code>2.0.0-pilot</code> y el commit queda anotado en <code>pilot-log.md</code>.</p>
+    </div></div>
+  </div>
+</section>
+
+<section aria-labelledby="f2">
+  <h2 id="f2">Fase 2 · S-01 hasta main, midiendo todo <span class="pill wait">hoy–mañana</span></h2>
+  <div class="steps">
+    <div class="step"><div class="n">2.1</div><div class="b">
+      <div class="m"><h3>Encender las mediciones</h3><span class="pill dim">yo · 5 min</span></div>
+      <p>Pongo a correr un script de muestreo fuera de orq2. Cada 30 s anota en un CSV la RAM usada y libre, la carga, el número de procesos <code>claude</code> y <code>codex</code> y el tamaño de <code>.orq/</code>. Además respaldo <code>.orq/</code>, porque el cierre borra el canal.</p>
+    </div></div>
+    <div class="step"><div class="n">2.2</div><div class="b">
+      <div class="m"><h3>Revivir los roles</h3><span class="pill dim">yo · 10 min</span></div>
+      <p>Primero <code>orq2 doctor</code> y después <code>orq2 relevo</code> para Atena, el Orquestador y el Planner. Mido cuánto tarda cada uno. Es la primera prueba real de recuperación después de un reinicio.</p>
+    </div></div>
+    <div class="step"><div class="n">2.3</div><div class="b">
+      <div class="m"><h3>Resolver "pidió visita" y lanzar T1</h3><span class="pill red">te pregunto</span></div>
+      <p>Tú decides si "mostró interés" cuenta como "pidió visita". Si la respuesta cambia el acuerdo, se corrige el examen y queda registrado. Después el Orquestador lanza T1 y verifico que el worker arranque y haga su primer commit.</p>
+    </div></div>
+    <div class="step"><div class="n">2.4</div><div class="b">
+      <div class="m"><h3>Construcción y verificación</h3><span class="pill dim">orq2 · 1–2 h</span></div>
+      <p>Se completan las 6 tareas y se verifica en la caja. Sobre el mismo commit corro a mano las pruebas del tablero: vitest, lint y tipos. La página dice qué corrió dentro de la caja y qué corrió fuera.</p>
+    </div></div>
+    <div class="step"><div class="n">2.5</div><div class="b">
+      <div class="m"><h3>Tú decides desde la página</h3><span class="pill red">tú · ≤10 min</span></div>
+      <p>Abres <code>slice decidir --html</code> con la demo (envío simulado, nada sale de verdad) y las pruebas. Aceptas o rechazas. Anotas tus minutos y si tuviste que abrir el diff.</p>
+    </div></div>
+    <div class="step"><div class="n">2.6</div><div class="b">
+      <div class="m"><h3>Comprobar que llegó a main</h3><span class="pill dim">yo · 10 min</span></div>
+      <p>Antes del cierre dejo a salvo el cambio local de <code>.gitignore</code>. Después verifico en Git que el commit está en <code>main</code>, no solo el evento del diario. Lleno la fila de métricas, reviso 3 citas de memoria y reemplazo m12 con <code>--reemplaza</code>.</p>
+      <p class="gate"><b>Listo cuando</b> S-01 está en <code>main</code> y la fila de métricas está completa. Con eso <b>la v2.0 queda cerrada y en uso</b>.</p>
+    </div></div>
+  </div>
+</section>
+
+<section aria-labelledby="k8s">
+  <h2 id="k8s">v2.1 · El despachador, como un controlador de Kubernetes</h2>
+  <p>En Kubernetes nadie "manda órdenes": declaras cómo quieres que esté el sistema y un controlador compara en bucle lo que quieres con lo que hay, y corrige la diferencia. Si se pierde un aviso no pasa nada, porque la siguiente vuelta lo ve igual. Para orq2: <b>el diario es la fuente de verdad, el despachador es el controlador y los agentes son los pods</b>, que se lanzan, se vigilan con latido y se reemplazan.</p>
+  <div class="diagram" role="img" aria-label="Bucle de reconciliación: el despachador lee el diario y el estado, calcula deudas, ejecuta acciones idempotentes y anota eventos; los workers renuevan un arriendo con latido">
+    <svg viewBox="0 0 900 330" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="br" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah hot" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+      <rect class="box tint" x="20" y="30" width="200" height="110"/>
+      <text class="t" x="34" y="58">Diario = bus</text>
+      <text x="34" y="82">eventos con seq,</text><text x="34" y="100">proyecto, causa,</text><text x="34" y="118">origen</text>
+      <rect class="box tint" x="20" y="180" width="200" height="110"/>
+      <text class="t" x="34" y="208">Estado deseado</text>
+      <text x="34" y="232">tarjeta aprobada,</text><text x="34" y="250">plan con tareas,</text><text x="34" y="268">política autopilot</text>
+      <rect class="box hot" x="320" y="90" width="250" height="150"/>
+      <text class="t r" x="336" y="118">Despachador</text>
+      <text class="s" x="336" y="138">código, no un modelo · 1 por proyecto</text>
+      <text x="336" y="164">1. leer estado real</text>
+      <text x="336" y="184">2. calcular deudas</text>
+      <text x="336" y="204">3. acción idempotente</text>
+      <text x="336" y="224">4. anotar el evento</text>
+      <path class="ln" d="M220,85 H300 V140 H318" marker-end="url(#b)"/>
+      <path class="ln" d="M220,235 H300 V190 H318" marker-end="url(#b)"/>
+      <path class="ln dash hot" d="M445,90 V20 H120 V28" marker-end="url(#br)"/>
+      <text class="s r" x="200" y="14">cada pocos segundos: si se perdió un aviso, la próxima vuelta lo ve</text>
+      <rect class="box" x="670" y="30" width="210" height="76"/>
+      <text class="t" x="684" y="58">Worker T1</text><text class="s" x="684" y="80">arriendo: vence en 30 min</text><text class="s" x="684" y="96">latido = commit o evento</text>
+      <rect class="box" x="670" y="126" width="210" height="76"/>
+      <text class="t" x="684" y="154">Verificador</text><text class="s" x="684" y="176">cierre con SHA → verificar</text><text class="s" x="684" y="192">dos veces = una sola</text>
+      <rect class="box" x="670" y="222" width="210" height="76"/>
+      <text class="t" x="684" y="250">Escalar</text><text class="s" x="684" y="272">empujar → parar → relanzar</text><text class="s" x="684" y="288">a la 3.ª: avisar al Owner</text>
+      <path class="ln" d="M570,130 H620 V68 H668" marker-end="url(#b)"/>
+      <path class="ln" d="M570,165 H668" marker-end="url(#b)"/>
+      <path class="ln" d="M570,200 H620 V260 H668" marker-end="url(#b)"/>
+      <text class="s" x="580" y="318">asigna: un mensaje, un destinatario · nadie se suscribe</text>
+    </svg>
+  </div>
+  <div class="k8s">
+    <div><span class="k">Kubernetes</span><b>Estado deseado vs. real</b><span>orq2: tarjeta aprobada + tarea lista, pero sin worker. Eso es una deuda y se lanza.</span></div>
+    <div><span class="k">Kubernetes</span><b>Reconciliación por nivel</b><span>orq2: no depende de no perder ningún aviso. Mira cómo está todo en cada vuelta.</span></div>
+    <div><span class="k">Kubernetes</span><b>Lease + liveness probe</b><span>orq2: si el worker no da latido, primero se le empuja, luego se le para y se relanza.</span></div>
+    <div><span class="k">Kubernetes</span><b>Leader election</b><span>orq2: un solo despachador por proyecto, con candado <code>flock</code>.</span></div>
+    <div><span class="k">Kubernetes</span><b>Operaciones idempotentes</b><span>orq2: aprobar, lanzar o cerrar dos veces da un solo resultado.</span></div>
+    <div><span class="k">Kubernetes</span><b>Namespaces</b><span>orq2: identificador de proyecto. Cada despachador ve solo sus sesiones.</span></div>
+  </div>
+</section>
+
+<section aria-labelledby="v21">
+  <h2 id="v21">v2.1 · Orden de construcción <span class="pill dim">después de cerrar S-01</span></h2>
+  <p>Es la unión de las propuestas de Fable y Astra. Cada paso es pequeño, pasa por la misma línea de construcción y tiene su prueba de aceptación. Los pasos 1 a 4 por sí solos habrían evitado las 17 h de S-01.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>Paso</th><th>Valor</th><th>Cómo se prueba</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td>Pruebas rápidas: <code>t.Parallel</code> en <code>slice</code> y <code>make rapido</code></td><td>Cada paso siguiente se construye más rápido</td><td><code>internal/slice</code> baja de 245 s a menos de 60 s sin perder casos</td></tr>
+      <tr><td>1</td><td><code>orq2 pendientes</code>, solo lectura</td><td>Se ve quién debe qué y desde cuándo</td><td>Sobre la copia de S-01 imprime "aprobada hace 17 h, T1 lista, sin worker"</td></tr>
+      <tr><td>2</td><td>Identificador de proyecto, <code>seq</code> en eventos y no borrar el canal al cerrar</td><td>Cada orquestador ve solo lo suyo y no se pierde el historial</td><td>Dos proyectos con el mismo nombre no se mezclan, y cerrar uno conserva los mensajes del otro</td></tr>
+      <tr><td>3</td><td>Durabilidad: fsync, guarda de línea cortada, errores que no se tragan, aprobar y cerrar recuperables</td><td>El despachador puede confiar en el disco después de un apagón</td><td>Corte simulado en cada frontera (ya existe <code>ORQ_FALLA_EN</code>): nada se pierde ni se duplica</td></tr>
+      <tr><td>4</td><td><code>despachar --una-vez</code> y después residente</td><td>Se acaba el atasco</td><td>Aprobar lanza el worker en menos de 5 s. Dos pasadas dan un solo worker</td></tr>
+      <tr><td>5</td><td>Supervisión con arriendo y latido</td><td>Destraba agentes sin ti</td><td>Un worker falso que nunca hace commit recibe, en orden y con tope: empujón, parada, relanzamiento y aviso</td></tr>
+      <tr><td>6</td><td>Checks por carpeta y sesión de contraste</td><td>El examen cubre todo y la historia se cuestiona contra el código</td><td>Una historia que toca <code>dashboard/</code> sin un check declarado no se abre</td></tr>
+      <tr><td>7</td><td>Memoria con procedencia: el harness calcula "confirmado" y las citas caducan</td><td>Memoria sin hechos falsos</td><td>Al repetir el caso m12, queda como intención y nunca como confirmado</td></tr>
+      <tr><td>8</td><td>Piloto autónomo en <code>init</code>: política, presupuestos y lista de "solo escalar"</td><td>El objetivo completo</td><td>S-02 de punta a punta con una sola acción tuya: escribir la historia</td></tr>
+    </tbody>
+  </table></div>
+  <p>El paso 8 no se adelanta al 6 ni al 7. Sin ellos, el piloto autónomo integraría código sin probar, guiado por una memoria sin comprobar.</p>
+</section>
+
+<footer>Fuentes: <code>fable-arquitectura.md</code>, <code>astra-arquitectura.md</code> y <code>astra-evaluacion.md</code> (scratchpad de esta sesión), <code>integration-verdict.md</code> y las mediciones de hoy. Lo de la v2.1 es plan, todavía no está construido.</footer>
+
+</div>
+
+</body>
+</html>
