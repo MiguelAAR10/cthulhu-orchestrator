@@ -104,3 +104,14 @@ func TestSondaUvSaltaValorDeFlag(t *testing.T) {
 		t.Errorf("herramientas: %q", got)
 	}
 }
+
+// F6: a host tool named again in a plain segment keeps its host lookup.
+func TestHerramientasUvSoloTramosUv(t *testing.T) {
+	if got := HerramientasUv("uv run --no-sync pytest && pytest"); len(got) != 0 {
+		t.Errorf("pytest also runs from the host: %q", got)
+	}
+	uv, resto := TramosUv("uv run --offline --no-sync ruff check . && uv run ruff format --check . ; echo ok")
+	if len(uv) != 2 || len(resto) != 1 {
+		t.Errorf("uv %q resto %q", uv, resto)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -225,15 +226,41 @@ func huellaSegura(dir string, bundle []string, cmd string) (string, error) {
 }
 
 // HerramientasUv son las palabras que cmd corre con `uv run`: salen del .venv, no del PATH del host.
+// Una herramienta que otro tramo (sin `uv run`) también nombra no cuenta: ese tramo la busca en el host.
 func HerramientasUv(cmd string) []string {
+	uv, resto := TramosUv(cmd)
 	var out []string
-	for _, t := range strings.FieldsFunc(cmd, func(r rune) bool { return r == '&' || r == '|' || r == ';' }) {
+	for _, t := range uv {
 		if s := SondaUvDe(t); s != "" {
 			f := strings.Fields(s)
-			out = append(out, f[len(f)-2])
+			h := f[len(f)-2]
+			if !slices.ContainsFunc(resto, func(r string) bool { return slices.Contains(strings.Fields(r), h) }) {
+				out = append(out, h)
+			}
 		}
 	}
 	return out
+}
+
+// TramosUv parte cmd en tramos (separados por &&, ||, ; o |): los que corren `uv run` y el resto.
+func TramosUv(cmd string) (uv, resto []string) {
+	for _, t := range strings.FieldsFunc(cmd, func(r rune) bool { return r == '&' || r == '|' || r == ';' }) {
+		if esUvRun(strings.Fields(t)) {
+			uv = append(uv, t)
+		} else {
+			resto = append(resto, t)
+		}
+	}
+	return uv, resto
+}
+
+func esUvRun(f []string) bool {
+	for i := 0; i+1 < len(f); i++ {
+		if f[i] == "uv" && f[i+1] == "run" {
+			return true
+		}
+	}
+	return false
 }
 
 // SondaUvDe es la sonda de un check que usa `uv run`: el prefijo del propio comando hasta la
