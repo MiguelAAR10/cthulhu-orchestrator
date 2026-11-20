@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"orq/internal/config"
+	"orq/internal/identidad"
 	"orq/internal/perfil"
 	"orq/internal/sandbox"
 	"orq/internal/slice"
@@ -61,6 +63,13 @@ type CheckCaja struct {
 	config.Check
 	Herramientas []sandbox.Herramienta
 	Navegadores  *sandbox.Herramienta
+	// Solo orq2, en un check con `uv run`: NoCorreUv es la negativa estática ("" si no la hay);
+	// si no, SondaUv es la sonda que corrió en una copia de HEAD con el .venv, LineaUv su primera
+	// línea y OkUv si salió 0. ErrUv: la caja o la copia no arrancaron.
+	NoCorreUv, SondaUv, LineaUv string
+	VenvUv                      string // el .venv que la sonda montó solo lectura
+	OkUv                        bool
+	ErrUv                       error
 }
 
 // ChecksCaja dice qué herramientas nombra cada check del proyecto y qué montaría la caja para ellas.
@@ -76,6 +85,9 @@ func ChecksCaja(cwd string) (out []CheckCaja, sinE2E string, err error) {
 			continue
 		}
 		cc := CheckCaja{Check: c, Herramientas: sandbox.Herramientas(c.Ejecutable())}
+		if identidad.EsOrq2() && strings.Contains(c.Cmd, "uv run") {
+			sondarUv(&cc, principal(root))
+		}
 		if c.Nombre == config.E2E {
 			tiene = true
 			nav := sandbox.Navegadores()
@@ -115,4 +127,30 @@ func checksDe(cwd string) (dir, rojo string, cs []config.Check, err error) {
 		return "", "", nil, ErrSinChecks
 	}
 	return dir, rojo, cs, nil
+}
+
+// principal es el repo principal de dir: el de la marca si dir es un clon de worker.
+func principal(dir string) string {
+	if m, ok := slice.LeerMarca(dir); ok && m.Root != "" {
+		return m.Root
+	}
+	return dir
+}
+
+// sondarUv decide un check uv sin red: uv no puede sincronizar en la caja y el .venv del checkout
+// principal entra solo lectura (nunca se sincroniza dentro). Si eso está, corre la sonda real.
+func sondarUv(cc *CheckCaja, root string) {
+	// La herramienta tras `uv run` sale del .venv: la prueba la sonda, no el PATH del host.
+	uvs := slice.HerramientasUv(cc.Cmd)
+	cc.Herramientas = slices.DeleteFunc(cc.Herramientas, func(h sandbox.Herramienta) bool { return slices.Contains(uvs, h.Nombre) })
+	if !strings.Contains(cc.Cmd, "--no-sync") {
+		cc.NoCorreUv = "uv sincroniza en la caja y no hay red; usa `uv run --offline --no-sync`"
+		return
+	}
+	if fi, err := os.Stat(filepath.Join(root, ".venv")); err != nil || !fi.IsDir() {
+		cc.NoCorreUv = "falta .venv; corre `uv sync` en el checkout principal"
+		return
+	}
+	cc.VenvUv = filepath.Join(root, ".venv")
+	cc.SondaUv, cc.LineaUv, cc.OkUv, cc.ErrUv = slice.Repo{Root: root, OrqDir: filepath.Join(root, ".orq")}.SondarUv(cc.Cmd)
 }

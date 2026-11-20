@@ -67,6 +67,11 @@ func runCheckCaja(stdout, stderr io.Writer) int {
 		if c.Navegadores != nil {
 			hs = append(hs, *c.Navegadores)
 		}
+		if c.NoCorreUv != "" {
+			code = 1
+			fmt.Fprintf(stdout, "%s  no corre en la caja: %s\n", c.Nombre, c.NoCorreUv)
+			continue
+		}
 		if no := sandbox.NoCorren(hs); no != "" {
 			code = 1
 			fmt.Fprintf(stdout, "%s  no corre en la caja: %s\n", c.Nombre, no)
@@ -91,6 +96,14 @@ func runCheckCaja(stdout, stderr io.Writer) int {
 				vistas = append(vistas, v)
 			}
 		}
+		switch {
+		case c.ErrUv != nil:
+			fallas = append(fallas, fmt.Sprintf("la sonda `%s` no arrancó: %v", c.SondaUv, c.ErrUv))
+		case c.SondaUv != "" && !c.OkUv:
+			fallas = append(fallas, fmt.Sprintf("la sonda `%s` falla: %s", c.SondaUv, c.LineaUv))
+		case c.SondaUv != "":
+			vistas = append(vistas, fmt.Sprintf("sonda `%s` → %s (no prueba que resuelva cada import: eso lo prueba el check)", c.SondaUv, c.LineaUv))
+		}
 		if len(fallas) > 0 {
 			code = 1
 			fmt.Fprintf(stdout, "%s  no corre en la caja: %s\n", c.Nombre, strings.Join(fallas, "; "))
@@ -100,7 +113,11 @@ func runCheckCaja(stdout, stderr io.Writer) int {
 			vistas = append(vistas, c.Navegadores.Nombre+" → "+c.Navegadores.Ruta)
 		}
 		monta := "nada fuera del sistema"
-		if ro := sandbox.RODe(hs); len(ro) > 0 {
+		ro := sandbox.RODe(hs)
+		if c.VenvUv != "" {
+			ro = append(ro, c.VenvUv)
+		}
+		if len(ro) > 0 {
 			monta = strings.Join(ro, ", ")
 		}
 		fmt.Fprintf(stdout, "%s  corre en la caja: %s · monta %s\n", c.Nombre, strings.Join(vistas, "; "), monta)
