@@ -44,7 +44,9 @@ func TestGuiaTarjetaClaraParaOwner(t *testing.T) {
 		"si hay un precio en el mensaje, no se envía",
 		"no status codes or internals",
 		"the test file path once",
-		"what changes for the user",
+		"`## Zonas`: one repo path per line",
+		"relative to the repo root, never absolute",
+		"what changes for the Owner goes in `## Historia` and `## Examen`",
 		"Task ids",
 		"your recommendation",
 		"- [ ] lo haces tú:",
@@ -52,6 +54,10 @@ func TestGuiaTarjetaClaraParaOwner(t *testing.T) {
 		if !strings.Contains(plan, w) {
 			t.Errorf("orq2 planner skill lacks %q", w)
 		}
+	}
+	// Zonas are repo paths: slice.LeerTarjeta and the decision page compare changed files against them.
+	if strings.Contains(plan, "what changes for the user") {
+		t.Errorf("orq2 planner skill still asks for Zonas as prose")
 	}
 	orch := leer("orq2-orchestrator")
 	// orq's own card sentence is replaced; the caps line printed from slice.TopesTarjeta (P11) may stay,
