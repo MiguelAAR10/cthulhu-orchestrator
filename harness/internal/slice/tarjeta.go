@@ -34,6 +34,12 @@ const (
 	maxPalabras       = 400
 )
 
+// TopesTarjeta dice los topes en una frase, con los mismos números que LeerTarjeta aplica.
+func TopesTarjeta() string {
+	return fmt.Sprintf("`## Historia` ≤%d lines, every other section ≤%d lines, every line ≤%d characters, ≤%d words in all",
+		maxLineasHistoria, maxLineasSeccion, maxCaracteres, maxPalabras)
+}
+
 var seccionesTarjeta = []string{"Historia", "Fuera", "Examen", "Zonas", "Preguntas"}
 
 // LeerTarjeta lee una tarjeta en markdown: una sección «## Nombre» por parte, en cualquier orden.
