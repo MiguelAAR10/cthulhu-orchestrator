@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"orq/internal/slice"
 )
 
 // orq2's planner skill tells the Planner to write the card as the Owner's plain-Spanish decision
@@ -37,9 +39,10 @@ func TestGuiaTarjetaClaraParaOwner(t *testing.T) {
 		"## Card",
 		"plain Spanish a non-programmer reads in 2 minutes",
 		"`.orq/plan-sNN.json`",
-		"Max 25 lines",
+		slice.TopesTarjeta(),
+		"`orq2 slice tarjeta --topes`",
+		"the `Valor:` line counts as one of them",
 		"`## Historia`, `## Fuera`, `## Examen`, `## Zonas`, `## Preguntas`",
-		"step by step",
 		"`Valor: <product metric> hoy <value> → meta <value>`",
 		"si hay un precio en el mensaje, no se envía",
 		"no status codes or internals",
@@ -55,6 +58,10 @@ func TestGuiaTarjetaClaraParaOwner(t *testing.T) {
 			t.Errorf("orq2 planner skill lacks %q", w)
 		}
 	}
+	// No literal card size: the caps come only from slice.TopesTarjeta, the numbers LeerTarjeta applies.
+	if strings.Contains(plan, "25 lines") {
+		t.Errorf("orq2 planner skill states a literal card size")
+	}
 	// Zonas are repo paths: slice.LeerTarjeta and the decision page compare changed files against them.
 	if strings.Contains(plan, "what changes for the user") {
 		t.Errorf("orq2 planner skill still asks for Zonas as prose")
@@ -65,9 +72,16 @@ func TestGuiaTarjetaClaraParaOwner(t *testing.T) {
 	if strings.Contains(orch, tarjetaOrq) {
 		t.Errorf("orq2 orchestrator skill still carries orq's card sentence")
 	}
-	for _, w := range []string{"plain Spanish for the Owner", "≤25 lines", "`orq2-planner` skill, section Card"} {
+	for _, w := range []string{"plain Spanish for the Owner", slice.TopesTarjeta(), "`orq2-planner` skill, section Card"} {
 		if !strings.Contains(orch, w) {
 			t.Errorf("orq2 orchestrator skill lacks %q", w)
 		}
+	}
+	if strings.Contains(orch, "25 lines") {
+		t.Errorf("orq2 orchestrator skill states a literal card size")
+	}
+	raw, _ := guias.ReadFile("guias/orquestador.md")
+	if g := orq2Guia("orquestador", string(raw)); strings.Contains(g, "story ≤3 lines") || !strings.Contains(g, slice.TopesTarjeta()) {
+		t.Errorf("orq2 orchestrator guide states its own card size instead of the caps")
 	}
 }

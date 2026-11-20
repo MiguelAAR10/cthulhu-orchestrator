@@ -12,7 +12,8 @@ const sinSalidaCaja = "The exam always runs in the box on a clean copy of the co
 
 // cambiosOrq2 son, por guía (rol) o skill (carpeta), las frases de orq que orq2 dice distinto.
 var cambiosOrq2 = map[string][][2]string{
-	"orquestador": {{"the exam runs on a clean copy, `--en-sitio \"reason\"` opts out; ", "the exam always runs in the box on a clean copy, no opt-out; "}},
+	"orquestador": {{"the exam runs on a clean copy, `--en-sitio \"reason\"` opts out; ", "the exam always runs in the box on a clean copy, no opt-out; "},
+		{"(story ≤3 lines, ", "(story within the card caps below, "}},
 	"orq-orchestrator": {{"The exam runs on a clean copy of the commit; `--en-sitio \"reason\"` opts out (stored, shown in the receipt). ",
 		"The exam always runs in the box on a clean copy of the commit, with no opt-out. "}},
 	"orq-planner": {{"(`orq canal` message, `orq mem ver`)", "(`orq msg leer` message, `orq mem ver`)"}},
