@@ -47,32 +47,39 @@ var seccionesTarjeta = []string{"Historia", "Fuera", "Examen", "Zonas", "Pregunt
 func LeerTarjeta(texto string) (Tarjeta, error) {
 	partes := map[string][]string{}
 	actual, palabras := "", 0
-	// Los topes se juntan: orq2 los devuelve todos de una vez; orq, el primero, como en 1.0.0.
+	// Los errores se juntan en el orden del documento: orq2 los devuelve todos de una vez; orq, el
+	// primero, que es el mismo que 1.0.0 devolvía al pararse en él.
 	var topes []error
 	excede := func(format string, a ...any) { topes = append(topes, fmt.Errorf(format, a...)) }
+	saltar := false // las líneas de una sección desconocida o repetida no cuentan
 	for _, l := range strings.Split(texto, "\n") {
 		l = strings.TrimSpace(l)
 		if titulo, ok := strings.CutPrefix(l, "## "); ok {
-			actual = ""
+			actual, saltar = "", false
 			for _, s := range seccionesTarjeta {
 				if strings.EqualFold(strings.TrimSpace(titulo), s) {
 					actual = s
 				}
 			}
 			if actual == "" {
-				return Tarjeta{}, fmt.Errorf("sección desconocida %q: la tarjeta tiene %s", titulo, strings.Join(seccionesTarjeta, ", "))
+				excede("sección desconocida %q: la tarjeta tiene %s", titulo, strings.Join(seccionesTarjeta, ", "))
+				saltar = true
+				continue
 			}
 			if _, ya := partes[actual]; ya {
-				return Tarjeta{}, fmt.Errorf("la sección %s está dos veces", actual)
+				excede("la sección %s está dos veces", actual)
+				saltar = true
+				continue
 			}
 			partes[actual] = nil
 			continue
 		}
-		if l == "" || actual == "" && strings.HasPrefix(l, "# ") {
+		if l == "" || saltar || actual == "" && strings.HasPrefix(l, "# ") {
 			continue
 		}
 		if actual == "" {
-			return Tarjeta{}, fmt.Errorf("texto fuera de una sección: %q", l)
+			excede("texto fuera de una sección: %q", l)
+			continue
 		}
 		l = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(l, "- "), "* "))
 		if n := utf8.RuneCountInString(l); n > maxCaracteres {
