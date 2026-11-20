@@ -73,8 +73,28 @@ Story (Atena, Owner-approved): the Owner picks 10–20 health prospects in `/adm
 | F1 | 21:29 | Atena relayed a worktree removal **with `--force`** to the Owner | rule: never `--force`. Owner told not to approve it. Check where the agent took it from. |
 | F2 | 21:33 | Owner: policies are too rigid (Astra always, fixed scouts, fixed repairs); only the locks must be fixed | Fable designs criteria-based policies after this batch (backlog) |
 
+## How orq2 closes (the framework's definition of done)
+
+orq2 v2.0 is closed when all three hold over the Real State stories:
+1. **Owner time:** the stop rule passes (median verified→decided ≤10 min, 0 undecided after 24 h, card ready→approved ≤3 min).
+2. **Harness stable:** 3 stories in a row with **0 new high defects** (P-items). Defects per story are counted below and must trend down.
+3. **Product value:** each story names one product metric before the card (S-01: real conversations with clinics, from 0) and the decision page states whether it moved. A story with no product metric is not counted.
+
+If after 10 stories (1) fails: one page fix and 5 more stories, else back to 1.0.0 + CI (plan.md).
+
+## Self-improvement loop (per accepted story, no new harness code before the stop rule)
+
+| Step | What | Where | Gate |
+|---|---|---|---|
+| 1 | Scout facts already saved with `path:line` | `.orq/memoria.jsonl` (12 entries after S-01 scouting) | Integrator spot-checks 3 citations per story (F2 by hand) |
+| 2 | ≤3 lines added to the living project skill, each with evidence | `.claude/skills/real-estate/SKILL.md` (F1, by hand) | Owner sees them on the decision page |
+| 3 | Next story's scouts read memory + skill first and only ask what is missing | Atena brief | Fewer scouts and less scouting time than the story before |
+| 4 | Harness defects → P-items → Fable plan → Opus build → fresh review → `make ci` → real-project proof → reinstall between slices | this log | Five filters, all green |
+
+Measured per story: scouts launched, scouting minutes, memory facts reused, new P-items.
+
 ## Metrics (from `orq2 metricas`, Real State)
 
-| Story | Card ready→approved | Verified→decided | Exam corrections | Repairs | Owner minutes | Cost |
-|---|---|---|---|---|---|---|
-| S-01 | — | — | — | — | — | — |
+| Story | Product metric | Card ready→approved | Verified→decided | Exam corrections | Repairs | Scouts / min | Facts reused | New P-items | Owner minutes | Cost |
+|---|---|---|---|---|---|---|---|---|---|---|
+| S-01 | clinic conversations (0 →) | — | — | — | — | — | 0 (first story) | 8 (P1–P8) | — | — |
