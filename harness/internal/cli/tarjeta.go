@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"orq/internal/identidad"
 	"os"
 	"slices"
 	"strings"
@@ -41,6 +42,10 @@ func imprimirTarjeta(w io.Writer, e *slice.Estado) {
 
 // runTarjeta pone la tarjeta del slice desde un archivo o, sin --archivo, la muestra.
 func runTarjeta(p proyecto, nn string, args []string, stdout, stderr io.Writer) int {
+	if identidad.EsOrq2() && len(args) == 1 && args[0] == "--topes" {
+		fmt.Fprintln(stdout, slice.TopesTarjeta()) // los mismos números que aplica LeerTarjeta
+		return 0
+	}
 	nn, args = nnYResto(nn, args)
 	archivo := ""
 	switch {

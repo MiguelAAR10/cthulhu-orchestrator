@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"orq/internal/slice"
 )
 
 // P11: orq2's Orchestrator, Planner and Atena guides and skills never offer --en-sitio, prove the exam
@@ -69,4 +71,19 @@ func TestGuiasOrq2CanalYAprobar(t *testing.T) {
 			t.Errorf("%s lacks %q", n, aprobar)
 		}
 	}
+}
+
+// Step 4: `slice tarjeta --topes` (orq2) prints the caps, and the guides print the same sentence.
+func TestTarjetaTopes(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	t.Setenv("ORQ_ROOT", root)
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	t.Chdir(root)
+	out, _, code := run(t, "slice", "tarjeta", "--topes")
+	if code != 0 || strings.TrimSpace(out) != slice.TopesTarjeta() {
+		t.Fatalf("code %d: %q", code, out)
+	}
+	guia, _, _ := run(t, "skill", "planificador")
+	contiene(t, guia, slice.TopesTarjeta())
 }

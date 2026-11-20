@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"orq/internal/diario"
+	"orq/internal/identidad"
 )
 
 // Tarjeta es la ficha de entendimiento que el Owner lee y aprueba antes de que empiece un worker:
@@ -46,6 +47,9 @@ var seccionesTarjeta = []string{"Historia", "Fuera", "Examen", "Zonas", "Pregunt
 func LeerTarjeta(texto string) (Tarjeta, error) {
 	partes := map[string][]string{}
 	actual, palabras := "", 0
+	// Los topes se juntan: orq2 los devuelve todos de una vez; orq, el primero, como en 1.0.0.
+	var topes []error
+	excede := func(format string, a ...any) { topes = append(topes, fmt.Errorf(format, a...)) }
 	for _, l := range strings.Split(texto, "\n") {
 		l = strings.TrimSpace(l)
 		if titulo, ok := strings.CutPrefix(l, "## "); ok {
@@ -72,13 +76,13 @@ func LeerTarjeta(texto string) (Tarjeta, error) {
 		}
 		l = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(l, "- "), "* "))
 		if n := utf8.RuneCountInString(l); n > maxCaracteres {
-			return Tarjeta{}, fmt.Errorf("en %s, una línea tiene %d caracteres; el tope es %d", actual, n, maxCaracteres)
+			excede("en %s, una línea tiene %d caracteres; el tope es %d", actual, n, maxCaracteres)
 		}
 		palabras += len(strings.Fields(l))
 		partes[actual] = append(partes[actual], l)
 	}
 	if palabras > maxPalabras {
-		return Tarjeta{}, fmt.Errorf("la tarjeta tiene %d palabras; el tope es %d (se lee en 3 minutos)", palabras, maxPalabras)
+		excede("la tarjeta tiene %d palabras; el tope es %d (se lee en 3 minutos)", palabras, maxPalabras)
 	}
 	for _, s := range seccionesTarjeta {
 		tope := maxLineasSeccion
@@ -87,18 +91,23 @@ func LeerTarjeta(texto string) (Tarjeta, error) {
 		}
 		switch n := len(partes[s]); {
 		case n == 0:
-			return Tarjeta{}, fmt.Errorf("falta la sección %s o está vacía (si no hay nada, escribe «ninguna»)", s)
+			excede("falta la sección %s o está vacía (si no hay nada, escribe «ninguna»)", s)
 		case n > tope:
-			return Tarjeta{}, fmt.Errorf("la sección %s tiene %d líneas; el tope es %d", s, n, tope)
+			excede("la sección %s tiene %d líneas; el tope es %d", s, n, tope)
 		}
 	}
 	for _, z := range partes["Zonas"] {
 		if filepath.IsAbs(z) || z == ".." || strings.HasPrefix(filepath.Clean(z), "../") {
-			return Tarjeta{}, fmt.Errorf("en Zonas, %q no es una ruta dentro del repo", z)
+			excede("en Zonas, %q no es una ruta dentro del repo", z)
+		} else if c := strings.Trim(filepath.Clean(z), "/"); c == "." || c == "" {
+			excede("en Zonas, %q cubre todo el repo: nombra las carpetas o archivos que se tocan, no la raíz", z)
 		}
-		if c := strings.Trim(filepath.Clean(z), "/"); c == "." || c == "" {
-			return Tarjeta{}, fmt.Errorf("en Zonas, %q cubre todo el repo: nombra las carpetas o archivos que se tocan, no la raíz", z)
+	}
+	if len(topes) > 0 {
+		if identidad.EsOrq2() {
+			return Tarjeta{}, errors.Join(topes...)
 		}
+		return Tarjeta{}, topes[0]
 	}
 	return Tarjeta{Historia: partes["Historia"], Fuera: partes["Fuera"], Examen: partes["Examen"], Zonas: partes["Zonas"], Preguntas: partes["Preguntas"]}, nil
 }
