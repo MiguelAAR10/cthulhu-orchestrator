@@ -143,14 +143,35 @@ func sondarUv(cc *CheckCaja, root string) {
 	// La herramienta tras `uv run` sale del .venv: la prueba la sonda, no el PATH del host.
 	uvs := slice.HerramientasUv(cc.Cmd)
 	cc.Herramientas = slices.DeleteFunc(cc.Herramientas, func(h sandbox.Herramienta) bool { return slices.Contains(uvs, h.Nombre) })
-	if !strings.Contains(cc.Cmd, "--no-sync") {
-		cc.NoCorreUv = "uv sincroniza en la caja y no hay red; usa `uv run --offline --no-sync`"
-		return
+	uv, _ := slice.TramosUv(cc.Cmd)
+	for _, t := range uv {
+		if !strings.Contains(t, "--no-sync") {
+			cc.NoCorreUv = "uv sincroniza en la caja y no hay red; usa `uv run --offline --no-sync`"
+			return
+		}
 	}
 	if fi, err := os.Stat(filepath.Join(root, ".venv")); err != nil || !fi.IsDir() {
 		cc.NoCorreUv = "falta .venv; corre `uv sync` en el checkout principal"
 		return
 	}
 	cc.VenvUv = filepath.Join(root, ".venv")
-	cc.SondaUv, cc.LineaUv, cc.OkUv, cc.ErrUv = slice.Repo{Root: root, OrqDir: filepath.Join(root, ".orq")}.SondarUv(cc.Cmd)
+	repo := slice.Repo{Root: root, OrqDir: filepath.Join(root, ".orq")}
+	// Cada tramo `uv run` con herramienta tiene su sonda: la primera que falla decide; si todas
+	// corren, se muestran juntas.
+	var sondas, lineas []string
+	for _, t := range uv {
+		if slice.SondaUvDe(t) == "" {
+			continue
+		}
+		cc.SondaUv, cc.LineaUv, cc.OkUv, cc.ErrUv = repo.SondarUv(t)
+		if cc.ErrUv != nil || !cc.OkUv {
+			return
+		}
+		sondas, lineas = append(sondas, cc.SondaUv), append(lineas, cc.LineaUv)
+	}
+	if len(sondas) == 0 {
+		cc.SondaUv, cc.LineaUv, cc.OkUv, cc.ErrUv = repo.SondarUv(cc.Cmd)
+		return
+	}
+	cc.SondaUv, cc.LineaUv = strings.Join(sondas, " && "), strings.Join(lineas, "; ")
 }

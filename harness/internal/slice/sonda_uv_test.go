@@ -85,3 +85,33 @@ func TestSondaUvDe(t *testing.T) {
 		}
 	}
 }
+
+// F5: the value of a uv flag is not the tool.
+func TestSondaUvSaltaValorDeFlag(t *testing.T) {
+	for cmd, want := range map[string]string{
+		"uv run --with foo pytest -q":                   "uv run --with foo pytest --version",
+		"uv run --directory sub --no-sync pytest":       "uv run --directory sub --no-sync pytest --version",
+		"uv run -p 3.12 --offline --no-sync mypy src":   "uv run -p 3.12 --offline --no-sync mypy --version",
+		"uv run --python=3.12 --no-sync ruff check .":   "uv run --python=3.12 --no-sync ruff --version",
+		"uv run --no-sync -- pytest":                    "uv run --no-sync -- pytest --version",
+		"uv run --group dev --extra x --no-sync pytest": "uv run --group dev --extra x --no-sync pytest --version",
+	} {
+		if got := SondaUvDe(cmd); got != want {
+			t.Errorf("%q: got %q want %q", cmd, got, want)
+		}
+	}
+	if got := HerramientasUv("uv run --with foo pytest && uv run --directory sub ruff check ."); !slices.Equal(got, []string{"pytest", "ruff"}) {
+		t.Errorf("herramientas: %q", got)
+	}
+}
+
+// F6: a host tool named again in a plain segment keeps its host lookup.
+func TestHerramientasUvSoloTramosUv(t *testing.T) {
+	if got := HerramientasUv("uv run --no-sync pytest && pytest"); len(got) != 0 {
+		t.Errorf("pytest also runs from the host: %q", got)
+	}
+	uv, resto := TramosUv("uv run --offline --no-sync ruff check . && uv run ruff format --check . ; echo ok")
+	if len(uv) != 2 || len(resto) != 1 {
+		t.Errorf("uv %q resto %q", uv, resto)
+	}
+}

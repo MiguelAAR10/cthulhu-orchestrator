@@ -6,6 +6,7 @@ package limits
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -95,6 +96,8 @@ func (l Limits) validate() error {
 		return fmt.Errorf("falta min_free_gb")
 	case l.MaxWorkers == nil && !identidad.EsOrq2():
 		return fmt.Errorf("falta max_workers")
+	case l.MaxWorkers != nil && *l.MaxWorkers < 0 && identidad.EsOrq2():
+		return fmt.Errorf("max_workers no puede ser negativo (%d); quítalo para que decidan RAM, CPU y carga", *l.MaxWorkers)
 	case l.StateMaxAgeHours == nil:
 		return fmt.Errorf("falta state_max_age_hours")
 	case len(l.Scratch.Paths) == 0:
@@ -108,8 +111,9 @@ func (l Limits) validate() error {
 }
 
 // SinTope es el tope de workers cuando limits.json no trae max_workers (solo orq2): no hay tope por
-// cabeza y deciden RAM, CPU y carga.
-const SinTope = -1
+// cabeza y deciden RAM, CPU y carga. Va fuera de banda: un max_workers explícito (orq acepta -1) nunca
+// se confunde con él.
+const SinTope = math.MinInt
 
 // TopeWorkers es max_workers, o SinTope si falta (solo orq2 lo permite).
 func (l Limits) TopeWorkers() int {

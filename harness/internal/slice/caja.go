@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -225,15 +226,41 @@ func huellaSegura(dir string, bundle []string, cmd string) (string, error) {
 }
 
 // HerramientasUv son las palabras que cmd corre con `uv run`: salen del .venv, no del PATH del host.
+// Una herramienta que otro tramo (sin `uv run`) también nombra no cuenta: ese tramo la busca en el host.
 func HerramientasUv(cmd string) []string {
+	uv, resto := TramosUv(cmd)
 	var out []string
-	for _, t := range strings.FieldsFunc(cmd, func(r rune) bool { return r == '&' || r == '|' || r == ';' }) {
+	for _, t := range uv {
 		if s := SondaUvDe(t); s != "" {
 			f := strings.Fields(s)
-			out = append(out, f[len(f)-2])
+			h := f[len(f)-2]
+			if !slices.ContainsFunc(resto, func(r string) bool { return slices.Contains(strings.Fields(r), h) }) {
+				out = append(out, h)
+			}
 		}
 	}
 	return out
+}
+
+// TramosUv parte cmd en tramos (separados por &&, ||, ; o |): los que corren `uv run` y el resto.
+func TramosUv(cmd string) (uv, resto []string) {
+	for _, t := range strings.FieldsFunc(cmd, func(r rune) bool { return r == '&' || r == '|' || r == ';' }) {
+		if esUvRun(strings.Fields(t)) {
+			uv = append(uv, t)
+		} else {
+			resto = append(resto, t)
+		}
+	}
+	return uv, resto
+}
+
+func esUvRun(f []string) bool {
+	for i := 0; i+1 < len(f); i++ {
+		if f[i] == "uv" && f[i+1] == "run" {
+			return true
+		}
+	}
+	return false
 }
 
 // SondaUvDe es la sonda de un check que usa `uv run`: el prefijo del propio comando hasta la
@@ -249,6 +276,13 @@ func SondaUvDe(cmd string) string {
 			}
 			j := i + 2
 			for j < len(f) && strings.HasPrefix(f[j], "-") {
+				if f[j] == "--" {
+					j++
+					break
+				}
+				if uvConValor[f[j]] {
+					j++ // el valor del flag no es la herramienta
+				}
 				j++
 			}
 			if j == len(f) {
@@ -258,6 +292,19 @@ func SondaUvDe(cmd string) string {
 		}
 	}
 	return ""
+}
+
+// uvConValor son los flags de `uv run` que toman el valor en la palabra siguiente.
+var uvConValor = map[string]bool{
+	"--with": true, "--with-editable": true, "--with-requirements": true, "--directory": true, "--project": true,
+	"--python": true, "-p": true, "--group": true, "--only-group": true, "--no-group": true, "--extra": true,
+	"--no-extra": true, "--package": true, "--env-file": true, "--index": true, "--default-index": true,
+	"--index-url": true, "--extra-index-url": true, "--find-links": true, "-f": true, "--cache-dir": true,
+	"--config-file": true, "--color": true, "--python-platform": true, "--index-strategy": true,
+	"--keyring-provider": true, "--resolution": true, "--prerelease": true, "--exclude-newer": true,
+	"--link-mode": true, "--refresh-package": true, "--upgrade-package": true, "-P": true,
+	"--reinstall-package": true, "--config-setting": true, "-C": true, "--allow-insecure-host": true,
+	"--python-preference": true, "--no-binary-package": true, "--no-build-package": true,
 }
 
 // SondarUv corre la sonda de un check uv dentro de la caja, en una copia limpia de HEAD del repo

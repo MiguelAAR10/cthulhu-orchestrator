@@ -216,3 +216,25 @@ func TestCheckCajaUv(t *testing.T) {
 		t.Fatalf("types must still refuse:\n%s", out)
 	}
 }
+
+// F6: every `uv run` segment must carry --no-sync, not only the first.
+func TestCheckCajaUvCadaTramo(t *testing.T) {
+	root := repoCLI(t)
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	t.Setenv("ORQ_STATE", t.TempDir())
+	t.Setenv("ORQ_LIMITS", filepath.Join(t.TempDir(), "limits.json"))
+	home := filepath.Join(t.TempDir(), "home")
+	bin := filepath.Join(home, ".local", "bin")
+	os.MkdirAll(bin, 0o755)
+	os.WriteFile(filepath.Join(bin, "uv"), []byte("#!/bin/sh\necho \"$4 9.9.9\"\n"), 0o755)
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", bin+":/usr/local/go/bin:/usr/bin:/bin")
+	escribirEn(t, root, ".orq/config.json", `{"checks": {"lint": {"cmd": "uv run --offline --no-sync ruff check . && uv run ruff format --check ."}, "types": {"cmd": "true"}, "tests": {"cmd": "true"}}}`)
+	os.MkdirAll(filepath.Join(root, ".venv"), 0o755)
+	t.Chdir(root)
+	out, _, code := run(t, "check", "--caja")
+	if code != 1 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	contiene(t, out, "lint  no corre en la caja: uv sincroniza en la caja y no hay red")
+}

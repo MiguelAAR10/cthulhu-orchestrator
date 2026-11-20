@@ -54,8 +54,10 @@ func TestGuiaTarjetaClaraParaOwner(t *testing.T) {
 		}
 	}
 	orch := leer("orq2-orchestrator")
-	if strings.Contains(orch, "`## Historia` ≤3 lines") {
-		t.Errorf("orq2 orchestrator skill still caps Historia at 3 lines")
+	// orq's own card sentence is replaced; the caps line printed from slice.TopesTarjeta (P11) may stay,
+	// because the constants are what orq slice tarjeta enforces (integration-verdict.md §3).
+	if strings.Contains(orch, tarjetaOrq) {
+		t.Errorf("orq2 orchestrator skill still carries orq's card sentence")
 	}
 	for _, w := range []string{"plain Spanish for the Owner", "≤25 lines", "`orq2-planner` skill, section Card"} {
 		if !strings.Contains(orch, w) {

@@ -202,3 +202,33 @@ func TestMetricasTarjetaDesdeDiario(t *testing.T) {
 		t.Fatalf("desde 10:30: mediana %v de %d", m.TarjetaMinMediana, m.TarjetasAprobadas)
 	}
 }
+
+// Agent-first step 4: under orq2 every cap violation comes back in one pass; orq keeps the first.
+func TestLeerTarjetaTodasLasViolaciones(t *testing.T) {
+	malo := strings.Replace(tarjetaBuena, "Ve el recibo al terminar.\n", "a\nb\nc\n", 1)
+	malo = strings.Replace(malo, "pagos en cuotas", strings.Repeat("x", 201), 1)
+	malo = strings.Replace(malo, "web/carrito", "../otro", 1)
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	_, err := LeerTarjeta(malo)
+	if err == nil || strings.Count(err.Error(), "\n") != 2 {
+		t.Fatalf("want 3 violations, got %v", err)
+	}
+	for _, q := range []string{"Historia", "200", "Zonas"} {
+		if !strings.Contains(err.Error(), q) {
+			t.Errorf("missing %q in %v", q, err)
+		}
+	}
+	t.Setenv("ORQ_NOMBRE", "")
+	if _, err := LeerTarjeta(malo); err == nil || strings.Contains(err.Error(), "\n") {
+		t.Fatalf("orq keeps one error: %v", err)
+	}
+}
+
+// The caps sentence carries each constant's value.
+func TestTopesTarjetaDiceLasConstantes(t *testing.T) {
+	for _, n := range []int{maxLineasHistoria, maxLineasSeccion, maxCaracteres, maxPalabras} {
+		if !strings.Contains(TopesTarjeta(), fmt.Sprintf("≤%d ", n)) {
+			t.Errorf("caps sentence lacks %d: %s", n, TopesTarjeta())
+		}
+	}
+}

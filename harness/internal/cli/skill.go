@@ -25,7 +25,7 @@ func instalarSkillsOrq(root string) (nuevas, distintas []string) {
 	ents, _ := orqSkills.ReadDir("orqskills")
 	for _, d := range ents {
 		raw, _ := orqSkills.ReadFile("orqskills/" + d.Name() + "/SKILL.md")
-		raw = []byte(identidad.Skills(identidad.Texto(skillOrq2(d.Name(), string(raw)))))
+		raw = []byte(identidad.Skills(identidad.Texto(orq2Guia(d.Name(), skillOrq2(d.Name(), string(raw))))))
 		nombre := identidad.Skills(d.Name())
 		dst := filepath.Join(root, ".claude", "skills", nombre, "SKILL.md")
 		actual, err := os.ReadFile(dst)
@@ -82,6 +82,7 @@ func runSkill(args []string, stdout, stderr io.Writer) int {
 	if rol == "orquestador" && identidad.EsOrq2() {
 		g = []byte(astraPorRol(string(g), cfg.Rol("astra").Kind))
 	}
+	g = []byte(orq2Guia(rol, string(g)))
 	// Los modelos de la guía salen de la configuración, no del texto.
 	fmt.Fprint(stdout, identidad.Skills(cfg.Expandir(string(g))))
 	if p.Root != "" {

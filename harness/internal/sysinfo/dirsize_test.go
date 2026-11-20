@@ -70,3 +70,26 @@ func TestDirSizeBytesParaleloIgualAlSerial(t *testing.T) {
 		t.Fatalf("file root: %d vs %d", got, serialSize(f))
 	}
 }
+
+// F1: a symlinked root is not followed, as the serial WalkDir never did.
+func TestDirSizeBytesRaizSymlinkComoSerial(t *testing.T) {
+	base := t.TempDir()
+	dst := filepath.Join(base, "dst")
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "f"), make([]byte, 1000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(dst, link); err != nil {
+		t.Fatal(err)
+	}
+	got, err := DirSizeBytes(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := serialSize(link); got != want {
+		t.Fatalf("symlink root: parallel=%d serial=%d", got, want)
+	}
+}

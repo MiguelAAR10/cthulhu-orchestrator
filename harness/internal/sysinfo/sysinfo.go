@@ -121,9 +121,13 @@ func DirSizeBytes(root string) (int64, error) {
 		total += info.Size()
 		return nil
 	}
-	hijos, err := os.ReadDir(root)
-	if err != nil {
-		// No es un directorio legible (un archivo, o no existe): el recorrido en serie decide.
+	var hijos []os.DirEntry
+	fi, err := os.Lstat(root)
+	if err == nil && fi.IsDir() {
+		hijos, err = os.ReadDir(root)
+	}
+	if err != nil || !fi.IsDir() {
+		// No es un directorio legible (un archivo, un symlink o no existe): el recorrido en serie decide.
 		err := filepath.WalkDir(root, sumar)
 		return total, err
 	}
