@@ -25,6 +25,25 @@ import (
 
 const Version = "1.0.0"
 
+// VersionOrq2 is what `orq2 version` and orq2's usage header say. slice.Version (receipts) is not it.
+const VersionOrq2 = "2.0.0-pilot"
+
+// version is the release this binary names: VersionOrq2 under orq2, Version under orq.
+func version() string {
+	if identidad.EsOrq2() {
+		return VersionOrq2
+	}
+	return Version
+}
+
+// uso is the usage text; under orq2 its header names orq2 and VersionOrq2.
+func uso() string {
+	if identidad.EsOrq2() {
+		return strings.Replace(usage, "orq "+Version+" ·", "orq2 "+VersionOrq2+" ·", 1)
+	}
+	return usage
+}
+
 const usage = `orq ` + Version + ` · harness de orquestador-2
 
   orq gate            hook PreToolUse: lee el JSON por stdin; exit 2 = bloquea
@@ -120,7 +139,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	slice.Version = identidad.Nombre() + " " + Version
 	stdout, stderr = identidad.Escritor(stdout), identidad.Escritor(stderr)
 	if len(args) == 0 {
-		fmt.Fprint(stderr, usage)
+		fmt.Fprint(stderr, uso())
 		return 1
 	}
 	defer func() {
@@ -189,7 +208,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		fmt.Fprintln(stdout, versionLine(debug.ReadBuildInfo()))
 		return 0
 	default:
-		fmt.Fprint(stderr, usage)
+		fmt.Fprint(stderr, uso())
 		return 1
 	}
 }
@@ -404,6 +423,6 @@ func runHalt(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprint(stderr, usage)
+	fmt.Fprint(stderr, uso())
 	return 1
 }

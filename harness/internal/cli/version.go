@@ -16,5 +16,5 @@ func versionLine(bi *debug.BuildInfo, ok bool) string {
 			}
 		}
 	}
-	return Version + " revision=" + rev + " modified=" + mod
+	return version() + " revision=" + rev + " modified=" + mod
 }
