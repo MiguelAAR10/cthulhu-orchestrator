@@ -30,7 +30,8 @@ func ChecksPara(root string, python bool) map[string]config.Check {
 			"tests": {Cmd: "go test ./..."},
 		}
 	}
-	if python && existe(root, "pyproject.toml") {
+	// Sin uv.lock, un package.json manda: el motivo de uv.lock solo cuando no hay Node.
+	if python && existe(root, "pyproject.toml") && (existe(root, "uv.lock") || !existe(root, "package.json")) {
 		return checksUv(root)
 	}
 	raw, err := os.ReadFile(filepath.Join(root, "package.json"))
