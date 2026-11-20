@@ -95,3 +95,14 @@ func TestChecksUvFlatLintTodo(t *testing.T) {
 		t.Fatalf("lint: %q", got)
 	}
 }
+
+// F4: single-quoted TOML strings name a tool too.
+func TestChecksUvComillaSimple(t *testing.T) {
+	py := "[project]\nname = 'x'\n[dependency-groups]\ndev = ['ruff', 'mypy', 'pytest']\n"
+	root := archivos(t, map[string]string{"pyproject.toml": py, "uv.lock": "", "src/a.py": ""})
+	for k, c := range ChecksPara(root, true) {
+		if c.Cmd == "" {
+			t.Fatalf("%s omitted: %q", k, c.Omitir)
+		}
+	}
+}

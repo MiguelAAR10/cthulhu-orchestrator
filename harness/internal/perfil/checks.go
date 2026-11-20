@@ -80,7 +80,7 @@ func existe(root, f string) bool {
 
 // checksUv propone los checks de un proyecto uv. La caja no tiene red y monta el .venv del checkout
 // principal solo lectura: uv no sincroniza (--no-sync) y el código se importa de la copia (PYTHONPATH=src).
-// pyproject.toml se lee como texto: una herramienta cuenta si aparece «[tool.<nombre>» o «"<nombre>».
+// pyproject.toml se lee como texto: una herramienta cuenta si aparece «[tool.<nombre>», «"<nombre>» o «'<nombre>».
 func checksUv(root string) map[string]config.Check {
 	if !existe(root, "uv.lock") {
 		sin := config.Check{Omitir: "Python sin uv.lock: escribe el comando en .orq/config.json"}
@@ -88,7 +88,9 @@ func checksUv(root string) map[string]config.Check {
 	}
 	raw, _ := os.ReadFile(filepath.Join(root, "pyproject.toml"))
 	txt := string(raw)
-	nombra := func(h string) bool { return strings.Contains(txt, "[tool."+h) || strings.Contains(txt, `"`+h) }
+	nombra := func(h string) bool {
+		return strings.Contains(txt, "[tool."+h) || strings.Contains(txt, `"`+h) || strings.Contains(txt, "'"+h)
+	}
 	pre, fuente := "uv run --offline --no-sync ", "."
 	if info, err := os.Stat(filepath.Join(root, "src")); err == nil && info.IsDir() {
 		pre, fuente = "PYTHONPATH=src "+pre, "src"
