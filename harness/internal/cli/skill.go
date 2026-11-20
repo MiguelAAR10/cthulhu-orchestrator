@@ -25,7 +25,7 @@ func instalarSkillsOrq(root string) (nuevas, distintas []string) {
 	ents, _ := orqSkills.ReadDir("orqskills")
 	for _, d := range ents {
 		raw, _ := orqSkills.ReadFile("orqskills/" + d.Name() + "/SKILL.md")
-		raw = []byte(identidad.Skills(identidad.Texto(string(raw))))
+		raw = []byte(identidad.Skills(identidad.Texto(skillOrq2(d.Name(), string(raw)))))
 		nombre := identidad.Skills(d.Name())
 		dst := filepath.Join(root, ".claude", "skills", nombre, "SKILL.md")
 		actual, err := os.ReadFile(dst)
