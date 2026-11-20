@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -332,7 +333,11 @@ func runStatus(stdout, stderr io.Writer) int {
 		}
 	}
 	fmt.Fprintf(stdout, "límites: %s\n", limits.DefaultPath())
-	fmt.Fprintf(stdout, "  max_workers=%d  quota_scratch=%.0f GB  protegidos=%s\n", *l.MaxWorkers, *l.Scratch.QuotaGB, strings.Join(l.Protected, ", "))
+	tope := "sin tope (deciden RAM, CPU y carga)"
+	if l.MaxWorkers != nil {
+		tope = strconv.Itoa(*l.MaxWorkers)
+	}
+	fmt.Fprintf(stdout, "  max_workers=%s  quota_scratch=%.0f GB  protegidos=%s\n", tope, *l.Scratch.QuotaGB, strings.Join(l.Protected, ", "))
 	for p, min := range l.MinFreeGB {
 		free, _ := sysinfo.FreeGB(p)
 		fmt.Fprintf(stdout, "  disco %-6s libre %.0f GB (mínimo %.0f)\n", p, free, min)

@@ -153,7 +153,10 @@ func evaluateLaunch(p Payload, l limits.Limits, env Env) Decision {
 	if err != nil {
 		return deny("orq: no pude contar workers (%v). Sin dato no hay lanzamiento.", err)
 	}
-	if n >= *l.MaxWorkers {
+	if l.MaxWorkers == nil && env.Capacidad == nil {
+		return deny("orq: limits.json no trae max_workers y no hay medición de la máquina. Sin dato no hay lanzamiento.")
+	}
+	if l.MaxWorkers != nil && n >= *l.MaxWorkers {
 		return deny("orq: hay %d worker(s) vivos y el tope es %d. Cierra paneles antes de lanzar otro.", n, *l.MaxWorkers)
 	}
 	if env.Capacidad != nil {

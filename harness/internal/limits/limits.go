@@ -80,7 +80,7 @@ func (l Limits) validate() error {
 	switch {
 	case len(l.MinFreeGB) == 0:
 		return fmt.Errorf("falta min_free_gb")
-	case l.MaxWorkers == nil:
+	case l.MaxWorkers == nil && !identidad.EsOrq2():
 		return fmt.Errorf("falta max_workers")
 	case l.StateMaxAgeHours == nil:
 		return fmt.Errorf("falta state_max_age_hours")
@@ -92,6 +92,18 @@ func (l Limits) validate() error {
 		return fmt.Errorf("falta scratch.critical_free_gb")
 	}
 	return nil
+}
+
+// SinTope es el tope de workers cuando limits.json no trae max_workers (solo orq2): no hay tope por
+// cabeza y deciden RAM, CPU y carga.
+const SinTope = -1
+
+// TopeWorkers es max_workers, o SinTope si falta (solo orq2 lo permite).
+func (l Limits) TopeWorkers() int {
+	if l.MaxWorkers == nil {
+		return SinTope
+	}
+	return *l.MaxWorkers
 }
 
 func expandHome(p, home string) string {

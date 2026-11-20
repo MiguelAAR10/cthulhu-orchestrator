@@ -11,6 +11,7 @@ import (
 	"math"
 
 	"orq/internal/config"
+	"orq/internal/limits"
 	"orq/internal/sysinfo"
 )
 
@@ -27,12 +28,18 @@ type Capacidad struct {
 }
 
 // Calcular aplica las reglas a una medición.
+// SinTope: sin max_workers (orq2), el tope por cabeza no existe y decide la máquina.
+const SinTope = limits.SinTope
+
 func Calcular(r config.Recursos, maxWorkers, vivos int, m sysinfo.Maquina) Capacidad {
 	c := Capacidad{Vivos: vivos, PorConfig: maxWorkers, Maquina: m, Reglas: r}
 	libres := math.Floor((m.MemDisponibleGB - r.ReservaRAMGB) / r.RAMPorAgenteGB)
 	c.PorRAM = vivos + int(math.Max(0, libres))
 	c.PorCPU = int(math.Max(0, math.Floor((float64(m.CPUs)-r.ReservaCPUs)/r.CPUPorAgente)))
 	c.Tope, c.Limita = c.PorConfig, "max_workers"
+	if maxWorkers == SinTope {
+		c.Tope, c.Limita = math.MaxInt, ""
+	}
 	if c.PorRAM < c.Tope {
 		c.Tope, c.Limita = c.PorRAM, "RAM"
 	}
@@ -71,5 +78,8 @@ func (c Capacidad) Motivo() string {
 
 // Resumen es una línea para `orq status`.
 func (c Capacidad) Resumen() string {
+	if c.PorConfig == SinTope {
+		return fmt.Sprintf("%d agentes a la vez (limita %s): max_workers sin tope · RAM %d · CPU %d", c.Tope, c.Limita, c.PorRAM, c.PorCPU)
+	}
 	return fmt.Sprintf("%d agentes a la vez (limita %s): max_workers %d · RAM %d · CPU %d", c.Tope, c.Limita, c.PorConfig, c.PorRAM, c.PorCPU)
 }

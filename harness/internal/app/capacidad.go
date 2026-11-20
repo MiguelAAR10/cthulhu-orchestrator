@@ -48,7 +48,7 @@ func Capacidad(cfg config.Config, l limits.Limits, m Medir) (recursos.Capacidad,
 	if err != nil {
 		return recursos.Capacidad{}, vivos, err
 	}
-	return recursos.Calcular(cfg.Recursos, *l.MaxWorkers, len(vivos), maq), vivos, nil
+	return recursos.Calcular(cfg.Recursos, l.TopeWorkers(), len(vivos), maq), vivos, nil
 }
 
 // CapacidadPara es la consulta del gate: con vivos ya contados, ¿cabe uno más en el proyecto de root?
@@ -62,7 +62,7 @@ func CapacidadPara(root string, l limits.Limits, vivos int, m Medir) (string, er
 	if err != nil {
 		return "", err
 	}
-	if c := recursos.Calcular(cfg.Recursos, *l.MaxWorkers, vivos, maq); !c.Cabe() {
+	if c := recursos.Calcular(cfg.Recursos, l.TopeWorkers(), vivos, maq); !c.Cabe() {
 		return c.Motivo(), nil
 	}
 	return "", nil
