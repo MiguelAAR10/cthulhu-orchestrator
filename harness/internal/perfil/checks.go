@@ -93,15 +93,13 @@ func checksUv(root string) map[string]config.Check {
 	if info, err := os.Stat(filepath.Join(root, "src")); err == nil && info.IsDir() {
 		pre, fuente = "PYTHONPATH=src "+pre, "src"
 	}
-	var dirs []string
-	for _, d := range []string{"src", "tests"} {
-		if info, err := os.Stat(filepath.Join(root, d)); err == nil && info.IsDir() {
-			dirs = append(dirs, d)
-		}
-	}
+	// Sin src/ el paquete vive en la raíz: se revisa todo el árbol, no solo tests/.
 	d := "."
-	if len(dirs) > 0 {
-		d = strings.Join(dirs, " ")
+	if fuente == "src" {
+		d = "src"
+		if info, err := os.Stat(filepath.Join(root, "tests")); err == nil && info.IsDir() {
+			d = "src tests"
+		}
 	}
 	out := map[string]config.Check{}
 	por := func(clave, h, cmd string) {

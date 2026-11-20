@@ -86,3 +86,12 @@ func TestChecksPyprojectSinUvLockNoOcultaNode(t *testing.T) {
 		t.Fatalf("orq2 %#v\norq %#v", got, orq)
 	}
 }
+
+// F3: a flat layout (no src/) lints the whole tree, not only tests/.
+func TestChecksUvFlatLintTodo(t *testing.T) {
+	root := archivos(t, map[string]string{"pyproject.toml": pyTodo, "uv.lock": "", "mypkg/__init__.py": "", "tests/test_x.py": ""})
+	const p = "uv run --offline --no-sync "
+	if got := ChecksPara(root, true)["lint"].Cmd; got != p+"ruff check . && "+p+"ruff format --check ." {
+		t.Fatalf("lint: %q", got)
+	}
+}
