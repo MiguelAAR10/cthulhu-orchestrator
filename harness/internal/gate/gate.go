@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"orq/internal/identidad"
 	"orq/internal/limits"
 	"orq/internal/orqdir"
 	"orq/internal/state"
@@ -78,6 +79,13 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 			for _, c := range cmds {
 				if d, ok := gitAjeno(c, raiz, rama); ok {
 					return d
+				}
+			}
+		}
+		if identidad.EsOrq2() {
+			for _, c := range cmds {
+				if orqPelado(c) {
+					return deny("orq2: el comando \"orq\" es orq 1.0.0, con otra configuración y otro estado. Usa `orq2 <subcomando>`.")
 				}
 			}
 		}

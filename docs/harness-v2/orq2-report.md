@@ -81,3 +81,12 @@ the built-in limits until one is put at `~/.config/orq2/limits.json`). Not run h
   context and relevo always run orq2.
 - The orq2 sandbox hides `~/.config` and `~/.local/state` as a whole, so 1.0.0's dirs stay hidden from
   workers; orq2's gate protects orq2's state paths, not 1.0.0's beyond that.
+
+## Review fixes (orq2-review.md)
+
+1. **Own skill names.** Under orq2, `identidad.Skills` renames `orq-{atena,orchestrator,planner,ruta,worker}` to `orq2-*`: `orq2 init` writes `.claude/skills/orq2-*` (name, directory and text), the role launch prompts (`skillDe`) load those names, and `orq2 skill ROL` guides point at them. A personal `orq-*` 1.0.0 skill can no longer shadow them. A binary named `orq` is untouched (golden test green).
+2. **Bare `orq` refused.** Under orq2 the gate (`gate.orqPelado`) denies a command whose word is `orq` (any path, any subcommand) with a message saying to use `orq2 <subcommand>`; `orq2` and the `ORQ_NOMBRE=orq2 <path>/orq` form stay allowed. Under `orq` nothing changes.
+3. **Own hooks not read as 1.0.0.** `hookOrq1` ignores a hit that follows `ORQ_NOMBRE=orq2` on its line; `orq2 init` twice on its own project succeeds (both hook forms tested).
+4. **Texts.** The refusal quotes the real matched command (`$HOME/bin/orq gate`); `identidad.Texto` rewrites `~/.config/orq/` and `~/.local/state/orq/` to the orq2 dirs, so the usage line shows `~/.config/orq2/config.json`.
+
+Tests (`internal/orq2_test.go`, temp HOME, real binaries) failed before each fix and pass after. Residual: the orq2 gate only sees commands typed through Bash; a script that calls `orq` internally is not inspected.

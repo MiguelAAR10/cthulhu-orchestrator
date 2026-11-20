@@ -10,6 +10,7 @@ import (
 	"orq/internal/agente"
 	"orq/internal/canal"
 	"orq/internal/config"
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 	"orq/internal/terminal"
 )
@@ -24,13 +25,14 @@ Read first: .orq/relevo-%[1]s.md if it exists, then "orq mem ver".
 Talk to other roles only via "orq msg send". Then wait for instructions.`
 
 func skillDe(rol string) string {
+	n := "orq-orchestrator"
 	switch rol {
 	case "atena":
-		return "orq-atena"
+		n = "orq-atena"
 	case "planificador", "astra":
-		return "orq-planner"
+		n = "orq-planner"
 	}
-	return "orq-orchestrator"
+	return identidad.Skills(n)
 }
 
 // entornoDe une ORQ_ROL con las variables de cuenta configuradas (CLAUDE_CONFIG_DIR, CODEX_HOME…).

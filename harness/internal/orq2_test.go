@@ -1,6 +1,8 @@
 package internal_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -181,7 +183,7 @@ func TestOrq2Identidad(t *testing.T) {
 	if !strings.Contains(out, "`orq2 check` los corre") {
 		t.Errorf("init output does not say orq2:\n%s", out)
 	}
-	skill, _ := os.ReadFile(filepath.Join(repo, ".claude", "skills", "orq-orchestrator", "SKILL.md"))
+	skill, _ := os.ReadFile(filepath.Join(repo, ".claude", "skills", "orq2-orchestrator", "SKILL.md"))
 	if strings.Contains(string(skill), "`orq up`") || !strings.Contains(string(skill), "`orq2 slice lanzar`") {
 		t.Errorf("the orchestrator skill orq2 installs still runs orq by name")
 	}
@@ -275,4 +277,128 @@ func soloClaude(f string) string {
 		}
 	}
 	return b.String()
+}
+
+// ---------- review fixes (orq2-review.md) ----------
+
+// Item 1: under orq2 the skills have orq2-* names, on disk and in every text that loads them.
+func TestOrq2SkillsPropias(t *testing.T) {
+	orq, orq2 := construir(t)
+	home, repo := fixtureGo(t)
+	if out, code := correr(t, orq2, home, repo, nil, "init"); code != 0 {
+		t.Fatalf("orq2 init: %d %s", code, out)
+	}
+	for _, n := range []string{"orq2-orchestrator", "orq2-planner", "orq2-atena", "orq2-ruta"} {
+		raw, err := os.ReadFile(filepath.Join(repo, ".claude", "skills", n, "SKILL.md"))
+		if err != nil {
+			t.Errorf("orq2 init did not write skill %s: %v", n, err)
+			continue
+		}
+		if !strings.Contains(string(raw), "name: "+n+"\n") {
+			t.Errorf("skill %s does not declare that name:\n%.200s", n, raw)
+		}
+	}
+	for _, n := range []string{"orq-orchestrator", "orq-planner", "orq-atena", "orq-ruta"} {
+		if _, err := os.Stat(filepath.Join(repo, ".claude", "skills", n)); err == nil {
+			t.Errorf("orq2 init wrote the 1.0.0 skill name %s", n)
+		}
+	}
+	for _, rol := range []string{"atena", "orquestador", "planificador"} {
+		g, _ := correr(t, orq2, home, repo, nil, "skill", rol)
+		if strings.Contains(g, "`orq-ruta`") {
+			t.Errorf("orq2 skill %s still points at orq-ruta:\n%s", rol, g)
+		}
+	}
+	// orq keeps its names.
+	h2, r2 := fixtureGo(t)
+	if out, code := correr(t, orq, h2, r2, nil, "init"); code != 0 {
+		t.Fatalf("orq init: %d %s", code, out)
+	}
+	if _, err := os.Stat(filepath.Join(r2, ".claude", "skills", "orq-orchestrator", "SKILL.md")); err != nil {
+		t.Errorf("orq lost orq-orchestrator: %v", err)
+	}
+}
+
+func gate(t *testing.T, bin, home, repo, cmd string, extra ...string) (string, int) {
+	t.Helper()
+	tpl, err := os.ReadFile(filepath.Join("..", "..", "templates", "limits.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{"orq", "orq2"} {
+		os.MkdirAll(filepath.Join(home, ".config", d), 0o755)
+		os.WriteFile(filepath.Join(home, ".config", d, "limits.json"), tpl, 0o644)
+	}
+	c := exec.Command(bin, "gate")
+	c.Dir = repo
+	c.Env = append([]string{"HOME=" + home, "PATH=/usr/bin:/bin"}, extra...)
+	in, _ := json.Marshal(map[string]any{"tool_name": "Bash", "cwd": repo, "tool_input": map[string]any{"command": cmd}})
+	c.Stdin = bytes.NewReader(in)
+	out, err := c.CombinedOutput()
+	code := 0
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	return string(out), code
+}
+
+// Item 2: orq2's gate refuses the bare orq command; orq2 stays allowed; orq's gate is unchanged.
+func TestOrq2GateRechazaOrqPelado(t *testing.T) {
+	orq, orq2 := construir(t)
+	home, repo := fixtureGo(t)
+	for _, cmd := range []string{"orq status", "orq slice lanzar 01", "cd /tmp && orq msg leer", "$HOME/bin/orq status", "echo hi | orq gate"} {
+		out, code := gate(t, orq2, home, repo, cmd)
+		if code != 2 || !strings.Contains(out, "orq2") {
+			t.Errorf("orq2 gate on %q: exit %d, want 2 saying to use orq2\n%s", cmd, code, out)
+		}
+	}
+	for _, cmd := range []string{"orq2 status", "orq2 slice estado", "echo orq status", "ls ~/.orq"} {
+		if out, code := gate(t, orq2, home, repo, cmd); code != 0 {
+			t.Errorf("orq2 gate on %q: exit %d\n%s", cmd, code, out)
+		}
+	}
+	for _, cmd := range []string{"orq status", "orq msg leer"} {
+		if out, code := gate(t, orq, home, repo, cmd); code != 0 {
+			t.Errorf("orq gate on %q changed: exit %d\n%s", cmd, code, out)
+		}
+	}
+}
+
+// Items 3 and 4: orq2 recognises its own hooks, quotes the real hook it refuses, and its usage
+// line shows orq2's config.
+func TestOrq2HooksPropiosYTextos(t *testing.T) {
+	orq, orq2 := construir(t)
+	// A binary named orq run as orq2 writes the ORQ_NOMBRE=orq2 <path>/orq form.
+	home, repo := fixtureGo(t)
+	for i := 1; i <= 2; i++ {
+		if out, code := correr(t, orq, home, repo, []string{"ORQ_NOMBRE=orq2"}, "init"); code != 0 {
+			t.Fatalf("ORQ_NOMBRE=orq2 orq init, run %d: %d\n%s", i, code, out)
+		}
+	}
+	// A binary named orq2 run twice.
+	home, repo = fixtureGo(t)
+	for i := 1; i <= 2; i++ {
+		if out, code := correr(t, orq2, home, repo, nil, "init"); code != 0 {
+			t.Fatalf("orq2 init, run %d: %d\n%s", i, code, out)
+		}
+	}
+	// A real 1.0.0 hook is still refused, and the message quotes the hook as written.
+	home, repo = fixtureGo(t)
+	if out, code := correr(t, orq, home, repo, nil, "init"); code != 0 {
+		t.Fatalf("orq init: %d %s", code, out)
+	}
+	out, code := correr(t, orq2, home, repo, nil, "init")
+	if code != 1 || !strings.Contains(out, "$HOME/bin/orq gate") {
+		t.Errorf("refusal does not quote the real hook $HOME/bin/orq gate (exit %d):\n%s", code, out)
+	}
+	u, _ := correr(t, orq2, home, repo, nil)
+	if !strings.Contains(u, "~/.config/orq2/config.json") || strings.Contains(u, "~/.config/orq/config.json") {
+		t.Errorf("orq2 usage does not show ~/.config/orq2/config.json:\n%s", u)
+	}
+	u, _ = correr(t, orq, home, repo, nil)
+	if !strings.Contains(u, "~/.config/orq/config.json") {
+		t.Errorf("orq usage changed:\n%s", u)
+	}
 }

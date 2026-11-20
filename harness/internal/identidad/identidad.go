@@ -86,12 +86,28 @@ func citar(s string) string {
 // Paths (~/.config/orq/, .orq/, bin/orq), skill names (orq-planner) and tags ([orq · ...]) stay.
 var orqComando = regexp.MustCompile(`(^|[^A-Za-z0-9_./~$-])orq( [a-z-])`)
 
-// Texto rewrites "orq <sub>" into "orq2 <sub>" for orq2; for orq it returns s untouched.
+// rutasOrq are the user-level directories orq2 does not use: it has its own under orq2.
+var rutasOrq = strings.NewReplacer("~/.config/orq/", "~/.config/orq2/", "~/.local/state/orq/", "~/.local/state/orq2/")
+
+// Texto rewrites "orq <sub>" into "orq2 <sub>" and the user-level dirs to their orq2 names for
+// orq2; for orq it returns s untouched. Project paths (.orq/) and tags stay.
 func Texto(s string) string {
 	if !EsOrq2() {
 		return s
 	}
-	return orqComando.ReplaceAllString(s, "${1}orq2${2}")
+	return orqComando.ReplaceAllString(rutasOrq.Replace(s), "${1}orq2${2}")
+}
+
+// skillOrq is a skill name orq ships: orq-atena, orq-orchestrator, orq-planner, orq-ruta, orq-worker.
+var skillOrq = regexp.MustCompile(`(^|[^A-Za-z0-9_-])orq-(atena|orchestrator|planner|ruta|worker)\b`)
+
+// Skills renames the orq skills in s to orq2-<name> for orq2, so a personal orq 1.0.0 skill with
+// the orq-<name> name can never stand in for orq2's; for orq it returns s untouched.
+func Skills(s string) string {
+	if !EsOrq2() {
+		return s
+	}
+	return skillOrq.ReplaceAllString(s, "${1}orq2-${2}")
 }
 
 // Escritor rewrites what passes through it with Texto; for orq it is w itself.

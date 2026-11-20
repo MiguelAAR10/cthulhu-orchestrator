@@ -157,6 +157,20 @@ var sliceOrquestador = conjunto("abrir", "cerrar", "reintentar", "tomar", "lanza
 // these inside a worker too, so a copied or renamed binary, an alias or a script cannot run them.
 func SliceSoloOrquestador(sub string) bool { return sliceOrquestador[sub] }
 
+// orqPelado says whether c runs the command named orq (any path, any subcommand): under orq2 that
+// is orq 1.0.0. The form orq2 writes in its own hooks, ORQ_NOMBRE=orq2 <path>/orq, is orq2 itself.
+func orqPelado(c simple) bool {
+	if len(c.w) == 0 || filepath.Base(c.w[0].s) != "orq" {
+		return false
+	}
+	for _, a := range c.asig {
+		if a.s == "ORQ_NOMBRE=orq2" {
+			return false
+		}
+	}
+	return true
+}
+
 func soloOrquestador(c simple) bool {
 	if len(c.w) == 0 || nombre(c.w[0]) != "orq" {
 		return false

@@ -25,17 +25,18 @@ func instalarSkillsOrq(root string) (nuevas, distintas []string) {
 	ents, _ := orqSkills.ReadDir("orqskills")
 	for _, d := range ents {
 		raw, _ := orqSkills.ReadFile("orqskills/" + d.Name() + "/SKILL.md")
-		raw = []byte(identidad.Texto(string(raw)))
-		dst := filepath.Join(root, ".claude", "skills", d.Name(), "SKILL.md")
+		raw = []byte(identidad.Skills(identidad.Texto(string(raw))))
+		nombre := identidad.Skills(d.Name())
+		dst := filepath.Join(root, ".claude", "skills", nombre, "SKILL.md")
 		actual, err := os.ReadFile(dst)
 		switch {
 		case err != nil:
 			os.MkdirAll(filepath.Dir(dst), 0o755)
 			if os.WriteFile(dst, raw, 0o644) == nil {
-				nuevas = append(nuevas, d.Name())
+				nuevas = append(nuevas, nombre)
 			}
 		case string(actual) != string(raw):
-			distintas = append(distintas, d.Name())
+			distintas = append(distintas, nombre)
 		}
 	}
 	return
@@ -46,7 +47,7 @@ func nombresSkillsOrq() []string {
 	ents, _ := orqSkills.ReadDir("orqskills")
 	var ns []string
 	for _, d := range ents {
-		ns = append(ns, d.Name())
+		ns = append(ns, identidad.Skills(d.Name()))
 	}
 	return ns
 }
@@ -79,7 +80,7 @@ func runSkill(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	// Los modelos de la guía salen de la configuración, no del texto.
-	fmt.Fprint(stdout, cfg.Expandir(string(g)))
+	fmt.Fprint(stdout, identidad.Skills(cfg.Expandir(string(g))))
 	if p.Root != "" {
 		ls := perfil.ParaRol(perfil.Lista(p.Perfil()), rol)
 		if len(ls) > 0 {

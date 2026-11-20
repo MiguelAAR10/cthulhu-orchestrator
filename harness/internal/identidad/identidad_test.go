@@ -8,7 +8,7 @@ func TestTexto(t *testing.T) {
 		"corre `orq slice verificar`":           "corre `orq2 slice verificar`",
 		"orq init\n":                            "orq2 init\n",
 		`run "orq skill worker"`:                `run "orq2 skill worker"`,
-		"~/.config/orq/config.json":             "~/.config/orq/config.json",
+		"~/.config/orq/config.json":             "~/.config/orq2/config.json",
 		"$HOME/bin/orq gate":                    "$HOME/bin/orq gate",
 		"skill orq-planner":                     "skill orq-planner",
 		"[orq · historia de atena]":             "[orq · historia de atena]",

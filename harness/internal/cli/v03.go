@@ -52,6 +52,39 @@ func hooks() string {
 // hooksOrq1 are the commands orq 1.0.0 puts in a project's .claude/settings (orq2's never match).
 var hooksOrq1 = []string{"orq gate", "orq contexto", "orq relevo"}
 
+// hookOrq1 returns the first orq 1.0.0 hook command in raw as written in the file ("" if none).
+// A hit that follows ORQ_NOMBRE=orq2 on its line is orq2's own hook (the form it writes for a
+// binary not named orq2); "orq2 gate" never contains "orq gate".
+func hookOrq1(raw string) string {
+	for _, h := range hooksOrq1 {
+		for i, resto := 0, raw; ; {
+			j := strings.Index(resto, h)
+			if j < 0 {
+				break
+			}
+			i += j
+			ini := strings.LastIndexByte(raw[:i], '\n') + 1
+			if !strings.Contains(raw[ini:i], "ORQ_NOMBRE=orq2") {
+				return comandoEn(raw, i)
+			}
+			i += len(h)
+			resto = raw[i:]
+		}
+	}
+	return ""
+}
+
+// comandoEn is the quoted string of raw that contains offset i (the whole hook command), so the
+// message quotes it with its path, as the file has it.
+func comandoEn(raw string, i int) string {
+	ini := strings.LastIndexByte(raw[:i], '"') + 1
+	fin := strings.IndexByte(raw[i:], '"')
+	if fin < 0 || strings.ContainsRune(raw[ini:i], '\n') {
+		return strings.TrimSpace(raw[i:min(len(raw), i+40)])
+	}
+	return raw[ini : i+fin]
+}
+
 // gestionadoPorOrq1 says why orq 1.0.0 manages the project at root ("" if it does not): its hooks
 // in .claude/settings.json or settings.local.json, or slices it opened. It writes nothing.
 func gestionadoPorOrq1(root string) []string {
@@ -62,11 +95,8 @@ func gestionadoPorOrq1(root string) []string {
 		if err != nil {
 			continue
 		}
-		for _, h := range hooksOrq1 {
-			if strings.Contains(string(raw), h) {
-				por = append(por, fmt.Sprintf("%s tiene los hooks de orq 1.0.0 (%q)", ruta, h))
-				break
-			}
+		if h := hookOrq1(string(raw)); h != "" {
+			por = append(por, fmt.Sprintf("%s tiene los hooks de orq 1.0.0 (%q)", ruta, h))
 		}
 	}
 	if ids := slice.AbiertosOrq1(filepath.Join(root, ".orq")); len(ids) > 0 {
