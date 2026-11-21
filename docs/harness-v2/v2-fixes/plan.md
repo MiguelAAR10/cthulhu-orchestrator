@@ -56,7 +56,7 @@ by builders; S-01 is paused as is.
   "phase": "D",
   "integration_branch": "harness-v2",
   "integration_owner": "orchestrator pane w47:p3B (since 2026-11-20); filter session w47:p9 relays Owner",
-  "harness_v2_tip": "2db67a9 (G0 + G4 merged); installed is still 299d02d",
+  "harness_v2_tip": "6a26b85 (G0 + G4 + G7 merged); installed is still 299d02d",
   "installed": "~/bin/orq2 = see install2 / installed_version; rollback = rollback_binary",
   "in_flight": {
     "R2": "integrated 5f25823. Independent Opus review of 309addf..bdf40db: VERDICT no High, no Medium; Lows for v2.1 notes: (a) aviso_ram_gb 0 now invalidates limits.json under orq2 and blocks all Bash (fails closed, release note) (b) card preamble gives one error per line under orq2 (c) lines in duplicate/unknown sections not checked in same pass (d) literal caps in cli.go:93 usage are orq 1.0.0 text, keep. Reviewer pane closed, review worktree removed. Next: make ci on 5f25823, clone proof, tell filter before install2",
@@ -69,11 +69,12 @@ by builders; S-01 is paused as is.
     "309addf_installable": "NO: fresh Opus review found 1 High (H1 Zonas) + 3 Medium, all in R2 scope"
   },
   "lanes": {
-    "A": {"group": "G7", "state": "6163067 (deny limited to orq2, merged 2db67a9); re-review in progress (rev-g4g1)", "attempt": 1, "pane": "w47:p3H (agent g7-update, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g7", "branch": "v2/g7-update", "base": "8683242"},
+    "A": {"group": "G2", "state": "waiting for G1 merge (depends on G1)"},
+    "G7": "integrated 6a26b85; reviews: ddf2508 High fixed, 6163067 no High, N1 fix bb71cf7 by orchestrator diff check. Pane closed, worktree removed, branch deleted. Gate record must be written with orq2 update --registrar for each gated SHA; ci log kept at a durable path",
     "G0": "integrated 8683242 (orchestrator diff check: only t.Parallel lines + make rapido; 115 tests before/after; 3 runs + -race slice PASS; ~20-35% faster under load). Pane closed, worktree removed, branch deleted. make ci pending: batched with G4/G1 merge",
     "B": {"group": "G4", "state": "depsEn gated to orq2 (19b30cc, 4 pkgs green -p 1); reviewer re-checking delta 68770f7..19b30cc", "owner_note": "after G4 is installed, RS S-01 will be refused until Owner adds a carpetas.dashboard block to RS .orq/config.json (builder proposed: pnpm run lint / pnpm exec tsc --noEmit / pnpm run test, build optional)", "attempt": 1, "pane": "w47:p3D (agent g4-examen, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g4", "branch": "v2/g4-examen", "base": "309addf", "started": "2026-11-20"}
   },
-  "lane_A2": {"group": "G1", "state": "review of 98b34b4: no High, 2 Medium (M1 clone marker routes every worker command to project .orq -> worker can write Owner confirmado memory; M2 close archives whole shared channel incl. other stories and undelivered). Builder fixing M1, M2 (+L2), review-fix attempt 1", "attempt": 1, "pane": "w47:p3F (agent g1-nada-perdido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g1", "branch": "v2/g1-nada-perdido", "base": "309addf", "note": "Owner 2026-11-20: G1 runs in parallel with G0, merges G0 at delivery; G5 still waits for G4"},
+  "lane_A2": {"group": "G1", "state": "delta review 6b2a8f5: no High, Medium N1 (worker aprender confirmar/refutar shifts lessons) + N2 skill eval, N4; builder fixing; then merge, notify G5, single make ci", "attempt": 1, "pane": "w47:p3F (agent g1-nada-perdido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g1", "branch": "v2/g1-nada-perdido", "base": "309addf", "note": "Owner 2026-11-20: G1 runs in parallel with G0, merges G0 at delivery; G5 still waits for G4"},
   "briefs": "session scratchpad brief-g0.md / brief-g4.md (also re-derivable from this plan's rows)",
   "queued": {},
   "owner_held": {"RS carpetas.dashboard config": "proposal held; Owner approves when next RS story (agenda de visitas) starts"},

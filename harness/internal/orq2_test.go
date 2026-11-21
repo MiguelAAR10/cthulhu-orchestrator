@@ -402,3 +402,22 @@ func TestOrq2HooksPropiosYTextos(t *testing.T) {
 		t.Errorf("orq usage changed:\n%s", u)
 	}
 }
+
+// H1 on the real binary: ORQ_UPDATE_* overrides are refused, not honoured, before anything else.
+func TestOrq2UpdateRechazaOverrides(t *testing.T) {
+	orq, orq2 := construir(t)
+	home, repo := fixtureGo(t)
+	for _, k := range []string{"ORQ_UPDATE_BIN", "ORQ_UPDATE_REPO", "ORQ_UPDATE_GO"} {
+		for _, args := range [][]string{{"update"}, {"update", "--ver"}, {"update", "--registrar", "HEAD"}} {
+			out, code := correr(t, orq2, home, repo, []string{k + "=" + home}, args...)
+			if code != 1 || !strings.Contains(out, k) {
+				t.Errorf("%s %v: exit %d\n%s", k, args, code, out)
+			}
+		}
+	}
+	// orq: still an unknown command, overrides or not.
+	out, code := correr(t, orq, home, repo, []string{"ORQ_UPDATE_BIN=" + home}, "update")
+	if u, _ := correr(t, orq, home, repo, nil, "nocomando"); code != 1 || out != u {
+		t.Errorf("orq update differs from an unknown command: %d\n%s", code, out)
+	}
+}
