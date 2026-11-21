@@ -211,6 +211,13 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	case "version":
 		fmt.Fprintln(stdout, versionLine(debug.ReadBuildInfo()))
 		return 0
+	case "update":
+		// orq2 only: under orq, `update` stays an unknown command, exactly as in 1.0.0.
+		if identidad.EsOrq2() {
+			return runUpdate(args[1:], stdin, stdout, stderr)
+		}
+		fmt.Fprint(stderr, uso())
+		return 1
 	default:
 		fmt.Fprint(stderr, uso())
 		return 1
