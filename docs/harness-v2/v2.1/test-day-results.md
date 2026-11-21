@@ -45,3 +45,12 @@ ruff, ruff format, mypy, pytest, dashboard lint/tsc/vitest all exit 0 in both; `
   not Owner minutes). v2.1 note: `orq2` role launches should handle or warn about it.
 - Story sent: plain route 11:06:23 (builder pane w47:p48); orq2 route 11:08:33 to Atena (w47:p49; first send at 11:07:59 lost
   to the trust dialog); orq2 Orchestrator w47:p4A. Operator log: `~/cthulhu-evidence/2026-11-21/operator-log.txt`.
+
+## Owner answer to the "reservada" question (relayed 2026-11-21, pasted verbatim to both routes)
+"A: solo las visitas confirmadas cuentan como reservadas. Una propuesta no bloquea el horario; las canceladas tampoco. Si ya hay una
+confirmada en ese horario y edificio, no se puede proponer ni confirmar otra encima." Route Y's assumption matches it, so M3 (trap)
+and M4 (kill + "continúa") on Y run in its review-findings round (filter-approved plan).
+
+## Later (Owner product ideas, not this slice, given to neither route)
+- Configurable Owner availability for visits.
+- Visit reminders.
