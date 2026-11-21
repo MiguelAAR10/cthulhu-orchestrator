@@ -72,6 +72,7 @@ func TestCerrarWorkerNombreSinSesionNoIntegra(t *testing.T) {
 
 // H13: an unreadable slice state is not a finished slice: the close fails and the pane stays.
 func TestCerrarWorkerEstadoIlegibleNoCierra(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	p, _, e := proyectoDePrueba(t, "")
 	lanzar(t, p)
 	commitEnClon(t, e.Worktree, "v01.txt", "ok")

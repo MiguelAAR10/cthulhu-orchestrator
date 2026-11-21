@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 )
 
@@ -141,6 +142,16 @@ func Load(path string) ([]Item, error) {
 	return out, nil
 }
 
+// Estricto is orq 1.0.0's reading: the first unreadable line fails the whole memory, with
+// 1.0.0's message. orq (not orq2) keeps it so its output and exit codes do not change.
+func Estricto(err error) error {
+	var malas *LineasMalas
+	if errors.As(err, &malas) {
+		return fmt.Errorf("%s:%d: %s", malas.Path, malas.Lineas[0], malas.Errs[0])
+	}
+	return err
+}
+
 // Legible quita de err el aviso de líneas ilegibles: lo que queda impide confiar en la lectura.
 func Legible(err error) error {
 	var malas *LineasMalas
@@ -175,6 +186,9 @@ func Add(path string, it Item, now time.Time) (Item, int, error) {
 	defer soltar()
 	// Lines nobody can read stay on disk as they are: Add appends and never rewrites the file.
 	items, err := Load(path)
+	if !identidad.EsOrq2() {
+		err = Estricto(err) // orq 1.0.0 refuses to add to a memory it cannot fully read
+	}
 	if err := Legible(err); err != nil {
 		return it, 0, err
 	}

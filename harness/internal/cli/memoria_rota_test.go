@@ -14,6 +14,7 @@ const memRota = `{"id":"m1","imp":"critica","cat":"requisito","fuente":"owner","
 
 // H13/H27: one torn memory line no longer hides all memory from a new session; it is reported.
 func TestMemoriaConLineaRotaSeVeYSeAvisa(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	root := t.TempDir()
 	t.Setenv("ORQ_ROOT", root)
 	t.Setenv("ORQ_ROL", "")

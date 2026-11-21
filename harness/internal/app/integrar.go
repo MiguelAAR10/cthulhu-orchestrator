@@ -10,6 +10,7 @@ import (
 
 	"orq/internal/canal"
 	"orq/internal/diario"
+	"orq/internal/identidad"
 	"orq/internal/slice"
 )
 
@@ -26,7 +27,8 @@ func (p Proyecto) CerrarWorker(ctx context.Context, nombre string) (string, erro
 	}
 	r := p.Slices()
 	e, err := r.Load(m[1])
-	if errors.Is(err, slice.ErrNoAbierto) {
+	if errors.Is(err, slice.ErrNoAbierto) || err != nil && !identidad.EsOrq2() {
+		// orq keeps 1.0.0: any read error counts as closed.
 		return "", nil // closed or never opened: nothing of this worker left to merge
 	}
 	if err != nil {

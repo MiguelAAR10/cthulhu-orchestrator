@@ -33,6 +33,7 @@ func TestLoadSaltaLaLineaRotaYLaReporta(t *testing.T) {
 // Adding to a memory with a bad line keeps that line on disk (nobody fixed it yet) and the new
 // item never glues onto a torn last line.
 func TestAddConservaLaLineaRota(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	p := filepath.Join(t.TempDir(), "memoria.jsonl")
 	os.WriteFile(p, []byte(strings.TrimSuffix(memConUnaLineaRota, "\n")+"\n{\"id\":\"m4\",\"imp\":\"al"), 0o644)
 	it, _, err := Add(p, Item{Imp: "media", Cat: "dominio", Fuente: "atena", Texto: "talla única"}, t0)
@@ -49,5 +50,19 @@ func TestAddConservaLaLineaRota(t *testing.T) {
 	items, err := Load(p)
 	if len(items) != 3 || items[2].Texto != "talla única" {
 		t.Fatalf("new item must be readable: %+v (%v)", items, err)
+	}
+}
+
+// orq (not orq2) keeps 1.0.0: Add refuses a memory with an unreadable line and does not touch it.
+func TestAddOrqRechazaComo100(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq")
+	p := filepath.Join(t.TempDir(), "memoria.jsonl")
+	os.WriteFile(p, []byte(memConUnaLineaRota), 0o644)
+	_, _, err := Add(p, Item{Imp: "media", Cat: "dominio", Fuente: "atena", Texto: "talla única"}, t0)
+	if err == nil || err.Error() != p+":2: unexpected end of JSON input" {
+		t.Fatalf("orq Add = %v, want 1.0.0's first-line error", err)
+	}
+	if raw, _ := os.ReadFile(p); string(raw) != memConUnaLineaRota {
+		t.Fatalf("file changed:\n%s", raw)
 	}
 }

@@ -85,6 +85,7 @@ func TestCerrarSinDocNoLlamaAlEscriba(t *testing.T) {
 // H2: closing a story archives its channel instead of deleting it, and the next story's
 // message ids continue after the archived ones.
 func TestCerrarArchivaElCanalYLosIdsSiguen(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	sliceVerde(t)
 	root := os.Getenv("ORQ_ROOT")
 	t.Setenv("ORQ_SIN_DOC", "1")

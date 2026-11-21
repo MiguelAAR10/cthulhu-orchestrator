@@ -81,6 +81,10 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 1
 		}
 		items, err := memoria.Load(p.MemPath())
+		if err != nil && !identidad.EsOrq2() {
+			fmt.Fprintln(stderr, memoria.Estricto(err)) // orq 1.0.0: one bad line fails mem ver
+			return 1
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			if memoria.Legible(err) != nil {
@@ -102,6 +106,9 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		defer soltar()
 		items, err := memoria.Load(p.MemPath())
+		if err != nil && !identidad.EsOrq2() {
+			err = memoria.Estricto(err)
+		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -706,22 +713,31 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		if _, _, err := memoria.Add(p.MemPath(), mem, time.Now()); err != nil {
 			pendiente = append(pendiente, fmt.Sprintf("la memoria no guardó el cierre (%v): orq mem add --imp %s --cat %s --fuente %s --slice S-%s %q", err, mem.Imp, mem.Cat, mem.Fuente, reg.NN, mem.Texto))
 		}
-		// The story's channel is archived, never deleted: its message ids stay valid as evidence.
-		if _, err := canal.Archivar(p.CanalPath(), "S-"+reg.NN); err != nil {
-			pendiente = append(pendiente, fmt.Sprintf("el canal no se archivó (%v): sigue en %s", err, p.CanalPath()))
+		// orq2 archives the story's channel, never deletes it: its message ids stay valid as
+		// evidence, and every cleanup failure is reported. orq keeps 1.0.0: the channel is
+		// deleted and cleanup errors other than the memory one are not reported.
+		orq2 := identidad.EsOrq2()
+		if orq2 {
+			if _, err := canal.Archivar(p.CanalPath(), "S-"+reg.NN); err != nil {
+				pendiente = append(pendiente, fmt.Sprintf("el canal no se archivó (%v): sigue en %s", err, p.CanalPath()))
+			}
+		} else {
+			os.Remove(p.CanalPath())
 		}
-		if err := os.Remove(p.PlanPath(reg.NN)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := os.Remove(p.PlanPath(reg.NN)); orq2 && err != nil && !errors.Is(err, os.ErrNotExist) {
 			pendiente = append(pendiente, fmt.Sprintf("el plan no se borró (%v)", err))
 		}
 		// Higiene: los paneles de los workers de este slice ya no tienen trabajo.
-		if ses, err := canal.LoadSesiones(p.SesPath()); err != nil {
+		ses, err := canal.LoadSesiones(p.SesPath())
+		if err != nil && orq2 {
 			pendiente = append(pendiente, fmt.Sprintf("no se leyeron las sesiones (%v): cierra a mano los paneles worker-*-s%s", err, reg.NN))
-		} else {
+		}
+		if err == nil {
 			c, err := p.CerrarSesiones(context.Background(), ses, func(k string) bool { return strings.HasPrefix(k, "worker-") && strings.HasSuffix(k, "-s"+reg.NN) })
 			if len(c) > 0 {
 				fmt.Fprintf(stdout, "paneles cerrados: %s\n", strings.Join(c, ", "))
 			}
-			if err != nil {
+			if err != nil && orq2 {
 				pendiente = append(pendiente, fmt.Sprintf("paneles de workers sin cerrar (%v)", err))
 			}
 		}
