@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -344,5 +345,92 @@ func TestDespacharTareaNuevaAWorkerVivo(t *testing.T) {
 	}
 	if a, v := len(term.Ops("arrancar")), len(term.Ops("avisar")); a != 1 || v != 2 {
 		t.Fatalf("arrancar=%d avisar=%d", a, v)
+	}
+}
+
+// G6 after G2: two `despachar --una-vez` runs at the same moment give exactly one worker, one
+// contract, and a journal with one launch: the launch/adopt decision is taken under the launch lock.
+func TestDespacharConcurrenteUnWorkerOrq2(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	for ronda := 0; ronda < 8; ronda++ {
+		p, term, e := proyectoDePrueba(t, "")
+		planS01(t, p, e.NN)
+		ctx := context.Background()
+		var listo sync.WaitGroup
+		listo.Add(1)
+		res := make([][]Despacho, 2)
+		errs := make([]error, 2)
+		var fin sync.WaitGroup
+		for i := range 2 {
+			fin.Add(1)
+			go func() {
+				defer fin.Done()
+				listo.Wait()
+				res[i], errs[i] = p.DespacharUnaVez(ctx, "claude")
+			}()
+		}
+		listo.Done()
+		fin.Wait()
+		if errs[0] != nil || errs[1] != nil {
+			t.Fatalf("ronda %d: %v / %v", ronda, errs[0], errs[1])
+		}
+		if a, c, v := len(term.Ops("arrancar")), len(term.Ops("crear")), len(term.Ops("avisar")); a != 1 || c != 1 || v != 1 {
+			t.Fatalf("ronda %d: arrancar=%d crear=%d avisar=%d", ronda, a, c, v)
+		}
+		lanzados := 0
+		for _, ds := range res {
+			for _, d := range ds {
+				switch d.Resultado {
+				case "lanzado":
+					lanzados++
+				case "ya_estaba":
+				default:
+					t.Fatalf("ronda %d: %+v", ronda, d)
+				}
+			}
+		}
+		evs, _ := diario.Leer(p.DiarioPath())
+		arranques, contratos, resultados := 0, 0, 0
+		for _, ev := range evs {
+			switch {
+			case ev.Tipo == "lanzamiento" && ev.Paso == "arranque" && ev.Resultado == "ok":
+				arranques++
+			case ev.Tipo == "lanzamiento" && ev.Paso == "contrato:T1" && ev.Resultado == "ok":
+				contratos++
+			case ev.Tipo == "despacho" && ev.Paso == "resultado" && ev.Resultado == "lanzado":
+				resultados++
+			}
+		}
+		if lanzados != 1 || arranques != 1 || contratos != 1 || resultados != 1 {
+			t.Fatalf("ronda %d: lanzados=%d arranques=%d contratos=%d despacho lanzado=%d\n%+v", ronda, lanzados, arranques, contratos, resultados, res)
+		}
+		if x := tarea(t, p, e.NN, "T1"); x.Estado != "en_curso" || x.Worker != "worker-back-s01" {
+			t.Fatalf("ronda %d: T1 %+v", ronda, x)
+		}
+	}
+}
+
+// RechazarOcupado, checked under the lock: a ready task whose zone worker is alive with another
+// task waits, with no intent in the journal.
+func TestDespacharOcupadoEsperaSinIntencionOrq2(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	p, term, e := proyectoDePrueba(t, "")
+	plan.Guardar(p.PlanPath(e.NN), &plan.Plan{Slice: e.NN, Debatido: true, Tareas: []plan.Tarea{
+		{ID: "T1", Zona: "back", Rutas: []string{"src"}, Dificultad: "baja", Estado: "pendiente"},
+		{ID: "T2", Zona: "back", Rutas: []string{"api"}, Dificultad: "baja", Estado: "pendiente"},
+	}})
+	ds, err := p.DespacharUnaVez(context.Background(), "claude")
+	if err != nil || len(ds) != 2 || ds[0].Resultado != "lanzado" || ds[1].Tarea != "T2" || ds[1].Resultado != "espera" || !strings.Contains(ds[1].Detalle, "T1") {
+		t.Fatalf("%v %+v", err, ds)
+	}
+	evs, _ := diario.Leer(p.DiarioPath())
+	n := 0
+	for _, ev := range evs {
+		if ev.Tipo == "despacho" && ev.Paso == "intento" {
+			n++
+		}
+	}
+	if n != 1 || len(term.Ops("avisar")) != 1 {
+		t.Fatalf("intents=%d contracts=%d", n, len(term.Ops("avisar")))
 	}
 }
