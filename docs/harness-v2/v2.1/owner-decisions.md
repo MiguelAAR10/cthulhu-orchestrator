@@ -81,3 +81,21 @@ happy-path tests. One hard verification loop, not many shallow ones.
 
 ## D12. Map capabilities before building
 Know which capabilities already exist (code, skills, references, people) before deciding what to build.
+
+## D13. Agents get full capability and a shared project environment (Owner, 2026-11-21, S-02)
+Context: on S-02 the sealed-exam box had no network, so the dashboard checks failed (pnpm tried to download
+itself) and the failure consumed repair attempt 1 of 2 with nothing wrong in the code. The Owner: "se les debe
+dar toda la libertad y potencial", plus a shared context so tests map well.
+- Workers and reviewers keep full internet and tools. Only the sealed exam is isolated, and isolation must never
+  make a correct story fail.
+- The box gets a declared network policy per check, not "no network": allow the package registries and the services
+  a check declares (e.g. npm, PyPI, a local Supabase); deny everything else and log it.
+- One shared project environment profile, read by every agent and every check: which env file applies per stage
+  (`.env.local` for dev, `.env.test` for tests and e2e, never production secrets in the box; names only, never values),
+  package manager and its pinned version, installed tool paths, ports, services to start, how to run e2e
+  (e.g. Playwright against the dev server with `.env.test`).
+- A preflight that runs every declared check inside the box on the base revision before the story starts, without
+  counting a repair; a red preflight is an environment problem for the orchestrator, never for the worker.
+- Environment failures never consume repair attempts; the receipt says "environment failed", not "code failed".
+- New clones come ready: trust accepted, dependencies present, environment profile copied.
+Evidence: ~/cthulhu-evidence/2026-11-21/agenda/estancamientos.log (15:32), .orq/config.json backup in that folder.
