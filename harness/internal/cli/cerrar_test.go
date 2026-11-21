@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -229,5 +230,23 @@ func TestCerrarRepetidoNoTocaLaMemoriaComo100(t *testing.T) {
 	}
 	if _, err := os.Stat(mem); !os.IsNotExist(err) {
 		t.Fatalf("orq wrote memory on a re-run: %v", err)
+	}
+}
+
+// G3 review 2: revoking a pending rejection is the Owner's, from a terminal.
+func TestRevocaRechazoEsDelOwner(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	sliceVerde(t)
+	viejo := esTerminal
+	esTerminal = func(io.Reader) bool { return false }
+	t.Cleanup(func() { esTerminal = viejo })
+	_, errs, code := run(t, "slice", "reabrir", "--revoca-rechazo", "otra vuelta")
+	if code != 1 || !strings.Contains(errs, "es del Owner") {
+		t.Fatalf("a non-terminal must not revoke: %d %s", code, errs)
+	}
+	t.Setenv("ORQ_ROL", "orquestador")
+	esTerminal = func(io.Reader) bool { return true }
+	if _, errs, code := run(t, "slice", "reintentar", "x", "--causa", "worker", "--revoca-rechazo"); code != 1 || !strings.Contains(errs, "es del Owner") {
+		t.Fatalf("an agent pane must not revoke: %d %s", code, errs)
 	}
 }

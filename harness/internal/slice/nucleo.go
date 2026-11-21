@@ -517,6 +517,10 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	return e, out, errors.Join(r.save(e), fmt.Errorf("%s (reparación %d de %d)", motivo, e.Fallos, MaxFallos-1))
 }
 
+// RevocaRechazo is the Owner's explicit override of a rejection still being closed (orq2): Por
+// says why. The CLI only builds it from the Owner's terminal.
+type RevocaRechazo struct{ Por string }
+
 // difContrato lists the contract fields that changed between two copies of a slice's state; the
 // card does not count (approving it does not change what a receipt proves).
 func difContrato(antes, ahora *Estado) []string {
@@ -568,7 +572,7 @@ const (
 
 // Reintentar abre un intento nuevo en la misma copia. Recibos viejos ya no valen. El diario anota
 // la causa: un examen corregido no cuenta como fallo del worker.
-func (r Repo) Reintentar(nn, cambio, causa string, decisionOwner bool) (*Estado, error) {
+func (r Repo) Reintentar(nn, cambio, causa string, decisionOwner bool, revoca ...RevocaRechazo) (*Estado, error) {
 	soltar, err := r.bloqueo(nn)
 	if err != nil {
 		return nil, err
@@ -751,7 +755,7 @@ func (r Repo) SumarExamen(nn string, nuevos []string, cmd, aprobado string) (*Es
 
 // Reabrir vuelve a construir un slice verificado para una reparación pedida por Atena u Owner:
 // mismo intento, misma copia, mismo equipo y sus commits. El recibo deja de valer.
-func (r Repo) Reabrir(nn, motivo string) (*Estado, error) {
+func (r Repo) Reabrir(nn, motivo string, revoca ...RevocaRechazo) (*Estado, error) {
 	soltar, err := r.bloqueo(nn)
 	if err != nil {
 		return nil, err

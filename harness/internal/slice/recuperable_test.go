@@ -425,9 +425,16 @@ func TestReintentarNoArrastraElMotivoDeRechazo(t *testing.T) {
 	if !conCaida(t, "intencion", func() { r.Cerrar("01", false, "motivo viejo", t0) }) {
 		t.Fatal("did not stop")
 	}
-	e, err := r.Reintentar("01", "sin tocar el fixture", CausaWorker, false)
+	if _, err := r.Reintentar("01", "sin tocar el fixture", CausaWorker, false); err == nil || !strings.Contains(err.Error(), "termina el rechazo") {
+		t.Fatalf("a pending rejection is not dropped by a retry: %v", err)
+	}
+	// Only the Owner's explicit override revokes it, and the diario says so.
+	e, err := r.Reintentar("01", "sin tocar el fixture", CausaWorker, false, RevocaRechazo{Por: "el Owner cambió de opinión"})
 	if err != nil || e.Cierre != nil {
 		t.Fatalf("a new attempt must start without the old close decision: %v %+v", err, e)
+	}
+	if rv := eventos(t, r, "revocacion"); len(rv) != 1 || rv[0].Detalle != "el Owner cambió de opinión" {
+		t.Fatalf("the override must be logged: %+v", rv)
 	}
 	if reg := convergeCerrado(t, r, false, "motivo nuevo"); reg.Motivo != "motivo nuevo" {
 		t.Fatalf("%+v", reg)
@@ -534,4 +541,71 @@ func decididoEn(ev diario.Evento) time.Time {
 	s, _ := ev.Datos["decidido"].(string)
 	ts, _ := time.Parse(time.RFC3339Nano, s)
 	return ts
+}
+
+// Review 2 M-1: a rejection already in the diario is not undone by a reopen; only the Owner's
+// override revokes it, logged, and then the slice can be verified and accepted.
+func TestRev2RechazoMedioLuegoReabrirAceptar(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	r, _ := verde(t)
+	if !conCaida(t, "decidido", func() { r.Cerrar("01", false, "no era", t0) }) {
+		t.Fatal("did not stop")
+	}
+	if _, err := r.Reabrir("01", "otra vuelta"); err == nil || !strings.Contains(err.Error(), "termina el rechazo") {
+		t.Fatalf("a reopen must not drop a pending rejection: %v", err)
+	}
+	if _, _, _, err := r.Cerrar("01", true, "", t0); err == nil {
+		t.Fatal("accepted over a pending rejection")
+	}
+	e, err := r.Reabrir("01", "otra vuelta", RevocaRechazo{Por: "el Owner lo pidió"})
+	if err != nil || e.Cierre != nil || e.Fase != Implementando {
+		t.Fatalf("the Owner's override reopens: %v %+v", err, e)
+	}
+	if rv := eventos(t, r, "revocacion"); len(rv) != 1 || rv[0].Resultado != "rechazado" {
+		t.Fatalf("the revocation must be logged: %+v", rv)
+	}
+	if _, _, err := r.Verificar("01", t0); err != nil {
+		t.Fatal(err)
+	}
+	if reg := convergeCerrado(t, r, true, ""); reg.Result != "aceptado" {
+		t.Fatalf("%+v", reg)
+	}
+}
+
+// Review 2 L-1: a rejection that starts while the exam runs stops the receipt under the lock.
+func TestRev2RechazoDuranteVerificar(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	conTras("verificar-cargado", func() {
+		if !conCaida(t, "intencion", func() { r.Cerrar("01", false, "no", t0) }) {
+			t.Fatal("did not stop")
+		}
+	}, func() {
+		if _, _, err := r.Verificar("01", t0); err == nil || !strings.Contains(err.Error(), "rechazado") {
+			t.Fatalf("the receipt must not be issued over a pending rejection: %v", err)
+		}
+	})
+	if e, _ = r.Load("01"); e.Fase != Implementando || e.Recibo != nil {
+		t.Fatalf("%+v", e)
+	}
+}
+
+// Review 2 L-2: the hint names only the ways out that exist in that phase.
+func TestRev2PistaDelRechazoPendiente(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	e := &Estado{NN: "01", Fase: Implementando, Cierre: &IntencionCierre{Resultado: "rechazado", Motivo: "no", TS: t0}}
+	msg := e.CierrePendiente().Error()
+	if !strings.Contains(msg, "termina el rechazo") || !strings.Contains(msg, "cerrar --rechazado") || strings.Contains(msg, "reabr") || strings.Contains(msg, "reintent") {
+		t.Fatalf("IMPLEMENTANDO: only finishing the rejection: %s", msg)
+	}
+	e.Fase = Verificado
+	if msg := e.CierrePendiente().Error(); !strings.Contains(msg, "reabrir") || !strings.Contains(msg, "--revoca-rechazo") {
+		t.Fatalf("VERIFICADO: the Owner may revoke by reopening: %s", msg)
+	}
+	e.Fase = Bloqueado
+	if msg := e.CierrePendiente().Error(); !strings.Contains(msg, "reintentar") || !strings.Contains(msg, "--revoca-rechazo") {
+		t.Fatalf("BLOQUEADO: the Owner may revoke with a new attempt: %s", msg)
+	}
 }
