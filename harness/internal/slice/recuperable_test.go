@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"orq/internal/diario"
 )
 
 type caida struct{ etapa string }
@@ -143,7 +145,7 @@ func TestCierreAceptadoConvergeTrasCaidaEnCadaEtapa(t *testing.T) {
 			if got, _ := os.ReadFile(filepath.Join(r.Root, "total.txt")); string(got) != "170\n" {
 				t.Fatal("main lacks the change")
 			}
-			if d := eventos(t, r, "decision"); len(d) != 1 || d[0].Resultado != "aceptado" || !d[0].TS.Equal(t0) {
+			if d := eventos(t, r, "decision"); len(d) != 1 || d[0].Resultado != "aceptado" || !decididoEn(d[0]).Equal(t0) {
 				t.Fatalf("one aceptado decision at the Owner's time expected: %+v", d)
 			}
 			ok := 0
@@ -207,7 +209,7 @@ func TestAceptadoSoloConElCommitEnMain(t *testing.T) {
 	if reg.Result != "aceptado" {
 		t.Fatalf("%+v", reg)
 	}
-	if d := eventos(t, r, "decision"); len(d) != 1 || !d[0].TS.Equal(t0) {
+	if d := eventos(t, r, "decision"); len(d) != 1 || !decididoEn(d[0]).Equal(t0) {
 		t.Fatalf("one decision at the Owner's first time: %+v", d)
 	}
 }
@@ -382,4 +384,154 @@ func TestIntencionDeCierreNoSeCambia(t *testing.T) {
 	if reg := convergeCerrado(t, r, false, "no"); reg.Result != "rechazado" {
 		t.Fatalf("%+v", reg)
 	}
+}
+
+// Review H-1: an accepted close that stopped (conflict, or a crash at intencion) and was reopened
+// can still be rejected: reopening drops the old decision.
+func TestReabrirLuegoRechazado(t *testing.T) {
+	for _, como := range []string{"conflicto", "caida"} {
+		t.Run(como, func(t *testing.T) {
+			t.Setenv("ORQ_NOMBRE", "orq2")
+			r, _ := verde(t)
+			if como == "conflicto" {
+				commitEn(t, r.Root, "total.txt", "99\n")
+				if _, _, _, err := r.Cerrar("01", true, "", t0); err == nil {
+					t.Fatal("integrated over a conflict")
+				}
+			} else if !conCaida(t, "intencion", func() { r.Cerrar("01", true, "", t0) }) {
+				t.Fatal("did not stop")
+			}
+			if e, _ := r.Load("01"); e.Fase != Integrando || e.Cierre == nil {
+				t.Fatalf("setup: %+v", e)
+			}
+			e, err := r.Reabrir("01", "otra vuelta")
+			if err != nil || e.Cierre != nil {
+				t.Fatalf("reopening must drop the old close decision: %v %+v", err, e.Cierre)
+			}
+			if reg := convergeCerrado(t, r, false, "al final no"); reg.Result != "rechazado" || reg.Motivo != "al final no" {
+				t.Fatalf("%+v", reg)
+			}
+		})
+	}
+}
+
+// Review H-1/M-1: a new attempt does not inherit a half-done rejection or its reason.
+func TestReintentarNoArrastraElMotivoDeRechazo(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "tests/datos.txt", "0\n")
+	r.Verificar("01", t0) // trap: BLOQUEADO
+	if !conCaida(t, "intencion", func() { r.Cerrar("01", false, "motivo viejo", t0) }) {
+		t.Fatal("did not stop")
+	}
+	e, err := r.Reintentar("01", "sin tocar el fixture", CausaWorker, false)
+	if err != nil || e.Cierre != nil {
+		t.Fatalf("a new attempt must start without the old close decision: %v %+v", err, e)
+	}
+	if reg := convergeCerrado(t, r, false, "motivo nuevo"); reg.Motivo != "motivo nuevo" {
+		t.Fatalf("%+v", reg)
+	}
+}
+
+// Review M-1: while a rejection is half done, the slice is stopped: no verify, no launch.
+func TestRechazoAMedioCerrarNoSeVerificaNiLanza(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	r := repoDeJuguete(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if !conCaida(t, "intencion", func() { r.Cerrar("01", false, "no", t0) }) {
+		t.Fatal("did not stop")
+	}
+	if _, _, err := r.Verificar("01", t0); err == nil || !strings.Contains(err.Error(), "rechazado") {
+		t.Fatalf("verify must refuse a slice being rejected: %v", err)
+	}
+	e, _ = r.Load("01")
+	if err := e.PuedeLanzar(); err == nil || !strings.Contains(err.Error(), "cerrar --rechazado") {
+		t.Fatalf("launch must refuse and say how to finish: %v", err)
+	}
+}
+
+// Review M-2: a card write that died between the seal and the state converges on the re-run.
+func TestPonerTarjetaConvergeTrasCaida(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	r := repoDeJuguete(t)
+	abrir(t, r)
+	tj, _ := LeerTarjeta(tarjetaBuena)
+	if !conCaida(t, "lista-sellada", func() { r.PonerTarjeta("01", tj, t0) }) {
+		t.Fatal("did not stop at lista-sellada")
+	}
+	e, _ := r.Load("01")
+	if err := r.confiable(e); err == nil || !strings.Contains(err.Error(), "slice tarjeta 01") {
+		t.Fatalf("the error must say how to finish: %v", err)
+	}
+	if _, err := r.PonerTarjeta("01", tj, t0.Add(time.Minute)); err != nil {
+		t.Fatalf("the re-run must converge: %v", err)
+	}
+	e, _ = r.Load("01")
+	if err := r.confiable(e); err != nil || !e.Tarjeta.Lista.Equal(t0.Add(time.Minute)) {
+		t.Fatalf("%v %+v", err, e.Tarjeta)
+	}
+	if _, _, err := r.AprobarTarjeta("01", t0.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Review L6: the approval event is matched by its own time, not by any earlier approval.
+func TestAprobacionSeAnotaPorSuHora(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	r := repoDeJuguete(t)
+	abrir(t, r)
+	ponerTarjeta(t, r, "01", t0)
+	// An earlier approval event of the same attempt (another card version).
+	if err := r.anotarUnaVez(eventoTarjeta(&Estado{NN: "01", Intento: 1}, "aprobada", t0.Add(time.Minute)), func(diario.Evento) bool { return false }); err != nil {
+		t.Fatal(err)
+	}
+	t1 := t0.Add(5 * time.Minute)
+	if !conCaida(t, "aprobado", func() { r.AprobarTarjeta("01", t1) }) {
+		t.Fatal("did not stop")
+	}
+	r.AprobarTarjeta("01", t0.Add(time.Hour))
+	var horas []time.Time
+	for _, ev := range eventos(t, r, "tarjeta") {
+		if ev.Resultado == "aprobada" {
+			horas = append(horas, ev.TS)
+		}
+	}
+	if len(horas) != 2 || !horas[1].Equal(t1) {
+		t.Fatalf("the second approval must be logged: %v", horas)
+	}
+}
+
+// Review L1: the decision event is stamped when written (after main has the commit); the Owner's
+// decision time travels as a field, and the waiting metric uses it.
+func TestDecisionSeFechaAlEscribirla(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	r, _ := verde(t)
+	os.WriteFile(filepath.Join(r.Root, "README"), []byte("borrador\n"), 0o644)
+	Git(r.Root, "add", "README")
+	r.Cerrar("01", true, "", t0.Add(time.Hour))
+	Git(r.Root, "commit", "-qm", "dueño")
+	r.Cerrar("01", true, "", t0.Add(3*time.Hour))
+	r.Cerrar("01", true, "", t0.Add(3*time.Hour))
+	d := eventos(t, r, "decision")
+	if len(d) != 1 || !d[0].TS.Equal(t0.Add(3*time.Hour)) {
+		t.Fatalf("stamped when written: %+v", d)
+	}
+	if s, _ := d[0].Datos["decidido"].(string); s == "" {
+		t.Fatalf("the Owner's time is a field: %+v", d[0])
+	} else if ts, err := time.Parse(time.RFC3339Nano, s); err != nil || !ts.Equal(t0.Add(time.Hour)) {
+		t.Fatalf("decidido %q: %v", s, err)
+	}
+	m := r.Metricas(t0.Add(-time.Hour), t0.Add(4*time.Hour))
+	if m.Decididos != 1 || m.DecisionMinMediana > 61 {
+		t.Fatalf("the wait ends at the Owner's decision: %+v", m)
+	}
+}
+
+// decididoEn is the Owner's decision time carried by a decision event.
+func decididoEn(ev diario.Evento) time.Time {
+	s, _ := ev.Datos["decidido"].(string)
+	ts, _ := time.Parse(time.RFC3339Nano, s)
+	return ts
 }
