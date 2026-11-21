@@ -34,3 +34,16 @@ Harness findings (not charged to either route's design)
 - `H sesion ver` keeps killed sessions listed as live (no heartbeat or lease). A message to a session in that stale registry was
   saved but not delivered. There is no way to discover commands by intent (`slice reabrir` was missed).
 - M6 used a hand-rolled harness, not mutmut. The Supabase adapter's own filters were not mutated on either route.
+
+## Correction (filter, on Owner delegation, 2026-11-21 ~13:05)
+`orq2 slice verificar` re-run on X at 12:56: green, exam 12/12 at 309ce709. orq2 itself flagged the drift: STATUS.md (+9,
+explicitly out of scope), scripts/demo_s01_overlap.py (+196), tests/test_visit_overlap_worker.py (approved). X also touched
+src/dante_os/infrastructure/supabase_commercial_visits.py (+42), just as Y did (+43).
+- **M2 corrected: tie on drift.** Both routes drifted: Y has WORK_LOG.md, HANDOFF.md and the Supabase adapter; X has STATUS.md,
+  the demo script and the Supabase adapter. orq2's only M2 edge is that it **detected and flagged its own drift before the
+  close**; Y did not.
+- **Corrected count, M1-M6: orq2 = 2 clear wins (M1, M5); plain = 1 (M4); ties = 3 (M2, M3, M6).** The decision rule still
+  says **continue with real stories**, by the minimum.
+- S-01 is **not closed**. Accepting it would put the out-of-scope STATUS.md into main, against the Owner's scope rule. The test
+  is complete without a close. The clones ~/worktrees/rs-prueba-{orq2,orq2-s01,simple} are kept as evidence.
+- After all X panes were closed, `orq2 sesion ver` still lists them as live. This confirms the stale-registry finding.
