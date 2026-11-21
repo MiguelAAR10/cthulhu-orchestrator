@@ -63,7 +63,9 @@ by builders; S-01 is paused as is.
     "clone_proof_5f25823": "PASS (throwaway RS clone + copied .orq/.venv in session scratchpad, isolated ORQ_*): version 2.0.0-pilot rev 5f25823 modified=false; doctor lists only 3 RS sessions that really no longer exist (S-01 paused; correct report, no harness defect); check --caja exit 0 (lint/types/tests run in box; first run failed only because the copied .venv kept shebangs to the live path, rewritten in the copy); over-cap card: orq2 lists all 3 violations in one run, orq name returns only the first (1.0.0)",
     "make_ci_on_97d4a72": "INVALID (not a code failure): e2e refused because HEAD moved during the run (orchestrator committed a checkpoint mid-ci). Rule: never commit on harness-v2 while make ci runs",
     "make_ci_on_69e251c": "INVALID again: filter committed docs dc06403/a28ff1a mid-run (25 pkgs ok, 0 FAIL); asked filter not to commit on harness-v2",
-    "make_ci_on_next": "running on the checkpoint commit after a28ff1a",
+    "make_ci_on_8aa4f8b": "PASS exit 0, 15m51s (G2 + G6 code); gate record written (git note refs/notes/orq2-gate)",
+    "docs_owner_pages": "merged 2485ee1 (D5-D12, debate response, test-day protocol draft 70ae851); filter commits Owner docs only on docs/owner-pages",
+    "test_day_prep": "protocol draft done (10 open questions for Owner, in the file); RS brownfield scout w47:p42 running (writes docs/harness-v2/v2.1/rs-brownfield-agenda.md on docs/owner-pages)",
     "make_ci_on_f9a936b": "PASS exit 0, 9m36s (lint, gofmt, vet, race 24 pkgs ok, internal/slice 169s vs 302s before G0; e2e-v05 + aislamiento 14/0/0); log ~/.local/share/orq2-gate-logs/make-ci-f9a936b.log",
     "gate_record_f9a936b": "written: git note refs/notes/orq2-gate on f9a936b (orq2 update --registrar, ORQ_ROL=orquestador)",
     "clone_proof_f9a936b": "PASS: version 2.0.0-pilot rev f9a936b modified=false; doctor only the 3 real dead RS sessions; check --caja exit 0; over-cap card lists all 3 violations",
@@ -78,7 +80,7 @@ by builders; S-01 is paused as is.
     "309addf_installable": "NO: fresh Opus review found 1 High (H1 Zonas) + 3 Medium, all in R2 scope"
   },
   "lanes": {
-    "A": {"group": "G3", "state": "review 1 of d939ccb: HIGH (reabrir/reintentar leave a stale aceptado intent: slice can never be rejected) + M-1 pending rejection does not stop the slice, M-2 PonerTarjeta crash permanent forged-state error, L1, L6. Builder fixing, review-fix attempt 1 of 2; review 2 after", "attempt": 1, "pane": "w47:p3W (agent g3-recuperable, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g3", "branch": "v2/g3-recuperable", "base": "d88b615", "note": "high risk: two reviews"},
+    "A": {"group": "G3", "state": "review 2 of b2418f2: no High; M-1 reabrir/reintentar silently cleared a pending Owner rejection, L-1, L-2; builder fixing, review-fix attempt 2 of 2 (last)", "attempt": 1, "pane": "w47:p3W (agent g3-recuperable, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g3", "branch": "v2/g3-recuperable", "base": "d88b615", "note": "high risk: two reviews"},
     "G2": "integrated d88b615; reviews: 1 High fixed, 2 no High (2 Medium fixed, orchestrator diff check). Pane closed, worktree removed, branch deleted",
     "G6": "integrated 97d4a72; review no High (2 Medium fixed); concurrent despachar goroutine test after G2 (one worker, one contract). Pane closed, worktree removed, branch deleted",
     "lint_fix": {"state": "in progress", "pane": "w47:p3M (agent lint-st1005, Haiku)", "worktree": "~/worktrees/cthulhu-lint", "branch": "v2/lint-st1005", "why": "make ci on f451d5b failed at lint in 8 s: ST1005 slice.go:298 from G1 99954c8 (S-NN error string); fix = lint:ignore directive, text unchanged; log ~/.local/share/orq2-gate-logs/make-ci-f451d5b.log"},
