@@ -51,3 +51,19 @@ result comes with proof; what one request teaches (environment, index, rules) ma
    one validated skill; the Owner decides before anything is built. Sonnet + Haiku.
 5. Lean plan 1, 3 (trimmed), 4, 6: honest attempts, preflight, approve chains dispatch, worker runs all checks. Sonnet.
 6. One real fix end to end with metrics; compare with S-02.
+
+## Reference: Google Cloud "Choose a design pattern for your agentic AI system" (read 2026-11-21)
+Mapping to orq2, and what we take:
+| Pattern | In orq2 today | Take |
+|---|---|---|
+| Single agent (start here) | question and fix routes | confirms: small requests stay single-agent, no team |
+| Coordinator / hierarchical decomposition | Atena → Orchestrator → Planner → workers | keep only on feature and product routes (cost and latency grow with each level) |
+| Parallel | workers by independent zone | keep; the gather step is the merge + sealed exam |
+| Review and critique | independent reviewer, sealed exam | keep; cap revision loops |
+| Loop / iterative refinement | repair attempts (max 3) | every loop needs an explicit exit (count, time, quality); add to the router a cap per route |
+| Swarm (all-to-all debate) | the Astra/Fable debate rounds | avoid by default: most costly, risk of not converging; one-pass reviews instead |
+| Human in the loop | card approval, close | becomes the autonomy setting (D16): which checkpoints pause |
+Router criteria to add (from the guide's requirement questions): task open-ended or fixed steps; latency vs
+thoroughness; inference budget; human involvement for high-stakes or subjective decisions. Context engineering terms
+for D23/D24: isolate context per agent, persist across steps, compress. Security note for D1: per-agent identity and
+least privilege. Not adopted: ADK and Google Cloud services (orq2 runs on Claude Code).
