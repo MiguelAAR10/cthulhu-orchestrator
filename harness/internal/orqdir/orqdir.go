@@ -3,6 +3,9 @@
 package orqdir
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +22,44 @@ func Root() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Dir(strings.TrimSpace(string(out))), nil
+	root := filepath.Dir(strings.TrimSpace(string(out)))
+	// A worker clone has its own .git: its project is the main checkout its marker names.
+	if m, ok, err := marcaArriba(root); ok {
+		return m, err
+	}
+	return root, nil
+}
+
+// marcaArriba busca la marca de clon de worker desde dir hacia arriba (también desde un repo
+// anidado dentro del clon) y devuelve el checkout principal que nombra. Una marca que no nombra
+// un directorio absoluto existente es un error: nunca se cae al .orq propio del clon.
+func marcaArriba(dir string) (string, bool, error) {
+	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
+		path := filepath.Join(d, ".git", MarcaClon)
+		raw, err := os.ReadFile(path)
+		if err == nil {
+			var m struct {
+				Root string `json:"root"`
+			}
+			if err := json.Unmarshal(raw, &m); err != nil {
+				return "", true, fmt.Errorf("worker clone marker %s is unreadable (%v): cannot find the project's .orq", path, err)
+			}
+			if !filepath.IsAbs(m.Root) {
+				return "", true, fmt.Errorf("worker clone marker %s names no absolute project root (%q)", path, m.Root)
+			}
+			if info, err := os.Stat(m.Root); err != nil || !info.IsDir() {
+				return "", true, fmt.Errorf("worker clone marker %s names project %s, which is not a directory", path, m.Root)
+			}
+			return filepath.Clean(m.Root), true, nil
+		}
+		// .git may be a file (linked worktree): ENOTDIR means no marker there either.
+		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR) {
+			return "", true, fmt.Errorf("worker clone marker %s: %w", path, err)
+		}
+		if filepath.Dir(d) == d {
+			return "", false, nil
+		}
+	}
 }
 
 // Dir devuelve <raíz>/.orq y la crea si falta.
