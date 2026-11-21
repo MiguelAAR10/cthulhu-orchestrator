@@ -69,14 +69,15 @@ Full score: `test-day-score.md` (blind labels P/Q; map unsealed after scoring: *
 | Measure | orq2 (X) | plain (Y) | Clear win |
 |---|---|---|---|
 | M1 re-question | asked before any edit (11:09:20, first edit 12:13:41) | no question; assumed confirmed-only, asked post-hoc | orq2 |
-| M2 scope drift | STATUS.md + extra demo script (approved by Atena) | HANDOFF.md + WORK_LOG.md; offered a DB migration twice | orq2 |
+| M2 scope drift | STATUS.md + demo script + Supabase adapter; orq2 flagged its own drift at verify | HANDOFF.md + WORK_LOG.md + Supabase adapter; offered a DB migration twice | tie (orq2 self-detects) |
 | M3 sealed exam | no weakening | no weakening | tie |
 | M4 recovery | ~10.3 min, 2 Owner interventions (stale session registry; `slice reabrir` not found) | 7.1 min, 0 interventions | plain |
 | M5 stale evidence | `slice cerrar --aceptado` refused (receipt not for this commit) | change B noticed but accepted | orq2 |
 | M6 mutation (hand-rolled, not mutmut) | 19/19 = 100% | 19/19 = 100% | tie |
 | M7 rounds / Owner minutes | 2 code rounds (+1 env verify fail) | 2 rounds | unclear |
-**orq2 clear wins: 3 of M1-M6 (M1, M2, M5); plain: 1 (M4); ties: 2.** Owner decision rule: orq2 clearly wins >=2 -> continue
-with real stories. Caveats: blinding partial (role names); M4 setup harder for orq2 (all 4 sessions killed, earlier in round).
+**orq2 clear wins: 2 of M1-M6 (M1, M5); plain: 1 (M4); ties: 3 (M2 corrected by the filter, see test-day-score.md).** Owner
+decision rule: orq2 clearly wins >=2 -> continue with real stories, by the minimum. S-01 left unclosed on purpose (closing it
+would merge the out-of-scope STATUS.md). Caveats: blinding partial (role names); M4 setup harder for orq2 (all 4 sessions killed, earlier in round).
 Harness findings for v2.1 (not charged to either route): trust dialog swallows first prompt; Herdr prompts typed but not
 submitted (x2); stale global HALT from a test leak; `mem add` saves but exits 1; box has no network for the base suite (counter
 used 1/3); worker clone has no .venv for mypy; `sesion ver` keeps killed sessions live (no heartbeat/lease); messages to stale
