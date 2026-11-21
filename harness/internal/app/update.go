@@ -47,7 +47,21 @@ const NombreRollback = "orq2-anterior"
 // the real ~/bin, ~/.local/share or the main checkout.
 type ConfUpdate struct {
 	Repo, Rama, Bin, Rollback, Go, Proc, Worktrees string
+	// Proyectos are extra project roots to check for busy slices (tests).
+	Proyectos []string
 }
+
+// PathUpdate is the only PATH git and go see while update runs.
+const PathUpdate = "/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
+
+// ConfUpdateFija is the configuration of the real binary. Stub: still reads env.
+func ConfUpdateFija() (ConfUpdate, error) { return LeerConfUpdate(), nil }
+
+// RevisarEntornoUpdate refuses ORQ_UPDATE_* overrides. Stub.
+func RevisarEntornoUpdate(environ []string) error { return nil }
+
+// SanearEntornoUpdate pins PATH and drops git overrides. Stub.
+func SanearEntornoUpdate() {}
 
 func envO(k, def string) string {
 	if v := os.Getenv(k); v != "" {

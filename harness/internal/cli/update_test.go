@@ -28,6 +28,7 @@ type fixUpdate struct {
 	root, repo, bin, rb, tmp, proc, wt string
 	viejo, punta                       string // commits: installed, harness-v2 tip
 	instalado                          []byte // bytes of the installed bin/orq2
+	conf                               app.ConfUpdate
 }
 
 func gitT(t *testing.T, dir string, args ...string) string {
@@ -73,15 +74,17 @@ func nuevoFixUpdate(t *testing.T) *fixUpdate {
 
 	// Fake go: `go build -trimpath -o OUT ./cmd/orq` run in <clone>/harness writes OUT as a script
 	// that reports the clone's HEAD and whether its tree is dirty, like the real -buildvcs stamp.
+	// It also records the Go environment it got, and claims a dirty tree when the file
+	// <root>/modificado exists (the build env is pinned: no test variable reaches it).
 	gofalso := filepath.Join(root, "go")
 	os.WriteFile(gofalso, []byte(`#!/bin/sh
 out=""
 while [ $# -gt 0 ]; do [ "$1" = "-o" ] && { shift; out="$1"; }; shift; done
 [ -n "$out" ] || exit 2
-echo "$PWD $GOTOOLCHAIN $GOPROXY" > "$out.args"; rm -f "$out.args"
+echo "GOROOT=$GOROOT|GOFLAGS=$GOFLAGS|GOENV=$GOENV|GOTOOLCHAIN=$GOTOOLCHAIN|GOPROXY=$GOPROXY|PATH=$PATH|GIT_DIR=$GIT_DIR" > `+root+`/go-env
 rev=$(git rev-parse HEAD) || exit 3
 mod=false; [ -n "$(git status --porcelain)" ] && mod=true
-[ -n "$FALSO_MODIFICADO" ] && mod=true
+[ -f `+root+`/modificado ] && mod=true
 printf '#!/bin/sh\necho "2.0.0-pilot revision=%s modified=%s"\n' "$rev" "$mod" > "$out"
 chmod 755 "$out"
 `), 0o755)
@@ -93,15 +96,11 @@ chmod 755 "$out"
 	t.Setenv("ORQ_NOMBRE", "orq2")
 	t.Setenv("ORQ_ROL", "")
 	t.Setenv("ORQ_ROOT", "")
-	t.Setenv("ORQ_UPDATE_REPO", f.repo)
-	t.Setenv("ORQ_UPDATE_BIN", f.bin)
-	t.Setenv("ORQ_UPDATE_ROLLBACK", f.rb)
-	t.Setenv("ORQ_UPDATE_GO", gofalso)
-	t.Setenv("ORQ_UPDATE_PROC", f.proc)
-	t.Setenv("ORQ_UPDATE_PROYECTOS", "")
-	t.Setenv("ORQ_WORKTREES", f.wt)
 	t.Setenv("TMPDIR", f.tmp)
-	t.Setenv("FALSO_MODIFICADO", "")
+	f.conf = app.ConfUpdate{Repo: f.repo, Rama: "harness-v2", Bin: f.bin, Rollback: f.rb, Go: gofalso, Proc: f.proc, Worktrees: f.wt}
+	viejaConf := prepararUpdate
+	prepararUpdate = func() (app.ConfUpdate, error) { return f.conf, nil }
+	t.Cleanup(func() { prepararUpdate = viejaConf })
 
 	viejo := esTerminal
 	esTerminal = func(io.Reader) bool { return true }
@@ -109,9 +108,17 @@ chmod 755 "$out"
 	return f
 }
 
+// logCI writes a make ci log that names sha, as the real one does in its candidate line.
+func (f *fixUpdate) logCI(t *testing.T, sha string) string {
+	t.Helper()
+	p := filepath.Join(f.root, "ci-"+sha[:7]+".log")
+	os.WriteFile(p, []byte("== candidate\ncandidate: /tmp/x/bin/orq · 2.0.0-pilot revision="+sha+" modified=false\n== go test -race\nok\n"), 0o644)
+	return p
+}
+
 func (f *fixUpdate) registrar(t *testing.T, sha string) {
 	t.Helper()
-	out, errs, code := runIn(t, "update", "--registrar", sha, "--revisor", "opus-fresco", "--veredicto", "sin-high", "--ci-exit", "0", "--ci-log", "/tmp/ci.log")
+	out, errs, code := runIn(t, "update", "--registrar", sha, "--revisor", "opus-fresco", "--veredicto", "sin-high", "--ci-exit", "0", "--ci-log", f.logCI(t, sha))
 	if code != 0 {
 		t.Fatalf("registrar %s: %d\n%s%s", sha, code, out, errs)
 	}
@@ -120,9 +127,22 @@ func (f *fixUpdate) registrar(t *testing.T, sha string) {
 // runIn runs the CLI with an empty, non-terminal stdin (esTerminal decides what counts as a TTY).
 func runIn(t *testing.T, args ...string) (string, string, int) {
 	t.Helper()
+	return runCon(t, "", args...)
+}
+
+// runCon runs the CLI with entrada as what the Owner types.
+func runCon(t *testing.T, entrada string, args ...string) (string, string, int) {
+	t.Helper()
 	var out, errb bytes.Buffer
-	code := Run(args, strings.NewReader(""), &out, &errb)
+	code := Run(args, strings.NewReader(entrada), &out, &errb)
 	return out.String(), errb.String(), code
+}
+
+// instalar runs `orq2 update` confirming with the tip's short SHA.
+func (f *fixUpdate) instalar(t *testing.T) (string, string, int) {
+	t.Helper()
+	p, _ := f.conf.Punta()
+	return runCon(t, p[:7]+"\n", "update")
 }
 
 func (f *fixUpdate) binIntacto(t *testing.T) {
@@ -243,10 +263,10 @@ func TestUpdateSliceVerificandoOCerrandoSeNiega(t *testing.T) {
 	f := nuevoFixUpdate(t)
 	f.registrar(t, f.punta)
 
-	// Closing, in a project named by ORQ_UPDATE_PROYECTOS.
+	// Closing, in a project the configuration names.
 	p1 := filepath.Join(f.root, "tienda")
 	proyectoConSlice(t, p1, "01", "CERRANDO")
-	t.Setenv("ORQ_UPDATE_PROYECTOS", p1)
+	f.conf.Proyectos = []string{p1}
 	_, errs, code := runIn(t, "update")
 	if code == 0 || !strings.Contains(errs, p1) || !strings.Contains(errs, "S-01") || !strings.Contains(errs, "CERRANDO") {
 		t.Fatalf("closing slice not refused: %d\n%s", code, errs)
@@ -254,7 +274,7 @@ func TestUpdateSliceVerificandoOCerrandoSeNiega(t *testing.T) {
 	f.binIntacto(t)
 
 	// Integrating, in a project found through a worker clone's marker under ORQ_WORKTREES.
-	t.Setenv("ORQ_UPDATE_PROYECTOS", "")
+	f.conf.Proyectos = nil
 	p2 := filepath.Join(f.root, "agenda")
 	proyectoConSlice(t, p2, "03", "INTEGRANDO")
 	clon := filepath.Join(f.wt, "agenda-s03", ".git")
@@ -301,8 +321,18 @@ func TestUpdateSliceVerificandoOCerrandoSeNiega(t *testing.T) {
 	f.binIntacto(t)
 	os.Remove(filepath.Join(p2, ".orq", "slices", "04.json"))
 
+	// A binary run under another name (the integrator's orq2-24f2438) with a global flag before
+	// `slice` is still seen.
+	os.MkdirAll(pid, 0o755)
+	os.WriteFile(filepath.Join(pid, "cmdline"), []byte("/home/x/.local/share/orq2-rollback/orq2-24f2438\x00--slice=03\x00slice\x00cerrar\x00--aceptado\x00"), 0o644)
+	if _, errs, code := runIn(t, "update"); code == 0 || !strings.Contains(errs, "4242") {
+		t.Fatalf("renamed binary closing not refused: %d\n%s", code, errs)
+	}
+	f.binIntacto(t)
+	os.RemoveAll(pid)
+
 	// Nothing busy: it goes through and names the projects it checked.
-	out, errs, code := runIn(t, "update")
+	out, errs, code := f.instalar(t)
 	if code != 0 || !strings.Contains(out, p2) {
 		t.Fatalf("update with idle projects: %d\n%s%s", code, out, errs)
 	}
@@ -373,7 +403,7 @@ func TestUpdateInstalaAtomicoYDiceViejoNuevo(t *testing.T) {
 	f.registrar(t, f.punta)
 	antes, _ := os.Stat(filepath.Join(f.bin, "orq2"))
 	viejoRB, _ := os.ReadFile(filepath.Join(f.rb, "orq2-24f2438"))
-	out, errs, code := runIn(t, "update")
+	out, errs, code := f.instalar(t)
 	if code != 0 {
 		t.Fatalf("update: %d\n%s%s", code, out, errs)
 	}
@@ -419,8 +449,8 @@ func TestUpdateInstalaAtomicoYDiceViejoNuevo(t *testing.T) {
 func TestUpdateCandidatoDebeDecirLaRevision(t *testing.T) {
 	f := nuevoFixUpdate(t)
 	f.registrar(t, f.punta)
-	t.Setenv("FALSO_MODIFICADO", "1")
-	if _, errs, code := runIn(t, "update"); code == 0 || !strings.Contains(errs, "modified=true") {
+	os.WriteFile(filepath.Join(f.root, "modificado"), nil, 0o644)
+	if _, errs, code := f.instalar(t); code == 0 || !strings.Contains(errs, "modified=true") {
 		t.Fatalf("dirty candidate installed: %d\n%s", code, errs)
 	}
 	f.binIntacto(t)
@@ -436,7 +466,7 @@ func TestUpdateVolverRestauraIdentico(t *testing.T) {
 		t.Fatalf("--volver without a rollback: %d %s", code, errs)
 	}
 	f.registrar(t, f.punta)
-	if _, errs, code := runIn(t, "update"); code != 0 {
+	if _, errs, code := f.instalar(t); code != 0 {
 		t.Fatalf("update: %s", errs)
 	}
 	antes, _ := os.Stat(filepath.Join(f.bin, "orq2"))
@@ -458,7 +488,7 @@ func TestUpdateVolverRestauraIdentico(t *testing.T) {
 	// A busy project also stops --volver.
 	p := filepath.Join(f.root, "tienda")
 	proyectoConSlice(t, p, "01", "CERRANDO")
-	t.Setenv("ORQ_UPDATE_PROYECTOS", p)
+	f.conf.Proyectos = []string{p}
 	if _, errs, code := runIn(t, "update", "--volver"); code == 0 || !strings.Contains(errs, "S-01") {
 		t.Fatalf("--volver while closing: %d %s", code, errs)
 	}
@@ -494,4 +524,161 @@ func TestUpdateVerNoEscribe(t *testing.T) {
 		t.Fatalf("--ver ungated tip after a gated one: %d\n%s%s", code, out, errs)
 	}
 	igualFoto(t, ft, foto(t, f.root))
+}
+
+// commitPunta adds a commit to harness-v2 and returns it.
+func (f *fixUpdate) commitPunta(t *testing.T, contenido string) string {
+	t.Helper()
+	gitT(t, f.repo, "checkout", "-q", "--", "harness/a.txt")
+	gitT(t, f.repo, "checkout", "-q", "harness-v2")
+	os.WriteFile(filepath.Join(f.repo, "harness", "a.txt"), []byte(contenido), 0o644)
+	gitT(t, f.repo, "commit", "-qam", contenido)
+	sha := gitT(t, f.repo, "rev-parse", "HEAD")
+	gitT(t, f.repo, "checkout", "-q", "main")
+	return sha
+}
+
+// H1: the build gets a pinned environment: no GOROOT, GOFLAGS or go env file from the caller,
+// and a fixed PATH, so an agent's environment cannot change what gets compiled.
+func TestUpdateEntornoDeConstruccionFijo(t *testing.T) {
+	f := nuevoFixUpdate(t)
+	f.registrar(t, f.punta)
+	t.Setenv("GOROOT", "/malo/goroot")
+	t.Setenv("GOFLAGS", "-toolexec=/malo/x")
+	t.Setenv("GOENV", "/malo/env")
+	t.Setenv("PATH", "/malo/bin:"+os.Getenv("PATH"))
+	if out, errs, code := f.instalar(t); code != 0 {
+		t.Fatalf("update: %d\n%s%s", code, out, errs)
+	}
+	raw, _ := os.ReadFile(filepath.Join(f.root, "go-env"))
+	got := strings.TrimSpace(string(raw))
+	want := "GOROOT=|GOFLAGS=-mod=readonly -buildvcs=true|GOENV=off|GOTOOLCHAIN=local|GOPROXY=off|PATH=" + app.PathUpdate + "|GIT_DIR="
+	if got != want {
+		t.Fatalf("build env:\n got  %s\n want %s", got, want)
+	}
+}
+
+// M1: before installing, the record is shown and the Owner types the short SHA; anything else
+// installs nothing.
+func TestUpdateMuestraRegistroYPideConfirmacion(t *testing.T) {
+	f := nuevoFixUpdate(t)
+	f.registrar(t, f.punta)
+	for _, entrada := range []string{"", "no\n", f.viejo[:7] + "\n"} {
+		out, errs, code := runCon(t, entrada, "update")
+		if code == 0 || !strings.Contains(errs, "confirm") {
+			t.Fatalf("installed with %q: %d\n%s%s", entrada, code, out, errs)
+		}
+		for _, w := range []string{"opus-fresco", "sin-high", f.logCI(t, f.punta), f.punta[:7]} {
+			if !strings.Contains(out, w) {
+				t.Fatalf("record not shown before confirming (missing %q):\n%s", w, out)
+			}
+		}
+		f.binIntacto(t)
+	}
+	if out, errs, code := f.instalar(t); code != 0 {
+		t.Fatalf("confirmed update: %d\n%s%s", code, out, errs)
+	}
+}
+
+// M1: the writer needs a make ci log that exists and names the SHA, and runs only for the Owner
+// or the orchestrator; at install time the log must still be there and still name it.
+func TestUpdateRegistrarExigeLogQueNombraElSHA(t *testing.T) {
+	f := nuevoFixUpdate(t)
+	reg := func(log string) (string, int) {
+		_, errs, code := runIn(t, "update", "--registrar", f.punta, "--revisor", "r", "--veredicto", "sin-high", "--ci-exit", "0", "--ci-log", log)
+		return errs, code
+	}
+	if errs, code := reg(filepath.Join(f.root, "no-existe.log")); code == 0 {
+		t.Fatalf("missing log recorded: %s", errs)
+	}
+	otro := f.logCI(t, f.viejo)
+	if errs, code := reg(otro); code == 0 || !strings.Contains(errs, f.punta) {
+		t.Fatalf("log of another SHA recorded: %d %s", code, errs)
+	}
+	t.Setenv("ORQ_ROL", "planificador")
+	if errs, code := reg(f.logCI(t, f.punta)); code == 0 || !strings.Contains(errs, "planificador") {
+		t.Fatalf("planner recorded a gate: %d %s", code, errs)
+	}
+	t.Setenv("ORQ_ROL", "orquestador")
+	if errs, code := reg(f.logCI(t, f.punta)); code != 0 {
+		t.Fatalf("orchestrator could not record: %s", errs)
+	}
+	t.Setenv("ORQ_ROL", "")
+	os.Remove(f.logCI(t, f.punta))
+	os.Remove(filepath.Join(f.root, "ci-"+f.punta[:7]+".log"))
+	if _, errs, code := f.instalar(t); code == 0 || !strings.Contains(errs, "log") {
+		t.Fatalf("installed with the ci log gone: %d %s", code, errs)
+	}
+	f.binIntacto(t)
+	if out, _, _ := runIn(t, "update", "--ver"); !strings.Contains(out, "sin registro de puerta") {
+		t.Fatalf("--ver accepts a record whose log is gone:\n%s", out)
+	}
+}
+
+// M2: a good rollback is only replaced by a clean build of a gated SHA. Anything else that was
+// installed is kept beside it, and the integrator's orq2-24f2438 is never touched.
+func TestUpdateNoPisaUnRollbackBueno(t *testing.T) {
+	f := nuevoFixUpdate(t)
+	viejoRB, _ := os.ReadFile(filepath.Join(f.rb, "orq2-24f2438"))
+	f.registrar(t, f.punta)
+	if _, errs, code := f.instalar(t); code != 0 {
+		t.Fatalf("first update: %s", errs)
+	}
+	anterior := filepath.Join(f.rb, "orq2-anterior")
+	if got, _ := os.ReadFile(anterior); !bytes.Equal(got, f.instalado) {
+		t.Fatal("with no rollback yet, the installed binary must become it")
+	}
+	// Something not gated lands on ~/bin/orq2 (a manual install, a half-failed update).
+	roto := []byte("#!/bin/sh\necho '2.0.0-pilot revision=" + f.punta + " modified=true'\n")
+	os.WriteFile(filepath.Join(f.bin, "orq2"), roto, 0o755)
+	tres := f.commitPunta(t, "3\n")
+	f.registrar(t, tres)
+	if out, errs, code := f.instalar(t); code != 0 {
+		t.Fatalf("second update: %d\n%s%s", code, out, errs)
+	}
+	if got, _ := os.ReadFile(anterior); !bytes.Equal(got, f.instalado) {
+		t.Fatalf("the good rollback was replaced by an ungated binary:\n%s", got)
+	}
+	copias, _ := filepath.Glob(filepath.Join(f.rb, "orq2-sin-puerta-*"))
+	if len(copias) != 1 {
+		t.Fatalf("the ungated binary was not kept beside the rollback: %v", copias)
+	}
+	if got, _ := os.ReadFile(copias[0]); !bytes.Equal(got, roto) {
+		t.Fatal("kept copy is not the ungated binary")
+	}
+	// Now the installed one is a clean gated build: it may become the rollback.
+	instTres, _ := os.ReadFile(filepath.Join(f.bin, "orq2"))
+	cuatro := f.commitPunta(t, "4\n")
+	f.registrar(t, cuatro)
+	if _, errs, code := f.instalar(t); code != 0 {
+		t.Fatalf("third update: %s", errs)
+	}
+	if got, _ := os.ReadFile(anterior); !bytes.Equal(got, instTres) {
+		t.Fatal("a clean gated build did not become the rollback")
+	}
+	if got, _ := os.ReadFile(filepath.Join(f.rb, "orq2-24f2438")); !bytes.Equal(got, viejoRB) {
+		t.Fatal("the integrator's rollback was touched")
+	}
+}
+
+// L2: --volver says which revision it restores and keeps the newer binary, so a second
+// --volver undoes the first.
+func TestUpdateVolverDiceQueRestauraYSeDeshace(t *testing.T) {
+	f := nuevoFixUpdate(t)
+	f.registrar(t, f.punta)
+	if _, errs, code := f.instalar(t); code != 0 {
+		t.Fatalf("update: %s", errs)
+	}
+	nuevo, _ := os.ReadFile(filepath.Join(f.bin, "orq2"))
+	out, errs, code := runIn(t, "update", "--volver")
+	if code != 0 || !strings.Contains(out, "restaura") || !strings.Contains(out, f.viejo) {
+		t.Fatalf("--volver: %d\n%s%s", code, out, errs)
+	}
+	out, errs, code = runIn(t, "update", "--volver")
+	if code != 0 {
+		t.Fatalf("second --volver: %d\n%s%s", code, out, errs)
+	}
+	if got, _ := os.ReadFile(filepath.Join(f.bin, "orq2")); !bytes.Equal(got, nuevo) {
+		t.Fatalf("second --volver did not bring the newer binary back:\n%s", got)
+	}
 }

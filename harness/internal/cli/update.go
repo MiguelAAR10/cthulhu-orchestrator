@@ -47,9 +47,17 @@ const usoUpdate = `uso: orq2 update             instala la punta harness-v2 si s
      orq2 update --registrar SHA --revisor QUIEN --veredicto sin-high --ci-exit 0 --ci-log REF
 `
 
+// prepararUpdate gives the configuration update runs with. Tests replace it; nothing outside the
+// binary (env, flags) can.
+var prepararUpdate = func() (app.ConfUpdate, error) { return app.LeerConfUpdate(), nil }
+
 // runUpdate is `orq2 update`. Run only reaches it under identity orq2.
 func runUpdate(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	c := app.LeerConfUpdate()
+	c, err := prepararUpdate()
+	if err != nil {
+		fmt.Fprintln(stderr, "orq2 update:", err)
+		return 1
+	}
 	if len(args) > 0 && args[0] == "--registrar" {
 		return runRegistrarPuerta(c, args[1:], stdout, stderr)
 	}
