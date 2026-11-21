@@ -498,7 +498,41 @@ func (c ConfUpdate) GuardarActual() (string, error) {
 		}
 		dst += "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	}
-	return dst, CopiarAtomico(c.Instalado(), dst)
+	if err := CopiarAtomico(c.Instalado(), dst); err != nil {
+		return dst, err
+	}
+	ahora := time.Now()
+	os.Chtimes(dst, ahora, ahora) // when it was kept, so the cap below keeps the newest
+	c.podarSinPuerta(MaxSinPuerta)
+	return dst, nil
+}
+
+// MaxSinPuerta is how many ungated copies stay in the rollback dir.
+const MaxSinPuerta = 2
+
+// podarSinPuerta removes all but the newest n orq2-sin-puerta-* copies. Only that prefix is
+// looked at: orq2-anterior and the integrator's orq2-24f2438 are never touched.
+func (c ConfUpdate) podarSinPuerta(n int) {
+	copias, _ := filepath.Glob(filepath.Join(c.Rollback, "orq2-sin-puerta-*"))
+	type copia struct {
+		ruta string
+		t    time.Time
+	}
+	var cs []copia
+	for _, p := range copias {
+		if fi, err := os.Lstat(p); err == nil && fi.Mode().IsRegular() {
+			cs = append(cs, copia{p, fi.ModTime()})
+		}
+	}
+	slices.SortFunc(cs, func(a, b copia) int {
+		if x := b.t.Compare(a.t); x != 0 {
+			return x
+		}
+		return strings.Compare(b.ruta, a.ruta)
+	})
+	for _, x := range cs[min(n, len(cs)):] {
+		os.Remove(x.ruta)
+	}
 }
 
 // Volver puts the rollback back on ~/bin/orq2 and keeps what was installed (GuardarActual), so

@@ -71,17 +71,24 @@ Every Owner check (tty, no `ORQ_ROL`, not a worker folder, the typed short SHA) 
 Unix user as the agents. A determined agent can fake each one: a pty from `script`, a cleared
 env, a `cd`. These checks are speed bumps against mistakes, not a security boundary.
 
-The real fences are these:
+The PreToolUse gate deny is a speed bump too. It denies a command line that may run
+`orq2 update` to a subagent (`agent_id`), a worker (worktree or clone) or a role panel
+(`ORQ_ROL`). It checks the raw text and the words as bash sees them, so quotes, variables and a
+name built at run time count. A script file (`sh x.sh`) or an interpreter can still hide it.
 
-- the binary takes no overrides;
-- the PreToolUse gate denies any command line that names `orq2` and `update` to a subagent
-  (`agent_id`), a worker (worktree or clone) or a role panel (`ORQ_ROL`). It matches the raw
-  text, so `bash -c`, `script -c` and a `cd` do not hide it;
-- the record and its CI log are shown to the Owner before installing.
+The real protections are these:
 
-Anyone who can write the repo's refs can still write a note with plain git, so the Owner reading
-the record before typing the SHA is part of the check.
+- the binary takes no overrides: repo, branch, `~/bin`, the rollback dir and go are pinned, and
+  any `ORQ_UPDATE_*` is refused;
+- the gate record must exist for the exact SHA, with a CI log that names it, and the Owner reads
+  it and types the short SHA before anything is installed. Anyone who can write the repo's refs
+  can write a note with plain git, so that reading is part of the check.
+
+Pinned does not mean tamper-proof. When go is `~/.local/bin/go`, it is as writable by the same
+user as `~/bin` itself.
 
 The gate deny exists only under identity orq2, because orq stays byte-identical to 1.0.0.
 Projects hooked with orq (`$HOME/bin/orq gate`) are not covered: a worker there is stopped only
 by the speed bumps above.
+
+Ungated copies (`orq2-sin-puerta-*`) are capped at the newest 2.

@@ -68,7 +68,7 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 		cmd, _ := p.ToolInput["command"].(string)
 		// `orq2 update` replaces the binary that is everyone's gate hook: it is the Owner's alone.
 		// orq2 only: under identity orq the gate stays exactly 1.0.0's.
-		if identidad.EsOrq2() && (p.AgentID != "" || wt || os.Getenv("ORQ_ROL") != "") && nombraUpdate(cmd) {
+		if identidad.EsOrq2() && (p.AgentID != "" || wt || os.Getenv("ORQ_ROL") != "") && nombraUpdate(cmd, analizar(cmd, p.Cwd)) {
 			return deny("orq2: `orq2 update` (también --ver, --volver y --registrar) es del Owner, en su terminal; un agente, un worker o un panel de rol no lo corre. Pídeselo al Owner.")
 		}
 		if pushPermitido(cmd, p.Cwd, l.PushRamas) {
@@ -304,5 +304,35 @@ func EsWorkerPropio(dir string) bool {
 // `script -c`, a variable prefix or a cd does not hide it; an agent context fails closed on it.
 var orq2Update = regexp.MustCompile(`orq2[^\s'"]*[\s'"].*\bupdate\b|\bupdate\b.*orq2`)
 
-// nombraUpdate says whether cmd may run orq2 update.
-func nombraUpdate(cmd string) bool { return orq2Update.MatchString(cmd) }
+// nombraUpdate says whether cmd may run orq2 update: on the raw text, or on the words as bash
+// sees them (quotes removed), where a name or an argument only known at run time counts as one.
+// It is a speed bump: a script file (`sh x.sh`) is not read.
+func nombraUpdate(cmd string, cmds []simple) bool {
+	if orq2Update.MatchString(cmd) {
+		return true
+	}
+	for _, c := range cmds {
+		if len(c.w) == 0 {
+			continue
+		}
+		cab := c.w[0]
+		esOrq2 := !cab.dyn && strings.HasPrefix(filepath.Base(cab.s), "orq2")
+		for _, a := range c.asig {
+			if a.s == "ORQ_NOMBRE=orq2" && !cab.dyn && strings.HasPrefix(filepath.Base(cab.s), "orq") {
+				esOrq2 = true
+			}
+		}
+		update, dinamico := false, false
+		for _, w := range c.w[1:] {
+			update = update || (!w.dyn && w.s == "update")
+			dinamico = dinamico || w.dyn
+		}
+		switch {
+		case esOrq2 && (update || dinamico): // orq2 update, orq2 "upd"ate, orq2 $a$b
+			return true
+		case cab.dyn && (update || strings.Contains(cab.s, "orq")): // ${O}2 update, $x update
+			return true
+		}
+	}
+	return false
+}
