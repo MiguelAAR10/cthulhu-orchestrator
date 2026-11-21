@@ -319,7 +319,7 @@ func SondaUvDe(cmd string) string {
 				}
 				j++
 			}
-			if j == len(f) {
+			if j >= len(f) { // sin herramienta, o un flag con valor como última palabra
 				return ""
 			}
 			return strings.Join(f[:j+1], " ") + " --version"

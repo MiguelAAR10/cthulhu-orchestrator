@@ -132,7 +132,8 @@ func TestGuiasYSkillsSoloNombranLoQueExiste(t *testing.T) {
 	ents, _ := orqSkills.ReadDir("orqskills")
 	for _, d := range ents {
 		raw, _ := orqSkills.ReadFile("orqskills/" + d.Name() + "/SKILL.md")
-		if m := noExiste(identidad.Texto(orq2Guia(d.Name(), string(raw)))); len(m) > 0 {
+		// Rendered as instalarSkillsOrq does, so skillOrq2's inserted text (P9) is scanned too.
+		if m := noExiste(identidad.Texto(orq2Guia(d.Name(), skillOrq2(d.Name(), string(raw))))); len(m) > 0 {
 			t.Errorf("orqskills/%s names %q", d.Name(), m)
 		}
 	}
