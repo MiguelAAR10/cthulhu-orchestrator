@@ -14,6 +14,7 @@ import (
 	"orq/internal/canal"
 	"orq/internal/config"
 	"orq/internal/gitx"
+	"orq/internal/identidad"
 	"orq/internal/limits"
 	"orq/internal/orqdir"
 	"orq/internal/perfil"
@@ -35,6 +36,9 @@ type PedidoWorker struct {
 	Presupuesto string
 	Dificultad  string
 	Tarea       string // id del plan o «siguiente»
+	// RechazarOcupado refuses a new task for a zone worker that is alive and still has another
+	// task in progress (for automatic dispatch). Without it, as in 1.0.0, the worker gets it too.
+	RechazarOcupado bool
 }
 
 // gitComun es el directorio git compartido de un worktree enlazado ("" si no se pudo leer).
@@ -66,6 +70,36 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	e, err := r.Load(w.Slice)
 	if err != nil || e == nil {
 		return "", false, errors.Join(err, errors.New("no hay slice abierto"))
+	}
+	// orq2: one capacity count at a time in the project, held until the new pane exists, so two
+	// launches in different slices never both take the last free slot.
+	soltarCap := func() {}
+	defer func() { soltarCap() }()
+	if identidad.EsOrq2() {
+		s, err := orqdir.Candado(filepath.Join(p.Dir, "capacidad"))
+		if err != nil {
+			return "", false, err
+		}
+		soltarCap = s
+		// One launch per slice at a time: the team, the plan and the sessions are read and written by
+		// one launcher, and a second launch of the same worker sees the first one's worker alive.
+		// It also waits for a member's close (cierre-sNN): a launch never joins a team that is being
+		// verified, and after the close it sees the new phase. Lock order, the same everywhere:
+		// capacidad → lanzar-sNN → cierre-sNN → slice-NN → integracion → leaf locks (plan, sesiones, avisos,
+		// rol-*, diario, canal), which are released without taking another.
+		soltar, err := orqdir.Candado(filepath.Join(p.Dir, "lanzar-s"+e.NN))
+		if err != nil {
+			return "", false, err
+		}
+		defer soltar()
+		soltarCierre, err := orqdir.Candado(filepath.Join(p.Dir, "cierre-s"+e.NN))
+		if err != nil {
+			return "", false, err
+		}
+		defer soltarCierre()
+		if e, err = r.Load(e.NN); err != nil || e == nil {
+			return "", false, errors.Join(err, errors.New("no hay slice abierto"))
+		}
 	}
 	if err := r.Confiar(e); err != nil {
 		return "", false, err
@@ -128,6 +162,13 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 			return "", false, errors.New(c.Motivo())
 		}
 	}
+	if w.RechazarOcupado && existe && tareaPl != nil && tareaPl.Worker != nombre {
+		for _, t := range pl.Tareas {
+			if t.Estado == "en_curso" && t.Worker == nombre && t.ID != tareaPl.ID {
+				return nombre, false, fmt.Errorf("%s sigue con %s: %s espera a que termine", nombre, t.ID, tareaPl.ID)
+			}
+		}
+	}
 	modelo, esfuerzo := p.Cfg.Worker(w.Agente, dificultad)
 	// Repetición pura: el worker vive y no trae tarea nueva. No se toca el equipo ni el plan.
 	repeticion := existe && (tareaPl == nil || tareaPl.Worker == nombre)
@@ -150,15 +191,20 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	}
 	arranco := existe
 	if tareaPl != nil && tareaPl.Worker != nombre {
-		if _, err := plan.Tomar(pl, tareaPl.ID, nombre); err != nil {
-			return "", false, err
-		}
-		if err := plan.Guardar(p.PlanPath(e.NN), pl); err != nil {
+		if err := p.tomarTarea(e.NN, pl, tareaPl.ID, nombre); err != nil {
 			return "", false, err
 		}
 		// Si el worker no llega a arrancar, la tarea vuelve a pendiente: si no, nadie puede relanzarla.
 		defer func() {
 			if arranco {
+				return
+			}
+			if identidad.EsOrq2() {
+				_, errS := plan.Actualizar(p.PlanPath(e.NN), func(f *plan.Plan) error {
+					_, err := plan.Soltar(f, tareaPl.ID)
+					return err
+				})
+				err = errors.Join(err, errS)
 				return
 			}
 			if pl2, errL := plan.Leer(p.PlanPath(e.NN)); errL == nil {
@@ -176,7 +222,8 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	if err != nil {
 		return "", false, err
 	}
-	RegistrarLlamador(ses, os.Getenv("ORQ_ROL"), p.Term.PanelActual(), p.ahora())
+	llamador := os.Getenv("ORQ_ROL")
+	RegistrarLlamador(ses, llamador, p.Term.PanelActual(), p.ahora())
 	s := sesionNueva{Nombre: nombre, Kind: w.Agente, Cwd: dir, Slice: e.NN, Intento: e.Intento,
 		Args: agente.ArgsWorker(w.Agente, modelo, esfuerzo, nombre, p.gitComun(ctx, dir)),
 		Env:  entornoDe(nombre, p.Cfg.WorkerEntorno(w.Agente, dificultad))}
@@ -187,6 +234,8 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 		s.Etiqueta = fmt.Sprintf("S-%s · %s", e.NN, orqdir.Slug(p.Root))
 	}
 	panel, res, err := p.abrirSesion(ctx, s)
+	soltarCap() // the pane exists (or failed): the next count sees it
+	soltarCap = func() {}
 	if err != nil {
 		// Desconocido: el agente pudo arrancar; la tarea no se suelta hasta saber.
 		arranco = errors.Is(err, terminal.ErrDesconocido)
@@ -197,7 +246,11 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 		panel.Pestana = otro.Tab
 	}
 	ses[nombre] = canal.Sesion{Agente: nombre, Pane: panel.ID, Tab: panel.Pestana, Desde: p.ahora().UTC().Truncate(time.Second), Gen: 1}
-	if err := canal.SaveSesiones(p.SesPath(), ses); err != nil {
+	claves := []string{nombre}
+	if _, ok := ses[llamador]; ok && llamador != nombre {
+		claves = append(claves, llamador)
+	}
+	if err := p.guardarSesiones(ses, claves...); err != nil {
 		return nombre, false, err
 	}
 	if tareaPl != nil {
@@ -208,11 +261,27 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	if tareaPl != nil {
 		paso += ":" + tareaPl.ID // una tarea nueva para un worker vivo es un contrato nuevo
 	}
-	entregado, err := p.avisarUnaVez(ctx, nombre, paso, nombre, prompt, e.NN, e.Intento)
+	entregado, err := p.avisarUnaVez(ctx, nombre, paso, nombre, panel.ID, prompt, e.NN, e.Intento)
 	if err != nil {
 		return nombre, false, fmt.Errorf("worker abierto pero no recibió el contrato: %w", err)
 	}
 	return nombre, res == terminal.YaEstaba && entregado, nil
+}
+
+// tomarTarea marks the task in progress for nombre. orq2 takes it on the plan on disk, under its
+// lock: a task taken meanwhile by someone else is refused, and no other change to the plan is lost.
+func (p Proyecto) tomarTarea(nn string, pl *plan.Plan, id, nombre string) error {
+	if !identidad.EsOrq2() {
+		if _, err := plan.Tomar(pl, id, nombre); err != nil { // orq keeps 1.0.0
+			return err
+		}
+		return plan.Guardar(p.PlanPath(nn), pl)
+	}
+	_, err := plan.Actualizar(p.PlanPath(nn), func(f *plan.Plan) error {
+		_, err := plan.Tomar(f, id, nombre)
+		return err
+	})
+	return err
 }
 
 // skillsDelWorker es el párrafo del contrato con las skills del proyecto para el tipo de tarea del

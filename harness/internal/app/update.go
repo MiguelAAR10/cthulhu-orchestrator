@@ -391,6 +391,12 @@ func ocupadoEn(root string) []string {
 	}
 	locks, _ := filepath.Glob(filepath.Join(od, "slice-*.lock"))
 	locks = append(locks, filepath.Join(od, "integracion.lock"))
+	// orq2's launch, close, delivery and role locks (orq never creates them).
+	for _, g := range []string{"lanzar-s*.lock", "cierre-s*.lock", "rol-*.lock"} {
+		m, _ := filepath.Glob(filepath.Join(od, g))
+		locks = append(locks, m...)
+	}
+	locks = append(locks, filepath.Join(od, "avisos.lock"))
 	for _, l := range locks {
 		f, err := os.Open(l)
 		if err != nil {
