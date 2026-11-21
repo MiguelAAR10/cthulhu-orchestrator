@@ -83,6 +83,7 @@ Final v2.0 state, 2026-11-20 23:45. Earlier checkpoint history is in Git (`git l
     "brownfield": "docs/harness-v2/v2.1/rs-brownfield-agenda.md",
     "runs_tonight": "none"
   },
+  "remote": "harness-v2 da1b11c pushed to origin by the filter at Owner request (2026-11-20); main untouched. Next push only when the filter asks, after merging the manual/README from docs/owner-pages",
   "worktrees": "only ~/worktrees/cthulhu-docs (filter, docs/owner-pages, clean, merged) and the two RS test clones",
   "panes": "w47:p9 (filter), w47:p3B (orchestrator); all builders and reviewers closed",
   "branches_not_merged": "v2/g5-memoria (K10), v2/panel (K11), v2/tui (K12), v2/locks (K13), v2/memoria (K14); each has a backlog line",
