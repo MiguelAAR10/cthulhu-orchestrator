@@ -71,12 +71,21 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	if err != nil || e == nil {
 		return "", false, errors.Join(err, errors.New("no hay slice abierto"))
 	}
+	// orq2: one capacity count at a time in the project, held until the new pane exists, so two
+	// launches in different slices never both take the last free slot.
+	soltarCap := func() {}
+	defer func() { soltarCap() }()
 	if identidad.EsOrq2() {
+		s, err := orqdir.Candado(filepath.Join(p.Dir, "capacidad"))
+		if err != nil {
+			return "", false, err
+		}
+		soltarCap = s
 		// One launch per slice at a time: the team, the plan and the sessions are read and written by
 		// one launcher, and a second launch of the same worker sees the first one's worker alive.
 		// It also waits for a member's close (cierre-sNN): a launch never joins a team that is being
 		// verified, and after the close it sees the new phase. Lock order, the same everywhere:
-		// lanzar-sNN → cierre-sNN → slice-NN → integracion → leaf locks (plan, sesiones, avisos,
+		// capacidad → lanzar-sNN → cierre-sNN → slice-NN → integracion → leaf locks (plan, sesiones, avisos,
 		// rol-*, diario, canal), which are released without taking another.
 		soltar, err := orqdir.Candado(filepath.Join(p.Dir, "lanzar-s"+e.NN))
 		if err != nil {
@@ -156,6 +165,13 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 			return "", false, errors.New(c.Motivo())
 		}
 	}
+	if w.RechazarOcupado && existe && tareaPl != nil && tareaPl.Worker != nombre {
+		for _, t := range pl.Tareas {
+			if t.Estado == "en_curso" && t.Worker == nombre && t.ID != tareaPl.ID {
+				return nombre, false, fmt.Errorf("%s sigue con %s: %s espera a que termine", nombre, t.ID, tareaPl.ID)
+			}
+		}
+	}
 	modelo, esfuerzo := p.Cfg.Worker(w.Agente, dificultad)
 	// Repetición pura: el worker vive y no trae tarea nueva. No se toca el equipo ni el plan.
 	repeticion := existe && (tareaPl == nil || tareaPl.Worker == nombre)
@@ -221,6 +237,8 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 		s.Etiqueta = fmt.Sprintf("S-%s · %s", e.NN, orqdir.Slug(p.Root))
 	}
 	panel, res, err := p.abrirSesion(ctx, s)
+	soltarCap() // the pane exists (or failed): the next count sees it
+	soltarCap = func() {}
 	if err != nil {
 		// Desconocido: el agente pudo arrancar; la tarea no se suelta hasta saber.
 		arranco = errors.Is(err, terminal.ErrDesconocido)

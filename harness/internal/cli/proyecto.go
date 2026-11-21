@@ -388,7 +388,14 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	viejo := ses[rol]
-	nuevo, _, err := p.LanzarRol(context.Background(), ses, rol, *a)
+	var nuevo canal.Sesion
+	if identidad.EsOrq2() {
+		// Checked again under the role's lock: the handover took minutes and another relevo may
+		// have opened a session meanwhile; viejo becomes the session really replaced.
+		nuevo, viejo, err = p.RelevarRol(context.Background(), ses, rol, *a, ses[rol], *forzar)
+	} else {
+		nuevo, _, err = p.LanzarRol(context.Background(), ses, rol, *a)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "orq relevo:", err)
 		return 1

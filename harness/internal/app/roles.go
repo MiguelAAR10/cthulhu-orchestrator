@@ -172,7 +172,11 @@ func (p Proyecto) AbrirRol(ctx context.Context, ses map[string]canal.Sesion, rol
 		defer soltar()
 	}
 	if s, ok := ses[rol]; ok {
-		return s, pedido, fmt.Errorf("%w: %s (%s, panel %s); ciérrala antes con orq sesion cerrar %s", ErrYaHay, rol, s.Agente, s.Pane, rol)
+		salida := "ciérrala antes con orq sesion cerrar " + rol
+		if rol == "orquestador" {
+			salida = "para una sesión fresca: orq relevo orquestador"
+		}
+		return s, pedido, fmt.Errorf("%w: %s (%s, panel %s); %s", ErrYaHay, rol, s.Agente, s.Pane, salida)
 	}
 	return p.lanzarRol(ctx, ses, rol, pedido)
 }
@@ -195,9 +199,28 @@ func (p Proyecto) candadoRol(ses map[string]canal.Sesion, rol string) (func(), e
 }
 
 // RelevarRol is `orq relevo ROL`: it opens the role's next session. visto is the session the
-// command saw when it started; anterior is the session the new one replaces.
+// command saw when it started; anterior is the session the new one replaces. In orq2 both are
+// decided under the role's lock on the map on disk: if another relevo opened a session since this
+// command started (any generation), or a recent one is alive, it is refused unless forzar.
 func (p Proyecto) RelevarRol(ctx context.Context, ses map[string]canal.Sesion, rol string, pedido config.Agente, visto canal.Sesion, forzar bool) (nueva, anterior canal.Sesion, err error) {
+	if !identidad.EsOrq2() {
+		anterior = ses[rol] // orq keeps 1.0.0
+		nueva, _, err = p.LanzarRol(ctx, ses, rol, pedido)
+		return nueva, anterior, err
+	}
+	soltar, err := p.candadoRol(ses, rol)
+	if err != nil {
+		return canal.Sesion{}, canal.Sesion{}, err
+	}
+	defer soltar()
 	anterior = ses[rol]
-	nueva, _, err = p.LanzarRol(ctx, ses, rol, pedido)
+	if !forzar && anterior.Agente != "" {
+		otra := anterior.Agente != visto.Agente || anterior.Pane != visto.Pane || anterior.Gen != visto.Gen
+		hace := p.ahora().Sub(anterior.Desde)
+		if (otra || anterior.Gen > 1 && hace < 15*time.Minute) && p.SesionViva(ctx, anterior) {
+			return canal.Sesion{}, anterior, fmt.Errorf("%w: %s ya tiene una sesión nueva viva (%s, generación %d, hace %s). No se abre otra; usa --forzar si de verdad hace falta", ErrYaHay, rol, anterior.Agente, anterior.Gen, hace.Round(time.Second))
+		}
+	}
+	nueva, _, err = p.lanzarRol(ctx, ses, rol, pedido)
 	return nueva, anterior, err
 }
