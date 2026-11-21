@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"orq/internal/identidad"
 	"orq/internal/plan"
 	"orq/internal/slice"
 )
@@ -112,7 +113,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		if err := plan.Guardar(path, pl); err != nil {
+		if err := plan.Guardar(path, pl); err != nil && identidad.EsOrq2() { // orq keeps 1.0.0
 			fmt.Fprintln(stderr, "orq plan: el plan no se guardó, nada cambió:", err)
 			return 1
 		}
@@ -134,7 +135,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		if err := plan.Guardar(path, pl); err != nil {
+		if err := plan.Guardar(path, pl); err != nil && identidad.EsOrq2() { // orq keeps 1.0.0
 			fmt.Fprintln(stderr, "orq plan: el plan no se guardó, nada cambió:", err)
 			return 1
 		}
@@ -172,7 +173,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		pl.Debatido = true
-		if err := plan.Guardar(path, pl); err != nil {
+		if err := plan.Guardar(path, pl); err != nil && identidad.EsOrq2() { // orq keeps 1.0.0
 			fmt.Fprintln(stderr, "orq plan: el plan no se guardó, nada cambió:", err)
 			return 1
 		}

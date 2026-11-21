@@ -14,6 +14,7 @@ import (
 // H17: a worker inside its clone runs `orq msg send` with no ORQ_ROOT. The message must land in
 // the project's .orq (where the Orchestrator reads), never in a clone-local .orq.
 func TestMsgSendDesdeElClonLlegaAlProyecto(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	conTerminalFalso(t)
 	t.Setenv("ORQ_ROOT", "")
 	t.Setenv("ORQ_ROL", "worker-tienda-w1-s01")

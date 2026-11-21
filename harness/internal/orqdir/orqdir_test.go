@@ -17,6 +17,7 @@ func gitInit(t *testing.T, dir string) {
 // H17: inside a worker clone (its own .git, with orq's marker) the project is the main checkout
 // named by the marker, so `msg send` and every .orq write reach the project, not the clone.
 func TestRootEnUnClonDeWorkerEsElCheckoutPrincipal(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	t.Setenv("ORQ_ROOT", "")
 	base := t.TempDir()
 	main, clon := filepath.Join(base, "main"), filepath.Join(base, "wt", "main-s01")
@@ -42,6 +43,7 @@ func TestRootEnUnClonDeWorkerEsElCheckoutPrincipal(t *testing.T) {
 
 // A marker that names no usable project fails loudly instead of writing into the clone.
 func TestRootConMarcaRotaFalla(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	t.Setenv("ORQ_ROOT", "")
 	clon := filepath.Join(t.TempDir(), "clon")
 	gitInit(t, clon)
@@ -83,5 +85,22 @@ func TestRootEnWorktreeEnlazado(t *testing.T) {
 	want, _ := filepath.EvalSymlinks(main)
 	if got, _ := filepath.EvalSymlinks(root); err != nil || got != want {
 		t.Fatalf("Root() = %q, %v; want %q", root, err, main)
+	}
+}
+
+// orq keeps 1.0.0: inside a worker clone the root is the clone itself.
+func TestRootOrqEnClonComo100(t *testing.T) {
+	t.Setenv("ORQ_ROOT", "")
+	t.Setenv("ORQ_NOMBRE", "orq")
+	base := t.TempDir()
+	main, clon := filepath.Join(base, "main"), filepath.Join(base, "clon")
+	gitInit(t, main)
+	gitInit(t, clon)
+	os.WriteFile(filepath.Join(clon, ".git", MarcaClon), []byte(`{"root":"`+main+`"}`), 0o644)
+	t.Chdir(clon)
+	root, err := Root()
+	want, _ := filepath.EvalSymlinks(clon)
+	if got, _ := filepath.EvalSymlinks(root); err != nil || got != want {
+		t.Fatalf("orq Root() = %q, %v; want the clone %q", root, err, clon)
 	}
 }

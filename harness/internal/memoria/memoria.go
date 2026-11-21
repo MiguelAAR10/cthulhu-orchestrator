@@ -137,6 +137,9 @@ func Load(path string) ([]Item, error) {
 	}
 	if len(malas.Lineas) > 0 {
 		malas.Path = path
+		if !identidad.EsOrq2() {
+			return nil, Estricto(&malas) // orq keeps 1.0.0: one bad line fails the whole memory
+		}
 		return out, &malas
 	}
 	return out, nil
@@ -186,9 +189,6 @@ func Add(path string, it Item, now time.Time) (Item, int, error) {
 	defer soltar()
 	// Lines nobody can read stay on disk as they are: Add appends and never rewrites the file.
 	items, err := Load(path)
-	if !identidad.EsOrq2() {
-		err = Estricto(err) // orq 1.0.0 refuses to add to a memory it cannot fully read
-	}
 	if err := Legible(err); err != nil {
 		return it, 0, err
 	}

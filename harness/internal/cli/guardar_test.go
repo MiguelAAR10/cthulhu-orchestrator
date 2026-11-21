@@ -11,6 +11,7 @@ import (
 
 // H7: plan hecha, soltar and debatido must fail when the plan cannot be saved, never claim success.
 func TestPlanSinGuardarFalla(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	root := repoCLI(t)
 	t.Setenv("ORQ_STATE", t.TempDir())
 	if _, errs, code := run(t, append(abrirBase, "--reporte", "out.tap", "--formato", "tap")...); code != 0 {
@@ -28,7 +29,7 @@ func TestPlanSinGuardarFalla(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(dir, 0o755) })
 	for _, args := range [][]string{{"plan", "hecha", "T1"}, {"plan", "soltar", "T1"}, {"plan", "debatido"}} {
 		out, errs, code := run(t, args...)
-		if code == 0 || !strings.Contains(errs, "orq plan:") {
+		if code == 0 || !strings.Contains(errs, "plan: el plan no se guardó") {
 			t.Errorf("%v with an unsaveable plan: code %d out %q err %q; want a failure", args, code, out, errs)
 		}
 	}
@@ -39,6 +40,7 @@ func TestPlanSinGuardarFalla(t *testing.T) {
 
 // H2/H27: when the close cannot write memory, the slice is closed but the command says so and fails.
 func TestCerrarSinMemoriaLoDice(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	sliceVerde(t)
 	root := os.Getenv("ORQ_ROOT")
 	t.Setenv("ORQ_SIN_DOC", "1")

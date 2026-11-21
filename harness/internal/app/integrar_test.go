@@ -93,6 +93,7 @@ func TestCerrarWorkerEstadoIlegibleNoCierra(t *testing.T) {
 // H27: the relevo and the worker contract say when memory could not be read, instead of
 // silently handing a session less memory than exists.
 func TestRelevoYContratoAvisanMemoriaIncompleta(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	p, _, e := proyectoDePrueba(t, "")
 	os.WriteFile(p.MemPath(), []byte(`{"id":"m1","imp":"alta","cat":"decision","fuente":"atena","texto":"pago con tarjeta"}`+"\n{roto\n"), 0o644)
 	rv := p.DatosRelevo("orquestador")
@@ -105,5 +106,16 @@ func TestRelevoYContratoAvisanMemoriaIncompleta(t *testing.T) {
 	c, err := p.Contrato(e.NN, "worker-claude-s01", "x", "", "10 min")
 	if err != nil || !strings.Contains(c, "memoria.jsonl:2") || !strings.Contains(c, "pago con tarjeta") {
 		t.Fatalf("contrato (%v):\n%s", err, c)
+	}
+}
+
+// orq keeps 1.0.0: with a bad memory line the relevo carries no memory and no warning.
+func TestRelevoOrqMemoriaRotaComo100(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq")
+	p, _, _ := proyectoDePrueba(t, "")
+	os.WriteFile(p.MemPath(), []byte(`{"id":"m1","imp":"alta","cat":"decision","fuente":"atena","texto":"pago con tarjeta"}`+"\n{roto\n"), 0o644)
+	rv := p.DatosRelevo("orquestador")
+	if rv.Memoria != "" || len(rv.Decisiones) != 0 || strings.Contains(rv.Markdown("hoy", ""), "Memoria incompleta") {
+		t.Fatalf("orq relevo: %+v", rv)
 	}
 }

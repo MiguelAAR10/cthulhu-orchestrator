@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"orq/internal/canal"
+	"orq/internal/identidad"
 	"orq/internal/memoria"
 	"orq/internal/slice"
 )
@@ -45,7 +46,7 @@ func (p Proyecto) DatosRelevo(rol string) Relevo {
 		rv.Pendientes = append(rv.Pendientes, fmt.Sprintf("%s %s→%s %s", m.ID, m.De, m.Para, m.Tipo))
 	}
 	vigente, errMem := p.MemVigente()
-	if errMem != nil {
+	if errMem != nil && identidad.EsOrq2() { // orq keeps 1.0.0: silent
 		rv.Memoria = errMem.Error()
 	}
 	for _, it := range memoria.Sorted(vigente) {

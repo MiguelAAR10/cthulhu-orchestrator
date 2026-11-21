@@ -429,7 +429,7 @@ func runContexto(stdout, stderr io.Writer) int {
 		}
 	}
 	items, errMem := p.MemVigente()
-	if errMem != nil {
+	if errMem != nil && identidad.EsOrq2() { // orq keeps 1.0.0: silent
 		fmt.Fprintf(stdout, "\naviso: %v\n", errMem)
 	}
 	if len(items) > 0 {
@@ -537,7 +537,7 @@ func runDoctor(stdout, stderr io.Writer) int {
 		}
 	}
 	items, errMem := memoria.Load(p.MemPath())
-	if errMem != nil {
+	if errMem != nil && identidad.EsOrq2() { // orq keeps 1.0.0: not counted
 		problemas++
 		fmt.Fprintf(stdout, "%v\n", errMem)
 	}

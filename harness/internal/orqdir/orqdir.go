@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"orq/internal/identidad"
 )
 
 // Root devuelve la raíz del checkout principal. ORQ_ROOT la fija para pruebas.
@@ -23,7 +25,11 @@ func Root() (string, error) {
 		return "", err
 	}
 	root := filepath.Dir(strings.TrimSpace(string(out)))
-	// A worker clone has its own .git: its project is the main checkout its marker names.
+	// orq2: a worker clone has its own .git, so its project is the main checkout its marker
+	// names. orq keeps 1.0.0 and uses the clone itself.
+	if !identidad.EsOrq2() {
+		return root, nil
+	}
 	if m, ok, err := marcaArriba(root); ok {
 		return m, err
 	}

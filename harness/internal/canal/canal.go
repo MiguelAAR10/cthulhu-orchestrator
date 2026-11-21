@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 )
 
@@ -100,7 +101,11 @@ func Append(path string, m *Msg) error {
 			}
 		}
 	}
-	m.ID, m.Estado = fmt.Sprintf("c%d", ultimo(prev, base)+1), "pendiente"
+	n := len(prev) // orq keeps 1.0.0: count of messages + 1
+	if identidad.EsOrq2() {
+		n = ultimo(prev, base)
+	}
+	m.ID, m.Estado = fmt.Sprintf("c%d", n+1), "pendiente"
 	line, _ := json.Marshal(m)
 	_, err = f.Write(append(line, '\n'))
 	return err

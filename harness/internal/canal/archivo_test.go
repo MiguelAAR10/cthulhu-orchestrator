@@ -2,6 +2,7 @@ package canal
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 // H2: closing a story archives its channel; ids keep growing so "c3" names one message forever.
 func TestArchivarGuardaElCanalYLosIdsSiguen(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	dir := t.TempDir()
 	p := filepath.Join(dir, "canal.jsonl")
 	for i := 0; i < 3; i++ {
@@ -51,6 +53,7 @@ func TestArchivarGuardaElCanalYLosIdsSiguen(t *testing.T) {
 
 // Messages sent while the channel is archived land in the archive or in the new channel, never lost.
 func TestArchivarConcurrenteNoPierdeMensajes(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	p := filepath.Join(t.TempDir(), "canal.jsonl")
 	Append(p, msg("primero"))
 	var wg sync.WaitGroup
@@ -91,5 +94,21 @@ func TestArchivarConcurrenteNoPierdeMensajes(t *testing.T) {
 	}
 	if len(vistos) != 28 {
 		t.Fatalf("%d messages survive, want 28", len(vistos))
+	}
+}
+
+// orq keeps 1.0.0: the next id is the number of messages + 1, even after a gap.
+func TestAppendOrqIdComo100(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq")
+	p := filepath.Join(t.TempDir(), "canal.jsonl")
+	os.WriteFile(p, []byte(`{"id":"c1","de":"atena","para":"orquestador","tipo":"estado","texto":"a"}`+"\n"+`{"id":"c5","de":"atena","para":"orquestador","tipo":"estado","texto":"b"}`+"\n"), 0o644)
+	m := msg("c")
+	if err := Append(p, m); err != nil || m.ID != "c3" {
+		t.Fatalf("orq id = %s (%v), want 1.0.0's c3", m.ID, err)
+	}
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	m = msg("d")
+	if Append(p, m); m.ID != "c6" {
+		t.Fatalf("orq2 id = %s, want c6 (after the highest)", m.ID)
 	}
 }

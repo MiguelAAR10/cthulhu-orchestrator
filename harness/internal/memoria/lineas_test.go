@@ -15,6 +15,7 @@ const memConUnaLineaRota = `{"id":"m1","imp":"critica","cat":"requisito","fuente
 
 // H13 (memory): one unreadable line is skipped and reported; the rest of the memory still counts.
 func TestLoadSaltaLaLineaRotaYLaReporta(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	p := filepath.Join(t.TempDir(), "memoria.jsonl")
 	os.WriteFile(p, []byte(memConUnaLineaRota), 0o644)
 	items, err := Load(p)
@@ -58,6 +59,9 @@ func TestAddOrqRechazaComo100(t *testing.T) {
 	t.Setenv("ORQ_NOMBRE", "orq")
 	p := filepath.Join(t.TempDir(), "memoria.jsonl")
 	os.WriteFile(p, []byte(memConUnaLineaRota), 0o644)
+	if items, err := Load(p); items != nil || err == nil || err.Error() != p+":2: unexpected end of JSON input" {
+		t.Fatalf("orq Load = %+v, %v; want nil and 1.0.0's first-line error", items, err)
+	}
 	_, _, err := Add(p, Item{Imp: "media", Cat: "dominio", Fuente: "atena", Texto: "talla única"}, t0)
 	if err == nil || err.Error() != p+":2: unexpected end of JSON input" {
 		t.Fatalf("orq Add = %v, want 1.0.0's first-line error", err)

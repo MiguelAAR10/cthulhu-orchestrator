@@ -81,10 +81,6 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 1
 		}
 		items, err := memoria.Load(p.MemPath())
-		if err != nil && !identidad.EsOrq2() {
-			fmt.Fprintln(stderr, memoria.Estricto(err)) // orq 1.0.0: one bad line fails mem ver
-			return 1
-		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			if memoria.Legible(err) != nil {
@@ -106,9 +102,6 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		defer soltar()
 		items, err := memoria.Load(p.MemPath())
-		if err != nil && !identidad.EsOrq2() {
-			err = memoria.Estricto(err)
-		}
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -710,7 +703,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		}
 		// The slice is already closed: every cleanup step still runs, and each failure is reported.
 		var pendiente []string
-		if _, _, err := memoria.Add(p.MemPath(), mem, time.Now()); err != nil {
+		if _, _, err := memoria.Add(p.MemPath(), mem, time.Now()); err != nil && identidad.EsOrq2() {
 			pendiente = append(pendiente, fmt.Sprintf("la memoria no guardó el cierre (%v): orq mem add --imp %s --cat %s --fuente %s --slice S-%s %q", err, mem.Imp, mem.Cat, mem.Fuente, reg.NN, mem.Texto))
 		}
 		// orq2 archives the story's channel, never deletes it: its message ids stay valid as

@@ -9,6 +9,7 @@ import (
 
 	"orq/internal/canal"
 	"orq/internal/gitx"
+	"orq/internal/identidad"
 	"orq/internal/memoria"
 	"orq/internal/orqdir"
 	"orq/internal/slice"
@@ -59,7 +60,7 @@ const lineasFicha = 60
 // EscribirFicha regenera .orq/PROYECTO.md con el escriba; rechaza una ficha sin sus secciones.
 func (p Proyecto) EscribirFicha() error {
 	items, err := memoria.Load(p.MemPath())
-	if err := memoria.Legible(err); err != nil {
+	if err := memoria.Legible(err); err != nil && identidad.EsOrq2() { // orq keeps 1.0.0
 		return fmt.Errorf("la memoria no se pudo leer: %w", err)
 	}
 	var keep []memoria.Item
