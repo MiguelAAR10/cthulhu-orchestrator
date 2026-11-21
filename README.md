@@ -4,7 +4,9 @@
 
 # CTHULHU ORCHESTRATOR
 
-**Agents write the code. A program decides when it's done.**
+**Rails for building software with agents.**
+
+You write the story. Cthulhu lays the rails. Agents build on them — and evidence decides what ships.
 
 `orq` / `orq2` — a multi-agent coding harness in Go, standard library only.<br>
 The in-house dev tool of **[AI EDGE RUNNERS](https://ai-edgerunners-landing.vercel.app)**.
