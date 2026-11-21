@@ -54,3 +54,7 @@ and M4 (kill + "continúa") on Y run in its review-findings round (filter-approv
 ## Later (Owner product ideas, not this slice, given to neither route)
 - Configurable Owner availability for visits.
 - Visit reminders.
+
+## Route X approval (relayed)
+2026-11-21 12:00:50: "aprobado" pasted to Atena (route X), relayed by the filter on the Owner's instruction at ~11:45:
+"haré caso a las recomendaciones de Atena ya para poder cerrar esta historia". Atena's summary was her recommendation A.
