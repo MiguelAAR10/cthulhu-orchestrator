@@ -11,6 +11,7 @@ const raiz = `"checks":{"lint":{"cmd":"ruff"},"types":{"cmd":"mypy"},"tests":{"c
 func cargarCarpetas(t *testing.T, cuerpo string) (Config, error) {
 	t.Helper()
 	t.Setenv("ORQ_ESCRIBA_MODELO", "")
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	return CargarDe(escribir(t, filepath.Join(t.TempDir(), "p.json"), "{"+cuerpo+"}"))
 }
 
@@ -64,5 +65,18 @@ func TestConfigPlanaSinCarpetas(t *testing.T) {
 	c, err := cargarCarpetas(t, raiz)
 	if err != nil || len(c.CarpetasEnOrden()) != 0 || len(c.ChecksEnOrden()) != 4 {
 		t.Fatalf("%v %+v", err, c)
+	}
+}
+
+// M2: under identity orq the carpetas key is refused exactly as orq 1.0.0 refuses an unknown field.
+func TestCarpetasRechazadaComoOrq(t *testing.T) {
+	t.Setenv("ORQ_ESCRIBA_MODELO", "")
+	t.Setenv("ORQ_NOMBRE", "orq")
+	_, err := CargarDe(escribir(t, filepath.Join(t.TempDir(), "p.json"), `{`+raiz+`,"carpetas":{"docs":{"exenta":"x"}}}`))
+	if err == nil || !strings.Contains(err.Error(), `json: unknown field "carpetas"`) {
+		t.Fatalf("orq accepted carpetas: %v", err)
+	}
+	if _, err := CargarDe(escribir(t, filepath.Join(t.TempDir(), "p.json"), `{`+raiz+`}`)); err != nil {
+		t.Fatalf("flat config under orq: %v", err)
 	}
 }

@@ -247,3 +247,29 @@ func TestSinCoberturaComoAntes(t *testing.T) {
 		t.Fatalf("orq 1.0.0 does not re-run checks on the merge: %v", err)
 	}
 }
+
+// M1: deleting an undeclared sub-project's manifest while editing it does not dodge coverage; the
+// manifests of the red commit count too.
+func TestBorrarManifiestoNoEsquivaCobertura(t *testing.T) {
+	r := repoDeJuguete(t)
+	os.MkdirAll(filepath.Join(r.Root, "svc"), 0o755)
+	os.WriteFile(filepath.Join(r.Root, "svc", "go.mod"), []byte("module svc\n"), 0o644)
+	os.WriteFile(filepath.Join(r.Root, "svc", "main.go"), []byte("package main\n"), 0o644)
+	Git(r.Root, "add", "-A")
+	Git(r.Root, "commit", "-qm", "svc")
+	r.Cobertura = true
+	r.Checks = checksRaizVerdes
+	e := abrir(t, r)
+	if _, err := Git(e.Worktree, "rm", "-q", "svc/go.mod"); err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "svc/main.go", "package main\n\nfunc main() {}\n")
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	e, _, err := r.Verificar("", t0)
+	if err == nil || !strings.Contains(err.Error(), "svc/") {
+		t.Fatalf("deleting svc/go.mod dodged coverage: %v", err)
+	}
+	if e.Fase == Verificado {
+		t.Fatal("verified")
+	}
+}
