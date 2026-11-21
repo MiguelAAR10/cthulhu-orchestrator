@@ -56,11 +56,12 @@ by builders; S-01 is paused as is.
   "phase": "D",
   "integration_branch": "harness-v2",
   "integration_owner": "orchestrator pane w47:p3B (since 2026-11-20); filter session w47:p9 relays Owner",
-  "harness_v2_tip": "6a26b85 (G0 + G4 + G7 merged); installed is still 299d02d",
+  "harness_v2_tip": "c0add30 + this checkpoint commit (G0, G4, G7, G1 merged); installed is still 299d02d",
   "installed": "~/bin/orq2 = see install2 / installed_version; rollback = rollback_binary",
   "in_flight": {
     "R2": "integrated 5f25823. Independent Opus review of 309addf..bdf40db: VERDICT no High, no Medium; Lows for v2.1 notes: (a) aviso_ram_gb 0 now invalidates limits.json under orq2 and blocks all Bash (fails closed, release note) (b) card preamble gives one error per line under orq2 (c) lines in duplicate/unknown sections not checked in same pass (d) literal caps in cli.go:93 usage are orq 1.0.0 text, keep. Reviewer pane closed, review worktree removed. Next: make ci on 5f25823, clone proof, tell filter before install2",
     "clone_proof_5f25823": "PASS (throwaway RS clone + copied .orq/.venv in session scratchpad, isolated ORQ_*): version 2.0.0-pilot rev 5f25823 modified=false; doctor lists only 3 RS sessions that really no longer exist (S-01 paused; correct report, no harness defect); check --caja exit 0 (lint/types/tests run in box; first run failed only because the copied .venv kept shebangs to the live path, rewritten in the copy); over-cap card: orq2 lists all 3 violations in one run, orq name returns only the first (1.0.0)",
+    "make_ci_next": "running on the tip that contains c0add30 (orchestrator, log make-ci-<sha>.log in session scratchpad)",
     "make_ci_on_5f25823": "PASS exit 0, 14m54s: lint, gofmt, vet, go test -race 24 pkgs ok (internal/slice 302s), e2e-v05 and aislamiento 14/0/0 (orchestrator-run; modified=true only from untracked docs copied by ci)",
     "install2": "Owner GO 2026-11-20 (via filter) for 5f25823 code; built from the docs-only commit on top of it so modified=false; result recorded below after install",
     "installed_version": "~/bin/orq2 = 2.0.0-pilot revision=299d02d2031635d8ff38fef8974a73e69284c2a6 modified=false (installed 2026-11-20 after Owner GO); ~/bin/orq untouched (1.0.0)",
@@ -69,12 +70,12 @@ by builders; S-01 is paused as is.
     "309addf_installable": "NO: fresh Opus review found 1 High (H1 Zonas) + 3 Medium, all in R2 scope"
   },
   "lanes": {
-    "A": {"group": "G2", "state": "waiting for G1 merge (depends on G1)"},
+    "A": {"group": "G2", "state": "launching", "attempt": 1, "worktree": "~/worktrees/cthulhu-g2", "branch": "v2/g2-escrituras"},
     "G7": "integrated 6a26b85; reviews: ddf2508 High fixed, 6163067 no High, N1 fix bb71cf7 by orchestrator diff check. Pane closed, worktree removed, branch deleted. Gate record must be written with orq2 update --registrar for each gated SHA; ci log kept at a durable path",
     "G0": "integrated 8683242 (orchestrator diff check: only t.Parallel lines + make rapido; 115 tests before/after; 3 runs + -race slice PASS; ~20-35% faster under load). Pane closed, worktree removed, branch deleted. make ci pending: batched with G4/G1 merge",
     "B": {"group": "G4", "state": "depsEn gated to orq2 (19b30cc, 4 pkgs green -p 1); reviewer re-checking delta 68770f7..19b30cc", "owner_note": "after G4 is installed, RS S-01 will be refused until Owner adds a carpetas.dashboard block to RS .orq/config.json (builder proposed: pnpm run lint / pnpm exec tsc --noEmit / pnpm run test, build optional)", "attempt": 1, "pane": "w47:p3D (agent g4-examen, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g4", "branch": "v2/g4-examen", "base": "309addf", "started": "2026-11-20"}
   },
-  "lane_A2": {"group": "G1", "state": "delta review 6b2a8f5: no High, Medium N1 (worker aprender confirmar/refutar shifts lessons) + N2 skill eval, N4; builder fixing; then merge, notify G5, single make ci", "attempt": 1, "pane": "w47:p3F (agent g1-nada-perdido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g1", "branch": "v2/g1-nada-perdido", "base": "309addf", "note": "Owner 2026-11-20: G1 runs in parallel with G0, merges G0 at delivery; G5 still waits for G4"},
+  "G1": "integrated c0add30; reviews 98b34b4 no High (M1, M2 fixed), delta no High (N1, N2, N4 fixed), guide fix by orchestrator diff check. Pane closed, worktree removed, branch deleted",
   "briefs": "session scratchpad brief-g0.md / brief-g4.md (also re-derivable from this plan's rows)",
   "queued": {},
   "owner_held": {"RS carpetas.dashboard config": "proposal held; Owner approves when next RS story (agenda de visitas) starts"},
