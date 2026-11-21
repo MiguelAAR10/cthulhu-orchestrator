@@ -130,6 +130,66 @@ func (c Config) ChecksEnOrden() []Check {
 	return out
 }
 
+// Carpeta es una subcarpeta del proyecto con sus propios checks, que corren dentro de ella con sus
+// propias dependencias (su node_modules, su .venv; orq nunca instala), o exenta con el motivo.
+// La clave "." solo puede eximir la raíz.
+type Carpeta struct {
+	Ruta   string           `json:"-"`
+	Checks map[string]Check `json:"checks,omitempty"`
+	Exenta string           `json:"exenta,omitempty"`
+	// Lista son los checks en orden (lint, types, tests y después los extra por nombre); la llena CarpetasEnOrden.
+	Lista []Check `json:"-"`
+}
+
+// CarpetasEnOrden devuelve las carpetas declaradas por ruta, cada una con sus checks en orden.
+func (c Config) CarpetasEnOrden() []Carpeta {
+	var out []Carpeta
+	for ruta, ca := range c.Carpetas {
+		ca.Ruta = ruta
+		if len(ca.Checks) > 0 {
+			for _, ch := range (Config{Checks: ca.Checks}).ChecksEnOrden() {
+				if !ch.Interno() {
+					ca.Lista = append(ca.Lista, ch)
+				}
+			}
+		}
+		out = append(out, ca)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Ruta < out[j].Ruta })
+	return out
+}
+
+var rutaCarpeta = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]*(/[A-Za-z0-9_][A-Za-z0-9._-]*)*$`)
+
+func (c Config) validarCarpetas() error {
+	for ruta, ca := range c.Carpetas {
+		donde := "carpetas." + ruta
+		sinExenta := strings.TrimSpace(ca.Exenta) == ""
+		switch {
+		case ruta == ".":
+			if sinExenta || len(ca.Checks) > 0 {
+				return errors.New(`carpetas..: la clave "." solo exime la raíz (exenta: el motivo); sus checks van en el bloque checks`)
+			}
+			continue
+		case !rutaCarpeta.MatchString(ruta) || filepath.Clean(ruta) != ruta || slices.Contains(strings.Split(ruta, "/"), ".."):
+			return fmt.Errorf("%s: ruta inválida; usa una carpeta relativa a la raíz, sin / final, sin .. y sin comodines (p. ej. dashboard)", donde)
+		case sinExenta == (len(ca.Checks) == 0):
+			return fmt.Errorf("%s: lleva checks (lint, types y tests, que corren dentro de la carpeta) o exenta (el motivo), uno de los dos", donde)
+		case !sinExenta:
+			continue
+		}
+		for _, n := range []string{Supresiones, Definiciones, E2E} {
+			if _, ok := ca.Checks[n]; ok {
+				return fmt.Errorf("%s.checks.%s: va solo en el bloque checks de la raíz", donde, n)
+			}
+		}
+		if err := validarBloque(donde+".", ca.Checks); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ValidarKind acepta solo los agentes que orq arranca. Codex no se usa nunca, en ningún rol.
 func ValidarKind(kind string) error {
 	switch {
@@ -148,8 +208,10 @@ type Config struct {
 	Workers  map[string]map[string]Agente `json:"workers"` // dificultad → agente → modelo y esfuerzo
 	Recursos Recursos                     `json:"recursos"`
 	Checks   map[string]Check             `json:"checks,omitempty"` // nombre → comando; ver ChecksEnOrden
-	Skills   Skills                       `json:"skills"`
-	Alertas  Alertas                      `json:"alertas"`
+	// Carpetas son las subcarpetas con checks propios (o exentas, con el motivo); ver CarpetasEnOrden.
+	Carpetas map[string]Carpeta `json:"carpetas,omitempty"`
+	Skills   Skills             `json:"skills"`
+	Alertas  Alertas            `json:"alertas"`
 
 	origen   map[string]string // clave con puntos → de dónde salió
 	archivos []Archivo
@@ -218,6 +280,21 @@ func Cargar(root string) (Config, error) {
 	return CargarDe(rutas...)
 }
 
+// esquemaOrq es el esquema de Config como lo leía orq 1.0.0: sin carpetas, que DisallowUnknownFields
+// rechaza. El tipo local se llama Config para que los errores de JSON digan lo mismo que 1.0.0.
+func esquemaOrq() any {
+	type Config struct {
+		Terminal string                       `json:"terminal"`
+		Roles    map[string]Agente            `json:"roles"`
+		Workers  map[string]map[string]Agente `json:"workers"`
+		Recursos Recursos                     `json:"recursos"`
+		Checks   map[string]Check             `json:"checks,omitempty"`
+		Skills   Skills                       `json:"skills"`
+		Alertas  Alertas                      `json:"alertas"`
+	}
+	return &Config{}
+}
+
 // CargarDe une el defecto con cada archivo, en orden; el último gana campo a campo.
 func CargarDe(rutas ...string) (Config, error) {
 	base, err := generico(Defecto())
@@ -238,10 +315,13 @@ func CargarDe(rutas ...string) (Config, error) {
 		}
 		archivos = append(archivos, Archivo{Ruta: ruta, Existe: true})
 		// Primero contra el esquema: un campo desconocido es un error, no se ignora.
-		var esquema Config
+		var esquema any = &Config{}
+		if !identidad.EsOrq2() {
+			esquema = esquemaOrq() // carpetas es solo de orq2: bajo orq se rechaza como en 1.0.0
+		}
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		dec.DisallowUnknownFields()
-		if err := dec.Decode(&esquema); err != nil {
+		if err := dec.Decode(esquema); err != nil {
 			return Config{}, fmt.Errorf("config: %s: %w", ruta, err)
 		}
 		if dec.More() {
@@ -413,7 +493,10 @@ func (c Config) validar() error {
 			}
 		}
 	}
-	if err := c.validarChecks(); err != nil {
+	if err := validarBloque("", c.Checks); err != nil {
+		return err
+	}
+	if err := c.validarCarpetas(); err != nil {
 		return err
 	}
 	if c.Alertas.SinProgresoMin <= 0 {
@@ -436,18 +519,19 @@ func (c Config) validar() error {
 	return nil
 }
 
-func (c Config) validarChecks() error {
-	if len(c.Checks) == 0 {
+// validarBloque valida un bloque checks; prefijo es "" en la raíz y "carpetas.<ruta>." en una carpeta.
+func validarBloque(prefijo string, checks map[string]Check) error {
+	if len(checks) == 0 {
 		return nil
 	}
 	for _, n := range ChecksBase {
-		if _, ok := c.Checks[n]; !ok {
-			return fmt.Errorf("falta checks.%s: el bloque checks declara lint, types y tests (con cmd u omitir)", n)
+		if _, ok := checks[n]; !ok {
+			return fmt.Errorf("falta %schecks.%s: el bloque checks declara lint, types y tests (con cmd u omitir)", prefijo, n)
 		}
 	}
-	for n, ch := range c.Checks {
+	for n, ch := range checks {
 		if !nombreCheck.MatchString(n) {
-			return fmt.Errorf("checks.%s: nombre inválido; usa minúsculas, cifras y guiones", n)
+			return fmt.Errorf("%schecks.%s: nombre inválido; usa minúsculas, cifras y guiones", prefijo, n)
 		}
 		sinCmd, sinOmitir := strings.TrimSpace(ch.Cmd) == "", strings.TrimSpace(ch.Omitir) == ""
 		switch {
@@ -460,13 +544,13 @@ func (c Config) validarChecks() error {
 				return errors.New("checks.supresiones: la corre orq; lleva patrones para sumar marcas u omitir (el motivo) para apagarla")
 			}
 		case (ch.Servidor != "" || ch.Puerto != 0) && (n != E2E || ch.Servidor == "" || ch.Puerto < 1 || ch.Puerto > 65535 || sinCmd):
-			return fmt.Errorf("checks.%s: servidor y puerto (1-65535) van juntos, solo en checks.e2e y con cmd", n)
+			return fmt.Errorf("%schecks.%s: servidor y puerto (1-65535) van juntos, solo en checks.e2e y con cmd", prefijo, n)
 		case ch.EsperaS != 0 && (ch.Servidor == "" || ch.EsperaS < 1 || ch.EsperaS > EsperaMax):
-			return fmt.Errorf("checks.%s: espera_s (1-%d) va solo con servidor, en checks.e2e", n, EsperaMax)
+			return fmt.Errorf("%schecks.%s: espera_s (1-%d) va solo con servidor, en checks.e2e", prefijo, n, EsperaMax)
 		case len(ch.Patrones) > 0 || len(ch.Archivos) > 0:
-			return fmt.Errorf("checks.%s: patrones va solo en checks.supresiones y archivos solo en checks.definiciones", n)
+			return fmt.Errorf("%schecks.%s: patrones va solo en checks.supresiones y archivos solo en checks.definiciones", prefijo, n)
 		case sinCmd == sinOmitir:
-			return fmt.Errorf("checks.%s: lleva cmd u omitir (el motivo), uno de los dos", n)
+			return fmt.Errorf("%schecks.%s: lleva cmd u omitir (el motivo), uno de los dos", prefijo, n)
 		}
 	}
 	return nil

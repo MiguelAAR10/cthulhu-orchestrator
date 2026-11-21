@@ -208,6 +208,14 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 	if err != nil {
 		return nil, "", err
 	}
+	// Cada carpeta que la historia justifica tocar tiene que tener checks (o estar exenta).
+	if r.cubreCarpetas() {
+		if _, sin, err := r.cobertura(o.Alcance, sha); err != nil {
+			return nil, "", err
+		} else if sin != nil {
+			return nil, "", errSinChecks("S-"+nn, sin)
+		}
+	}
 	// Paso B: base sana separada de aceptación roja. Las dos sobre el commit, no sobre la carpeta del dueño.
 	if o.Sano != "" {
 		out, ok, err := r.sanoEn(sha, o.Sano)
@@ -364,6 +372,17 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 		}
 		notas = append(notas, fmt.Sprintf("runner cambiado y aceptado (%s): %s", acepto, strings.Join(cambiados, ", ")))
 	}
+	rutas, err := r.rutasDelSlice(e, head)
+	if err != nil {
+		return e, "", err
+	}
+	carpetas, sin, err := r.cobertura(rutas, e.SHARojo, head)
+	if err != nil {
+		return e, "", err
+	}
+	if sin != nil {
+		return e, "", fmt.Errorf("no se verifica: %w", errSinChecks(e.ID(), sin))
+	}
 	out, code, ok, cnt, intacto, err := r.examen(e, head)
 	if err != nil {
 		return e, out, err
@@ -372,7 +391,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if !intacto {
 		return e, out, r.bloquear(e, "el examen se modificó mientras corría: trampa")
 	}
-	checks, err := r.checksEn(e, head)
+	checks, err := r.checksEn(e, head, carpetas, false)
 	if err != nil {
 		return e, out, err
 	}

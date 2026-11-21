@@ -56,7 +56,7 @@ by builders; S-01 is paused as is.
   "phase": "D",
   "integration_branch": "harness-v2",
   "integration_owner": "orchestrator pane w47:p3B (since 2026-11-20); filter session w47:p9 relays Owner",
-  "harness_v2_tip": "8683242 (G0 merged on top of docs commits); installed is still 299d02d",
+  "harness_v2_tip": "2db67a9 (G0 + G4 merged); installed is still 299d02d",
   "installed": "~/bin/orq2 = see install2 / installed_version; rollback = rollback_binary",
   "in_flight": {
     "R2": "integrated 5f25823. Independent Opus review of 309addf..bdf40db: VERDICT no High, no Medium; Lows for v2.1 notes: (a) aviso_ram_gb 0 now invalidates limits.json under orq2 and blocks all Bash (fails closed, release note) (b) card preamble gives one error per line under orq2 (c) lines in duplicate/unknown sections not checked in same pass (d) literal caps in cli.go:93 usage are orq 1.0.0 text, keep. Reviewer pane closed, review worktree removed. Next: make ci on 5f25823, clone proof, tell filter before install2",
@@ -69,11 +69,11 @@ by builders; S-01 is paused as is.
     "309addf_installable": "NO: fresh Opus review found 1 High (H1 Zonas) + 3 Medium, all in R2 scope"
   },
   "lanes": {
-    "A": {"group": "G7", "state": "review of ddf2508: HIGH found (reproduced in scratch dirs: any agent could install an arbitrary ~/bin/orq2 via ORQ_UPDATE_* overrides + pty; no gate rule for update) + M1 forgeable git-notes record, M2 failed install then re-run loses good rollback, L1-L3. Real ~/bin/orq2 verified untouched (299d02d) and orq2-24f2438 intact. Builder fixing, review-fix attempt 1 of 2", "attempt": 1, "pane": "w47:p3H (agent g7-update, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g7", "branch": "v2/g7-update", "base": "8683242"},
+    "A": {"group": "G7", "state": "6163067 (deny limited to orq2, merged 2db67a9); re-review in progress (rev-g4g1)", "attempt": 1, "pane": "w47:p3H (agent g7-update, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g7", "branch": "v2/g7-update", "base": "8683242"},
     "G0": "integrated 8683242 (orchestrator diff check: only t.Parallel lines + make rapido; 115 tests before/after; 3 runs + -race slice PASS; ~20-35% faster under load). Pane closed, worktree removed, branch deleted. make ci pending: batched with G4/G1 merge",
     "B": {"group": "G4", "state": "depsEn gated to orq2 (19b30cc, 4 pkgs green -p 1); reviewer re-checking delta 68770f7..19b30cc", "owner_note": "after G4 is installed, RS S-01 will be refused until Owner adds a carpetas.dashboard block to RS .orq/config.json (builder proposed: pnpm run lint / pnpm exec tsc --noEmit / pnpm run test, build optional)", "attempt": 1, "pane": "w47:p3D (agent g4-examen, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g4", "branch": "v2/g4-examen", "base": "309addf", "started": "2026-11-20"}
   },
-  "lane_A2": {"group": "G1", "state": "04871f1: gated H2 close, H13 CerrarWorker, H13 memory to orq2 with orq-1.0.0 pinning tests; orchestrator decision: gate also the 5 remaining orq-visible items (H17 root, H7 plan save exit, close memory write, H27 warnings, canal next-id) — no exceptions to byte-identity; builder doing it", "attempt": 1, "pane": "w47:p3F (agent g1-nada-perdido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g1", "branch": "v2/g1-nada-perdido", "base": "309addf", "note": "Owner 2026-11-20: G1 runs in parallel with G0, merges G0 at delivery; G5 still waits for G4"},
+  "lane_A2": {"group": "G1", "state": "review of 98b34b4: no High, 2 Medium (M1 clone marker routes every worker command to project .orq -> worker can write Owner confirmado memory; M2 close archives whole shared channel incl. other stories and undelivered). Builder fixing M1, M2 (+L2), review-fix attempt 1", "attempt": 1, "pane": "w47:p3F (agent g1-nada-perdido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g1", "branch": "v2/g1-nada-perdido", "base": "309addf", "note": "Owner 2026-11-20: G1 runs in parallel with G0, merges G0 at delivery; G5 still waits for G4"},
   "briefs": "session scratchpad brief-g0.md / brief-g4.md (also re-derivable from this plan's rows)",
   "queued": {},
   "owner_held": {"RS carpetas.dashboard config": "proposal held; Owner approves when next RS story (agenda de visitas) starts"},

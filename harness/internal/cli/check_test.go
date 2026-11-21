@@ -238,3 +238,31 @@ func TestCheckCajaUvCadaTramo(t *testing.T) {
 	}
 	contiene(t, out, "lint  no corre en la caja: uv sincroniza en la caja y no hay red")
 }
+
+// orq check runs the folder checks for the folders the clone touches since the red (committed or
+// not), so the worker sees locally what Verificar will enforce; untouched folders are not run.
+func TestCheckCorreChecksDeCarpetasTocadas(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2") // carpetas is orq2 only
+	root := repoCLI(t)
+	t.Setenv("ORQ_STATE", t.TempDir())
+	t.Setenv("ORQ_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+	if _, errs, code := run(t, append(append([]string{}, abrirBase...), "--reporte", "out.tap", "--formato", "tap")...); code != 0 {
+		t.Fatalf("abrir: %d %s", code, errs)
+	}
+	run(t, "slice", "tomar", "w1")
+	wt := filepath.Join(filepath.Dir(root), "wt", "tienda-s01")
+	escribirEn(t, root, ".orq/config.json", `{"checks": {"lint": {"cmd": "true"}, "types": {"cmd": "true"}, "tests": {"cmd": "true"}},
+		"carpetas": {"dashboard": {"checks": {"lint": {"cmd": "true"}, "types": {"cmd": "true"}, "tests": {"cmd": "test ! -f roto"}}}}}`)
+	t.Setenv("ORQ_ROOT", "")
+	t.Chdir(wt)
+	out, errs, code := run(t, "check")
+	if code != 0 || strings.Contains(out, "dashboard/") {
+		t.Fatalf("exit %d, dashboard untouched must not run:\n%s%s", code, out, errs)
+	}
+	escribirEn(t, wt, "dashboard/roto", "x\n") // untracked: the worker has not committed yet
+	out, _, code = run(t, "check")
+	if code == 0 {
+		t.Fatalf("red dashboard passed:\n%s", out)
+	}
+	contiene(t, out, "dashboard/tests  fallo (exit 1)", "dashboard/lint  paso")
+}
