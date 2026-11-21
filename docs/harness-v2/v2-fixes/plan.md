@@ -56,11 +56,12 @@ by builders; S-01 is paused as is.
   "phase": "D",
   "integration_branch": "harness-v2",
   "integration_owner": "orchestrator pane w47:p3B (since 2026-11-20); filter session w47:p9 relays Owner",
-  "harness_v2_tip": "d88b615 (+ docs) — G0, G4, G7, G1, G2 merged",
+  "harness_v2_tip": "97d4a72 — G0, G4, G7, G1, G2, G6 merged",
   "installed": "~/bin/orq2 = see install2 / installed_version; rollback = rollback_binary",
   "in_flight": {
     "R2": "integrated 5f25823. Independent Opus review of 309addf..bdf40db: VERDICT no High, no Medium; Lows for v2.1 notes: (a) aviso_ram_gb 0 now invalidates limits.json under orq2 and blocks all Bash (fails closed, release note) (b) card preamble gives one error per line under orq2 (c) lines in duplicate/unknown sections not checked in same pass (d) literal caps in cli.go:93 usage are orq 1.0.0 text, keep. Reviewer pane closed, review worktree removed. Next: make ci on 5f25823, clone proof, tell filter before install2",
     "clone_proof_5f25823": "PASS (throwaway RS clone + copied .orq/.venv in session scratchpad, isolated ORQ_*): version 2.0.0-pilot rev 5f25823 modified=false; doctor lists only 3 RS sessions that really no longer exist (S-01 paused; correct report, no harness defect); check --caja exit 0 (lint/types/tests run in box; first run failed only because the copied .venv kept shebangs to the live path, rewritten in the copy); over-cap card: orq2 lists all 3 violations in one run, orq name returns only the first (1.0.0)",
+    "make_ci_on_97d4a72": "running (started ~21:51, log ~/.local/share/orq2-gate-logs/make-ci-97d4a72.log)",
     "make_ci_on_f9a936b": "PASS exit 0, 9m36s (lint, gofmt, vet, race 24 pkgs ok, internal/slice 169s vs 302s before G0; e2e-v05 + aislamiento 14/0/0); log ~/.local/share/orq2-gate-logs/make-ci-f9a936b.log",
     "gate_record_f9a936b": "written: git note refs/notes/orq2-gate on f9a936b (orq2 update --registrar, ORQ_ROL=orquestador)",
     "clone_proof_f9a936b": "PASS: version 2.0.0-pilot rev f9a936b modified=false; doctor only the 3 real dead RS sessions; check --caja exit 0; over-cap card lists all 3 violations",
@@ -75,9 +76,9 @@ by builders; S-01 is paused as is.
     "309addf_installable": "NO: fresh Opus review found 1 High (H1 Zonas) + 3 Medium, all in R2 scope"
   },
   "lanes": {
-    "A": {"group": "G3", "state": "in progress", "attempt": 1, "pane": "w47:p3W (agent g3-recuperable, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g3", "branch": "v2/g3-recuperable", "base": "d88b615", "note": "high risk: two reviews"},
+    "A": {"group": "G3", "state": "delivered d939ccb (e2e-v05 86/0 with orq from 5332003); review 1 of 2 in progress (rev-g3, pane w47:p3Y)", "attempt": 1, "pane": "w47:p3W (agent g3-recuperable, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g3", "branch": "v2/g3-recuperable", "base": "d88b615", "note": "high risk: two reviews"},
     "G2": "integrated d88b615; reviews: 1 High fixed, 2 no High (2 Medium fixed, orchestrator diff check). Pane closed, worktree removed, branch deleted",
-    "C": {"group": "G6", "state": "fixes delivered b26fbd6 (M1, L1, L3, L4, L5; guide says one run at a time); waits for G2 merge, then merge G2 + concurrent despachar test + use LanzarWorker refuse-busy option", "attempt": 1, "pane": "w47:p3N (agent g6-despacho, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g6", "branch": "v2/g6-despacho", "base": "f451d5b", "note": "Owner 2026-11-20: G6 runs now, independent of G5"},
+    "G6": "integrated 97d4a72; review no High (2 Medium fixed); concurrent despachar goroutine test after G2 (one worker, one contract). Pane closed, worktree removed, branch deleted",
     "lint_fix": {"state": "in progress", "pane": "w47:p3M (agent lint-st1005, Haiku)", "worktree": "~/worktrees/cthulhu-lint", "branch": "v2/lint-st1005", "why": "make ci on f451d5b failed at lint in 8 s: ST1005 slice.go:298 from G1 99954c8 (S-NN error string); fix = lint:ignore directive, text unchanged; log ~/.local/share/orq2-gate-logs/make-ci-f451d5b.log"},
     "G7": "integrated 6a26b85; reviews: ddf2508 High fixed, 6163067 no High, N1 fix bb71cf7 by orchestrator diff check. Pane closed, worktree removed, branch deleted. Gate record must be written with orq2 update --registrar for each gated SHA; ci log kept at a durable path",
     "G0": "integrated 8683242 (orchestrator diff check: only t.Parallel lines + make rapido; 115 tests before/after; 3 runs + -race slice PASS; ~20-35% faster under load). Pane closed, worktree removed, branch deleted. make ci pending: batched with G4/G1 merge",
