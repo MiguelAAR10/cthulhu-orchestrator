@@ -67,3 +67,16 @@ Router criteria to add (from the guide's requirement questions): task open-ended
 thoroughness; inference budget; human involvement for high-stakes or subjective decisions. Context engineering terms
 for D23/D24: isolate context per agent, persist across steps, compress. Security note for D1: per-agent identity and
 least privilege. Not adopted: ADK and Google Cloud services (orq2 runs on Claude Code).
+
+## Expert agents as tools (Owner question, 2026-11-21) — D30
+Yes, with a rule: **skill = knowledge loaded into the agent that builds** (cheap, shares context: "how to build
+with Angular/TypeScript/Supabase"); **agent-as-tool = a separate expert with its own short context, called for an
+independent judgment or for research that would bloat the caller's context.**
+- Start with at most 4, each a Claude Code subagent file with model, tools and a checklist:
+  security/auth (any route, middleware, token, RLS), data/migrations (schema, constraints, races), frontend
+  taste/accessibility (screens, mobile, consistency with approved art), reference-repo scout (search, compare, Haiku).
+- Called by the router from signals (files or zones touched, route, risk), never on every request.
+- Each returns a short verdict with evidence; only a High blocks. Its checklist grows from misses (D26).
+- Kept only if it catches something real within N stories; otherwise removed (avoid agent sprawl and token cost).
+Evidence it pays: in S-02 the missing session check on `/api/properties` was found by chance by the Orchestrator;
+a security expert triggered by "new API route" makes that routine.
