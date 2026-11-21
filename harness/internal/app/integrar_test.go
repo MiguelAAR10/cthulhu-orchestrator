@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"orq/internal/diario"
@@ -64,5 +66,24 @@ func TestCerrarWorkerNombreSinSesionNoIntegra(t *testing.T) {
 	e, _ = p.Slices().Load("01")
 	if e.Fase == slice.Verificado || len(filasIntegracion(t, p)) != 0 {
 		t.Fatalf("nothing may change: fase %s, rows %+v", e.Fase, filasIntegracion(t, p))
+	}
+}
+
+// H13: an unreadable slice state is not a finished slice: the close fails and the pane stays.
+func TestCerrarWorkerEstadoIlegibleNoCierra(t *testing.T) {
+	p, _, e := proyectoDePrueba(t, "")
+	lanzar(t, p)
+	commitEnClon(t, e.Worktree, "v01.txt", "ok")
+	estado := filepath.Join(p.Dir, "slices", "01.json")
+	if err := os.WriteFile(estado, []byte("{roto"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.CerrarWorker(context.Background(), "worker-claude-s01"); err == nil {
+		t.Fatal("an unreadable slice state must refuse the close")
+	}
+	// A slice that is really closed (no state file) still has nothing to integrate.
+	os.Remove(estado)
+	if _, err := p.CerrarWorker(context.Background(), "worker-claude-s01"); err != nil {
+		t.Fatalf("closed slice: %v", err)
 	}
 }

@@ -26,8 +26,15 @@ func (p Proyecto) CerrarWorker(ctx context.Context, nombre string) (string, erro
 	}
 	r := p.Slices()
 	e, err := r.Load(m[1])
-	if err != nil || e == nil || e.Fase != slice.Implementando {
-		return "", nil // closed, missing or past building: nothing of this worker left to merge
+	if errors.Is(err, slice.ErrNoAbierto) {
+		return "", nil // closed or never opened: nothing of this worker left to merge
+	}
+	if err != nil {
+		// Unreadable is not finished: the worker's work may still need merging, so the pane stays.
+		return "", fmt.Errorf("%s no se cierra: no se pudo leer el estado de S-%s (%w)", nombre, m[1], err)
+	}
+	if e == nil || e.Fase != slice.Implementando {
+		return "", nil // past building: nothing of this worker left to merge
 	}
 	ses, err := canal.LoadSesiones(p.SesPath())
 	if err != nil {

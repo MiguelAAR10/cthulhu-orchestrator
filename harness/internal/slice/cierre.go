@@ -66,7 +66,7 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 	}
 	defer soltar()
 	e, err := r.Load(nn)
-	if nn != "" && err != nil && strings.Contains(err.Error(), "no está abierto") {
+	if nn != "" && err != nil && errors.Is(err, ErrNoAbierto) {
 		for _, reg := range leerJSONL[Registro](r.logPath()) {
 			if reg.NN == strings.TrimPrefix(nn, "S-") {
 				return &reg, nil, "", ErrYaCerrado
