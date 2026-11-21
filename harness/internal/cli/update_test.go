@@ -241,7 +241,7 @@ func TestUpdateRegistrarSoloPuertaVerde(t *testing.T) {
 	if out, _ := exec.Command("git", "-C", f.repo, "notes", "--ref="+app.RefPuerta, "list").Output(); len(out) != 0 {
 		t.Fatalf("records written: %s", out)
 	}
-	if _, errs, code := runIn(t, "update", "--registrar", f.punta[:10], "--revisor", "r", "--veredicto", "sin-high", "--ci-exit", "0", "--ci-log", "l"); code != 0 {
+	if _, errs, code := runIn(t, "update", "--registrar", f.punta[:10], "--revisor", "r", "--veredicto", "sin-high", "--ci-exit", "0", "--ci-log", f.logCI(t, f.punta)); code != 0 {
 		t.Fatalf("short SHA not resolved: %s", errs)
 	}
 	nota := gitT(t, f.repo, "notes", "--ref="+app.RefPuerta, "show", f.punta)

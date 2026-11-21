@@ -66,6 +66,10 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 	var cmds []simple
 	if p.ToolName == "Bash" {
 		cmd, _ := p.ToolInput["command"].(string)
+		// `orq2 update` replaces the binary that is everyone's gate hook: it is the Owner's alone.
+		if (p.AgentID != "" || wt || os.Getenv("ORQ_ROL") != "") && nombraUpdate(cmd) {
+			return deny("orq2: `orq2 update` (también --ver, --volver y --registrar) es del Owner, en su terminal; un agente, un worker o un panel de rol no lo corre. Pídeselo al Owner.")
+		}
 		if pushPermitido(cmd, p.Cwd, l.PushRamas) {
 			return allow()
 		}
@@ -293,3 +297,11 @@ func EsWorkerPropio(dir string) bool {
 		}
 	}
 }
+
+// orq2Update is a command line that names orq2 (any path, any copy such as orq2-24f2438) and the
+// word update. It is matched on the raw text, not the parsed words, so wrapping it in `bash -c`,
+// `script -c`, a variable prefix or a cd does not hide it; an agent context fails closed on it.
+var orq2Update = regexp.MustCompile(`orq2[^\s'"]*[\s'"].*\bupdate\b|\bupdate\b.*orq2`)
+
+// nombraUpdate says whether cmd may run orq2 update.
+func nombraUpdate(cmd string) bool { return orq2Update.MatchString(cmd) }

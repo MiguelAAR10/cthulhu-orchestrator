@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +26,14 @@ import (
 //   - no slice of any project it can see is being verified or closed.
 //
 // The current binary is kept as rollback in ~/.local/share/orq2-rollback/orq2-anterior.
+//
+// Threat model, said plainly: every Owner check here (terminal, no ORQ_ROL, not a worker folder,
+// the typed confirmation) runs as the same Unix user as the agents, so a determined agent can
+// fake each one (a pty from `script`, a cleared env, a cd). They are speed bumps against
+// mistakes. The real fences are: the binary takes no overrides (paths, repo, branch and go are
+// pinned; any ORQ_UPDATE_* is refused); the PreToolUse gate denies any command line naming
+// `orq2 update` to subagents, workers and role panels; and the gate record must exist for the
+// exact SHA, with a ci log that names it, shown to the Owner before installing.
 
 // esTerminal says whether stdin is a terminal. Tests replace it.
 var esTerminal = esTerminalReal
@@ -44,12 +53,19 @@ func esTerminalReal(r io.Reader) bool {
 const usoUpdate = `uso: orq2 update             instala la punta harness-v2 si su SHA tiene registro de puerta
      orq2 update --ver       solo dice si hay una versión nueva con puerta (no escribe nada)
      orq2 update --volver    pone de vuelta la versión anterior guardada
-     orq2 update --registrar SHA --revisor QUIEN --veredicto sin-high --ci-exit 0 --ci-log REF
+     orq2 update --registrar SHA --revisor QUIEN --veredicto sin-high --ci-exit 0 --ci-log ARCHIVO
+                             (ARCHIVO: el log de make ci de ese SHA; debe existir y nombrarlo)
 `
 
 // prepararUpdate gives the configuration update runs with. Tests replace it; nothing outside the
 // binary (env, flags) can.
-var prepararUpdate = func() (app.ConfUpdate, error) { return app.LeerConfUpdate(), nil }
+var prepararUpdate = func() (app.ConfUpdate, error) {
+	if err := app.RevisarEntornoUpdate(os.Environ()); err != nil {
+		return app.ConfUpdate{}, err
+	}
+	app.SanearEntornoUpdate()
+	return app.ConfUpdateFija()
+}
 
 // runUpdate is `orq2 update`. Run only reaches it under identity orq2.
 func runUpdate(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -80,7 +96,7 @@ func runUpdate(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "--volver":
 		return updateVolver(c, stdout, stderr)
 	}
-	return updateInstalar(c, stdout, stderr)
+	return updateInstalar(c, stdin, stdout, stderr)
 }
 
 // soloOwner refuses anything that is not the Owner at a terminal.
@@ -116,8 +132,12 @@ func runRegistrarPuerta(c app.ConfUpdate, args []string, stdout, stderr io.Write
 		}
 		vals[k] = resto[i+1]
 	}
-	if strings.HasPrefix(os.Getenv("ORQ_ROL"), "worker") || sandbox.Dentro() {
-		fmt.Fprintln(stderr, "orq2 update --registrar: es del integrador; un worker no registra puertas")
+	if rol := os.Getenv("ORQ_ROL"); rol != "" && rol != "orquestador" {
+		fmt.Fprintf(stderr, "orq2 update --registrar: es del Owner o del orquestador que integra; este panel es de %s\n", rol)
+		return 1
+	}
+	if sandbox.Dentro() {
+		fmt.Fprintln(stderr, "orq2 update --registrar: no corre dentro de la caja")
 		return 1
 	}
 	if cwd, err := os.Getwd(); err != nil || gate.IsWorker(cwd) {
@@ -158,13 +178,26 @@ func negarSiOcupado(c app.ConfUpdate, stderr io.Writer) (app.Ocupacion, bool) {
 	return o, true
 }
 
-func updateInstalar(c app.ConfUpdate, stdout, stderr io.Writer) int {
+// confirmar shows the gate record and asks the Owner to type the short SHA.
+func confirmar(reg app.RegistroPuerta, stdin io.Reader, stdout io.Writer) bool {
+	corto := reg.SHA[:7]
+	fmt.Fprintf(stdout, "registro de puerta de %s:\n  revisión independiente: %s, por %s\n  %s: exit %d, log %s\n  registrado: %s\n",
+		reg.SHA, reg.Revision.Veredicto, reg.Revision.Revisor, reg.CI.Comando, *reg.CI.Exit, reg.CI.Log, reg.Fecha)
+	fmt.Fprintln(stdout, "orq2 no puede probar que el registro dice la verdad: lo escribe el integrador. Léelo (y el log) antes de seguir.")
+	fmt.Fprintf(stdout, "Para instalar escribe los 7 primeros caracteres del SHA (%s): ", corto)
+	linea, _ := bufio.NewReader(stdin).ReadString('\n')
+	fmt.Fprintln(stdout)
+	return strings.TrimSpace(linea) == corto
+}
+
+func updateInstalar(c app.ConfUpdate, stdin io.Reader, stdout, stderr io.Writer) int {
 	punta, err := c.Punta()
 	if err != nil {
 		fmt.Fprintln(stderr, "orq2 update:", err)
 		return 1
 	}
-	if _, err := c.LeerPuerta(punta); err != nil {
+	reg, err := c.LeerPuerta(punta)
+	if err != nil {
 		fmt.Fprintf(stderr, "orq2 update: la punta %s (%s) no tiene registro de puerta válido: %v.\n"+
 			"Solo se instala un SHA con revisión independiente sin High y make ci exit 0 para ese SHA exacto;\n"+
 			"el integrador lo registra con: orq2 update --registrar %s --revisor QUIEN --veredicto sin-high --ci-exit 0 --ci-log REF\n",
@@ -178,6 +211,10 @@ func updateInstalar(c app.ConfUpdate, stdout, stderr io.Writer) int {
 	if viejo.Limpia(punta) {
 		fmt.Fprintf(stdout, "orq2 ya está en la punta %s (%s); nada que hacer\n", punta, c.Rama)
 		return 0
+	}
+	if !confirmar(reg, stdin, stdout) {
+		fmt.Fprintln(stderr, "orq2 update: sin confirmación; no se instala nada")
+		return 1
 	}
 	dir, err := os.MkdirTemp("", "orq2-update-")
 	if err != nil {
@@ -196,11 +233,10 @@ func updateInstalar(c app.ConfUpdate, stdout, stderr io.Writer) int {
 	if no {
 		return 1
 	}
-	if viejo.Existe {
-		if err := app.CopiarAtomico(c.Instalado(), c.RutaRollback()); err != nil {
-			fmt.Fprintln(stderr, "orq2 update: no se pudo guardar la versión actual; no se instala nada:", err)
-			return 1
-		}
+	guardada, err := c.GuardarActual()
+	if err != nil {
+		fmt.Fprintln(stderr, "orq2 update: no se pudo guardar la versión actual; no se instala nada:", err)
+		return 1
 	}
 	if err := app.CopiarAtomico(cand, c.Instalado()); err != nil {
 		fmt.Fprintln(stderr, "orq2 update: no se pudo instalar (el binario actual sigue intacto):", err)
@@ -208,8 +244,11 @@ func updateInstalar(c app.ConfUpdate, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "proyectos revisados: %s\n", o.Proyectos())
 	fmt.Fprintf(stdout, "orq2 actualizado: %s -> %s\n", viejo.Rev, punta)
-	if viejo.Existe {
-		fmt.Fprintf(stdout, "la anterior quedó en %s; para volver: orq2 update --volver\n", c.RutaRollback())
+	switch {
+	case guardada == c.RutaRollback():
+		fmt.Fprintf(stdout, "la anterior quedó en %s; para volver: orq2 update --volver\n", guardada)
+	case guardada != "":
+		fmt.Fprintf(stdout, "la anterior (%s) no era una versión con puerta: quedó aparte en %s; --volver sigue restaurando %s\n", viejo.Rev, guardada, c.RutaRollback())
 	}
 	if r := app.RevisionDe(c.Instalado()); !r.Limpia(punta) {
 		fmt.Fprintf(stderr, "orq2 update: el instalado dice %q; vuelve con orq2 update --volver\n", r.Linea)
@@ -226,12 +265,20 @@ func updateVolver(c app.ConfUpdate, stdout, stderr io.Writer) int {
 	if _, no := negarSiOcupado(c, stderr); no {
 		return 1
 	}
-	actual, anterior := app.RevisionDe(c.Instalado()), app.RevisionDe(c.RutaRollback())
-	if err := app.CopiarAtomico(c.RutaRollback(), c.Instalado()); err != nil {
-		fmt.Fprintln(stderr, "orq2 update --volver: no se pudo restaurar (el binario actual sigue intacto):", err)
+	actual, anterior, guardada, err := c.Volver()
+	if err != nil {
+		fmt.Fprintln(stderr, "orq2 update --volver: no se restauró (el binario actual sigue intacto):", err)
 		return 1
 	}
+	fmt.Fprintf(stdout, "orq2 update --volver restaura %s (%s)\n", anterior.Rev, anterior.Linea)
 	fmt.Fprintf(stdout, "orq2 vuelto atrás: %s -> %s\n", actual.Rev, anterior.Rev)
+	if guardada != "" {
+		fmt.Fprintf(stdout, "la que estaba (%s) quedó en %s", actual.Rev, guardada)
+		if guardada == c.RutaRollback() {
+			fmt.Fprint(stdout, "; para deshacer: orq2 update --volver")
+		}
+		fmt.Fprintln(stdout)
+	}
 	return 0
 }
 

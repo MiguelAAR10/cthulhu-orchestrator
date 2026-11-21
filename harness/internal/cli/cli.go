@@ -49,9 +49,11 @@ func uso() string {
 // usoUpdateOrq2 is the usage of `orq2 update`, shown only under orq2: orq's usage is 1.0.0's.
 const usoUpdateOrq2 = `  orq2 update [--ver | --volver]   el Owner, en su terminal: instala la punta harness-v2 de Cthulhu solo si
                                  ese SHA tiene registro de puerta (revisión sin High y make ci exit 0) y
-                                 ningún slice se verifica ni se cierra; guarda la anterior para --volver;
-                                 --ver solo informa
-  orq2 update --registrar SHA --revisor QUIEN --veredicto sin-high --ci-exit 0 --ci-log REF   el integrador
+                                 ningún slice se verifica ni se cierra; muestra el registro y pide escribir
+                                 el SHA corto; guarda la anterior para --volver (que se deshace con otro
+                                 --volver); --ver solo informa
+  orq2 update --registrar SHA --revisor QUIEN --veredicto sin-high --ci-exit 0 --ci-log ARCHIVO
+                                 el integrador: ARCHIVO es el log de make ci de ese SHA y debe nombrarlo
 `
 
 const usage = `orq ` + Version + ` · harness de orquestador-2

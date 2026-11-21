@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -43,10 +44,12 @@ const VeredictoSinHigh = "sin-high"
 // there (the integrator's orq2-24f2438) are never touched.
 const NombreRollback = "orq2-anterior"
 
-// ConfUpdate holds every path update uses; each one is overridable by env, so tests never touch
-// the real ~/bin, ~/.local/share or the main checkout.
+// ConfUpdate holds every path update uses. The real binary gets it from ConfUpdateFija only:
+// nothing in the environment changes it. Tests build their own.
 type ConfUpdate struct {
 	Repo, Rama, Bin, Rollback, Go, Proc, Worktrees string
+	// Home is the HOME the build gets (the account's, not the caller's).
+	Home string
 	// Proyectos are extra project roots to check for busy slices (tests).
 	Proyectos []string
 }
@@ -54,35 +57,61 @@ type ConfUpdate struct {
 // PathUpdate is the only PATH git and go see while update runs.
 const PathUpdate = "/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
 
-// ConfUpdateFija is the configuration of the real binary. Stub: still reads env.
-func ConfUpdateFija() (ConfUpdate, error) { return LeerConfUpdate(), nil }
-
-// RevisarEntornoUpdate refuses ORQ_UPDATE_* overrides. Stub.
-func RevisarEntornoUpdate(environ []string) error { return nil }
-
-// SanearEntornoUpdate pins PATH and drops git overrides. Stub.
-func SanearEntornoUpdate() {}
-
-func envO(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
+// ConfUpdateFija is the configuration of the real binary, pinned: the home comes from the
+// account database (not $HOME), the repo is the Cthulhu main checkout, the branch harness-v2,
+// the install dir ~/bin, and go one of a fixed list of absolute paths. No env var changes it.
+func ConfUpdateFija() (ConfUpdate, error) {
+	u, err := user.Current()
+	if err != nil || u.HomeDir == "" || !filepath.IsAbs(u.HomeDir) {
+		return ConfUpdate{}, fmt.Errorf("no se pudo saber el home de la cuenta (%v)", err)
 	}
-	return def
+	h := u.HomeDir
+	c := ConfUpdate{
+		Repo:      filepath.Join(h, "projects", "MiguelAR10-Builder", "AI-Edge-Runners", "experiments", "cthulhu-orchestrator"),
+		Rama:      "harness-v2",
+		Bin:       filepath.Join(h, "bin"),
+		Rollback:  filepath.Join(h, ".local", "share", "orq2-rollback"),
+		Proc:      "/proc",
+		Worktrees: filepath.Join(h, "worktrees"),
+		Home:      h,
+	}
+	for _, g := range []string{"/usr/local/go/bin/go", filepath.Join(h, ".local", "bin", "go"), "/usr/bin/go", "/usr/lib/go/bin/go"} {
+		if fi, err := os.Stat(g); err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0 {
+			c.Go = g
+			break
+		}
+	}
+	if c.Go == "" {
+		return c, errors.New("no hay go en /usr/local/go/bin, ~/.local/bin, /usr/bin ni /usr/lib/go/bin")
+	}
+	return c, nil
 }
 
-// LeerConfUpdate: ORQ_UPDATE_REPO (the Cthulhu main checkout), ORQ_UPDATE_RAMA (harness-v2),
-// ORQ_UPDATE_BIN (~/bin), ORQ_UPDATE_ROLLBACK (~/.local/share/orq2-rollback), ORQ_UPDATE_GO (go),
-// ORQ_UPDATE_PROC (/proc) and ORQ_WORKTREES (~/worktrees).
-func LeerConfUpdate() ConfUpdate {
-	home, _ := os.UserHomeDir()
-	return ConfUpdate{
-		Repo:      envO("ORQ_UPDATE_REPO", filepath.Join(home, "projects", "MiguelAR10-Builder", "AI-Edge-Runners", "experiments", "cthulhu-orchestrator")),
-		Rama:      envO("ORQ_UPDATE_RAMA", "harness-v2"),
-		Bin:       envO("ORQ_UPDATE_BIN", filepath.Join(home, "bin")),
-		Rollback:  envO("ORQ_UPDATE_ROLLBACK", filepath.Join(home, ".local", "share", "orq2-rollback")),
-		Go:        envO("ORQ_UPDATE_GO", "go"),
-		Proc:      envO("ORQ_UPDATE_PROC", "/proc"),
-		Worktrees: envO("ORQ_WORKTREES", filepath.Join(home, "worktrees")),
+// RevisarEntornoUpdate refuses any ORQ_UPDATE_* variable: the real binary has no overrides, and
+// one that is set must not look as if it took effect.
+func RevisarEntornoUpdate(environ []string) error {
+	var malos []string
+	for _, kv := range environ {
+		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "ORQ_UPDATE_") {
+			malos = append(malos, k)
+		}
+	}
+	if len(malos) > 0 {
+		slices.Sort(malos)
+		return fmt.Errorf("orq2 update no acepta overrides por entorno (%s): quítalos y vuelve a correrlo", strings.Join(malos, ", "))
+	}
+	return nil
+}
+
+// SanearEntornoUpdate pins PATH and drops every GIT_* variable but the commit identity, so the
+// git and go that update runs are the system's and look at the repo they are told to.
+func SanearEntornoUpdate() {
+	os.Setenv("PATH", PathUpdate)
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(k, "GIT_") && !strings.HasPrefix(k, "GIT_AUTHOR_") && !strings.HasPrefix(k, "GIT_COMMITTER_") {
+			os.Unsetenv(k)
+		}
 	}
 }
 
@@ -138,7 +167,23 @@ func (c ConfUpdate) LeerPuerta(sha string) (RegistroPuerta, error) {
 	if err := json.Unmarshal([]byte(raw), &r); err != nil {
 		return r, fmt.Errorf("registro ilegible: %v", err)
 	}
-	return r, r.Validar(sha)
+	if err := r.Validar(sha); err != nil {
+		return r, err
+	}
+	return r, logNombra(r.CI.Log, sha)
+}
+
+// logNombra checks that the make ci log exists and names sha (its candidate line prints the
+// revision). It does not prove the run passed: the record says so, and the Owner reads it.
+func logNombra(log, sha string) error {
+	raw, err := os.ReadFile(log)
+	if err != nil {
+		return fmt.Errorf("el log de make ci %s no se puede leer (%v)", log, err)
+	}
+	if !strings.Contains(string(raw), sha) {
+		return fmt.Errorf("el log de make ci %s no nombra %s", log, sha)
+	}
+	return nil
 }
 
 var shaCompleto = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -161,6 +206,12 @@ func (c ConfUpdate) RegistrarPuerta(ref, revisor, ciLog string, now time.Time) (
 	sha, err := c.Commit(ref)
 	if err != nil {
 		return "", err
+	}
+	if ciLog, err = filepath.Abs(ciLog); err != nil {
+		return sha, err
+	}
+	if err := logNombra(ciLog, sha); err != nil {
+		return sha, err
 	}
 	var r RegistroPuerta
 	r.Esquema, r.SHA, r.Fecha = EsquemaPuerta, sha, now.UTC().Format(time.RFC3339)
@@ -216,7 +267,7 @@ type Ocupacion struct {
 }
 
 // FuentesProyectos says where update looks for projects.
-const FuentesProyectos = "ORQ_UPDATE_PROYECTOS (rutas separadas por :), ORQ_ROOT, la carpeta actual, las marcas de los clones de worker en ORQ_WORKTREES y la carpeta de cada proceso orq/orq2 que corre"
+const FuentesProyectos = "ORQ_ROOT, la carpeta actual, las marcas de los clones de worker en ~/worktrees (y en ORQ_WORKTREES si está) y la carpeta de cada proceso orq/orq2 que corre; no hay registro global de proyectos"
 
 func (o Ocupacion) Proyectos() string {
 	if len(o.Vistos) == 0 {
@@ -232,12 +283,18 @@ var opsOcupadas = []string{"verificar", "cerrar", "juntar"}
 // writes nothing.
 func (c ConfUpdate) RevisarOcupados() Ocupacion {
 	var o Ocupacion
-	candidatos := strings.Split(os.Getenv("ORQ_UPDATE_PROYECTOS"), ":")
-	candidatos = append(candidatos, os.Getenv("ORQ_ROOT"))
+	// Every source only adds projects to check, so none of them can hide a busy slice.
+	candidatos := append(slices.Clone(c.Proyectos), os.Getenv("ORQ_ROOT"))
 	if cwd, err := os.Getwd(); err == nil {
 		candidatos = append(candidatos, cwd)
 	}
-	marcas, _ := filepath.Glob(filepath.Join(c.Worktrees, "*", ".git", orqdir.MarcaClon))
+	var marcas []string
+	for _, wt := range []string{c.Worktrees, os.Getenv("ORQ_WORKTREES")} {
+		if wt != "" {
+			m, _ := filepath.Glob(filepath.Join(wt, "*", ".git", orqdir.MarcaClon))
+			marcas = append(marcas, m...)
+		}
+	}
 	for _, m := range marcas {
 		if mc, ok := slice.LeerMarca(filepath.Dir(filepath.Dir(m))); ok {
 			candidatos = append(candidatos, mc.Root)
@@ -255,7 +312,8 @@ func (c ConfUpdate) RevisarOcupados() Ocupacion {
 			continue
 		}
 		argv := strings.Split(strings.TrimRight(string(raw), "\x00"), "\x00")
-		if len(argv) < 3 || !slices.Contains([]string{"orq", "orq2"}, filepath.Base(argv[0])) {
+		// Any binary whose name starts with orq: orq, orq2, a copy such as orq2-24f2438.
+		if len(argv) < 3 || !strings.HasPrefix(filepath.Base(argv[0]), "orq") {
 			continue
 		}
 		cwd, _ := os.Readlink(filepath.Join(c.Proc, d.Name(), "cwd"))
@@ -276,13 +334,15 @@ func (c ConfUpdate) RevisarOcupados() Ocupacion {
 	return o
 }
 
-// ocupa says whether args (after the binary) verify or close a slice.
+// ocupa says whether args (after the binary) verify or close a slice; flags may come first.
 func ocupa(args []string) bool {
-	switch args[0] {
-	case "slice":
-		return slices.ContainsFunc(args[1:], func(a string) bool { return slices.Contains(opsOcupadas, a) })
-	case "sesion":
-		return slices.Contains(args[1:], "cerrar")
+	for i, a := range args {
+		switch a {
+		case "slice":
+			return slices.ContainsFunc(args[i+1:], func(a string) bool { return slices.Contains(opsOcupadas, a) })
+		case "sesion":
+			return slices.Contains(args[i+1:], "cerrar")
+		}
 	}
 	return false
 }
@@ -349,23 +409,32 @@ func ocupadoEn(root string) []string {
 // CopiarAtomico copies src over dst through a temp file in dst's directory and a rename, so dst
 // is always either the old file or the new one, never half written. Mode and mtime follow src.
 func CopiarAtomico(src, dst string) error {
-	in, err := os.Open(src)
+	tmp, err := prepararCopia(src, dst)
 	if err != nil {
 		return err
+	}
+	return colocar(tmp, dst)
+}
+
+// prepararCopia writes src, synced, to a temp file beside dst and returns its path.
+func prepararCopia(src, dst string) (string, error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return "", err
 	}
 	defer in.Close()
 	fi, err := in.Stat()
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
+		return "", err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".nuevo-*")
 	if err != nil {
-		return err
+		return "", err
 	}
-	limpiar := func(e error) error { tmp.Close(); os.Remove(tmp.Name()); return e }
+	limpiar := func(e error) (string, error) { tmp.Close(); os.Remove(tmp.Name()); return "", e }
 	if _, err := io.Copy(tmp, in); err != nil {
 		return limpiar(err)
 	}
@@ -377,11 +446,16 @@ func CopiarAtomico(src, dst string) error {
 	}
 	if err := tmp.Close(); err != nil {
 		os.Remove(tmp.Name())
-		return err
+		return "", err
 	}
 	os.Chtimes(tmp.Name(), fi.ModTime(), fi.ModTime())
-	if err := os.Rename(tmp.Name(), dst); err != nil {
-		os.Remove(tmp.Name())
+	return tmp.Name(), nil
+}
+
+// colocar renames tmp onto dst and syncs the directory; on failure tmp is removed.
+func colocar(tmp, dst string) error {
+	if err := os.Rename(tmp, dst); err != nil {
+		os.Remove(tmp)
 		return err
 	}
 	if d, err := os.Open(filepath.Dir(dst)); err == nil {
@@ -389,6 +463,60 @@ func CopiarAtomico(src, dst string) error {
 		d.Close()
 	}
 	return nil
+}
+
+// conPuerta says whether r is a clean build of a SHA with a valid gate record.
+func (c ConfUpdate) conPuerta(r Revision) bool {
+	if r.Mod != "false" || !shaCompleto.MatchString(r.Rev) {
+		return false
+	}
+	_, err := c.LeerPuerta(r.Rev)
+	return err == nil
+}
+
+// GuardarActual keeps the installed binary before it is replaced. It becomes the rollback
+// (orq2-anterior) only when it is a clean build of a gated SHA or there is no rollback yet;
+// otherwise it is kept beside it as orq2-sin-puerta-<rev>, so a good rollback is never lost.
+// Names never collide with other files in the dir (the integrator's orq2-24f2438). It returns
+// where the binary went ("" if nothing was installed).
+func (c ConfUpdate) GuardarActual() (string, error) {
+	r := RevisionDe(c.Instalado())
+	if !r.Existe {
+		return "", nil
+	}
+	if _, err := os.Stat(c.RutaRollback()); os.IsNotExist(err) || c.conPuerta(r) {
+		return c.RutaRollback(), CopiarAtomico(c.Instalado(), c.RutaRollback())
+	}
+	rev := r.Rev
+	if !shaCompleto.MatchString(rev) {
+		rev = "desconocida"
+	}
+	dst := filepath.Join(c.Rollback, "orq2-sin-puerta-"+rev[:min(12, len(rev))])
+	if viejo, err := os.ReadFile(dst); err == nil {
+		if actual, err := os.ReadFile(c.Instalado()); err == nil && string(viejo) == string(actual) {
+			return dst, nil
+		}
+		dst += "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	}
+	return dst, CopiarAtomico(c.Instalado(), dst)
+}
+
+// Volver puts the rollback back on ~/bin/orq2 and keeps what was installed (GuardarActual), so
+// a second Volver undoes the first. The rollback is staged before anything is moved.
+func (c ConfUpdate) Volver() (actual, anterior Revision, guardada string, err error) {
+	actual, anterior = RevisionDe(c.Instalado()), RevisionDe(c.RutaRollback())
+	if !anterior.Existe {
+		return actual, anterior, "", fmt.Errorf("no hay versión anterior guardada en %s", c.RutaRollback())
+	}
+	tmp, err := prepararCopia(c.RutaRollback(), c.Instalado())
+	if err != nil {
+		return actual, anterior, "", err
+	}
+	if guardada, err = c.GuardarActual(); err != nil {
+		os.Remove(tmp)
+		return actual, anterior, "", fmt.Errorf("no se pudo guardar la versión actual: %v", err)
+	}
+	return actual, anterior, guardada, colocar(tmp, c.Instalado())
 }
 
 // ConstruirCandidato builds ./cmd/orq of sha the way make install2 does (go build -trimpath), in
@@ -409,7 +537,10 @@ func (c ConfUpdate) ConstruirCandidato(sha, dir string) (string, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctxB, c.Go, "build", "-trimpath", "-o", bin, "./cmd/orq")
 	cmd.Dir = filepath.Join(src, "harness")
-	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local", "GOPROXY=off", "GOFLAGS=-mod=readonly -buildvcs=true")
+	// A fixed environment, nothing inherited: no GOROOT, GOFLAGS (-toolexec), go env file or
+	// PATH from the caller can change what gets compiled.
+	cmd.Env = []string{"PATH=" + PathUpdate, "HOME=" + c.Home, "TMPDIR=" + os.TempDir(), "GOTOOLCHAIN=local",
+		"GOPROXY=off", "GOFLAGS=-mod=readonly -buildvcs=true", "GOENV=off", "GOWORK=off"}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("go build: %v\n%s", err, out)
 	}
