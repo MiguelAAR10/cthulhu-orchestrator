@@ -713,10 +713,12 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		if orq2 {
 			// Only this story's delivered messages leave the live channel; with no other story
 			// open, untagged messages are this story's too. Undelivered ones always stay.
-			otros, _ := r.Abiertos()
+			// If the open stories cannot be listed, untagged messages stay (fail safe).
+			otros, errOtros := r.Abiertos()
+			soloEsta := errOtros == nil && len(otros) == 0
 			deEsta := func(m canal.Msg) bool {
 				historia, _, _ := strings.Cut(m.Attempt, "/")
-				return m.Estado != "pendiente" && (historia == "S-"+reg.NN || m.Attempt == "" && len(otros) == 0)
+				return m.Estado != "pendiente" && (historia == "S-"+reg.NN || m.Attempt == "" && soloEsta)
 			}
 			if _, err := canal.Archivar(p.CanalPath(), "S-"+reg.NN, deEsta); err != nil {
 				pendiente = append(pendiente, fmt.Sprintf("el canal no se archivó (%v): sigue en %s", err, p.CanalPath()))

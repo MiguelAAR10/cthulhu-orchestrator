@@ -40,6 +40,8 @@ var mutadores = [][]string{
 	{"relevo", "orquestador"}, {"up"}, {"init"}, {"doc"},
 	{"aprender", "add", "x"}, {"aprender", "promover", "i1"},
 	{"slice", "decidir"}, {"skills", "fijar"},
+	{"aprender", "confirmar", "i1"}, {"aprender", "refutar", "i1"},
+	{"skill", "eval", "x"}, {"skill", "notas"}, {"skill", "comparar", "a", "b"}, {"skill"},
 }
 
 // M1: from a worker clone (orq2), the marker lets msg and read-only commands reach the project,
@@ -63,6 +65,7 @@ func TestWorkerEnClonNoMutaElProyecto(t *testing.T) {
 	for _, args := range [][]string{
 		{"msg", "send", "--de", "worker-tienda-w1-s01", "--para", "orquestador", "--tipo", "pregunta", "¿envío?"},
 		{"msg", "leer"}, {"mem", "ver"}, {"mem"}, {"sesion", "ver"}, {"halt"}, {"version"},
+		{"aprender"}, {"aprender", "ver"}, {"skill", "worker"},
 	} {
 		if out, errs, code := run(t, args...); code != 0 && code != 3 {
 			t.Errorf("%v must still run from a worker clone: code %d out %q err %q", args, code, out, errs)

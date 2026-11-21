@@ -156,3 +156,28 @@ func mustLoad(t *testing.T, path string) []canal.Msg {
 	}
 	return ms
 }
+
+// N4: if the open stories cannot be listed at close, untagged messages stay live (fail safe).
+func TestCerrarSinListaDeAbiertosNoArchivaSinEtiqueta(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	sliceVerde(t)
+	root := os.Getenv("ORQ_ROOT")
+	t.Setenv("ORQ_SIN_DOC", "1")
+	path := filepath.Join(root, ".orq", "canal.jsonl")
+	m := &canal.Msg{De: "atena", Para: "orquestador", Tipo: "estado", Texto: "sin etiqueta"}
+	if err := canal.Append(path, m); err != nil {
+		t.Fatal(err)
+	}
+	canal.MarcarEntregado(path, m.ID, time.Now())
+	// Another story's state that cannot be read: the list of open stories fails.
+	if err := os.WriteFile(filepath.Join(root, ".orq", "slices", "02.json"), []byte("{roto"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, errs, _ := run(t, "slice", "--slice", "01", "cerrar", "--aceptado")
+	if !strings.Contains(out, "cerrado como") {
+		t.Fatalf("the close itself must run: %s %s", out, errs)
+	}
+	if vivo, _ := os.ReadFile(path); !strings.Contains(string(vivo), "sin etiqueta") {
+		t.Fatalf("an untagged message left the live channel although open stories were unknown: %s %s\n%s", out, errs, vivo)
+	}
+}

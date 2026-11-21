@@ -490,8 +490,11 @@ func permitidoAWorker(args []string) bool {
 	}
 	en := func(xs ...string) bool { return slices.Contains(xs, sub) }
 	switch args[0] {
-	case "gate", "watch", "status", "check", "fase", "contexto", "doctor", "version", "skill", "--skill", "metricas", "sandbox", "alinear":
+	case "gate", "watch", "status", "check", "fase", "contexto", "doctor", "version", "metricas", "sandbox", "alinear":
 		return true
+	case "skill", "--skill":
+		// Only a role's guide (skill <rol>): eval, notas and comparar spend money or touch shared notes.
+		return len(args) == 2 && !strings.HasPrefix(sub, "-") && !slices.Contains([]string{"eval", "notas", "comparar"}, sub)
 	case "msg":
 		return en("", "send", "leer", "reconciliar")
 	case "mem", "sesion", "config":
@@ -499,7 +502,7 @@ func permitidoAWorker(args []string) bool {
 	case "plan":
 		return en("ver", "revisar")
 	case "aprender":
-		return en("", "ver", "confirmar", "refutar")
+		return en("", "ver") // confirmar/refutar would move project lessons over the injection threshold
 	case "halt":
 		return sub == ""
 	case "slice":
