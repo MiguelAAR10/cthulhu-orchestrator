@@ -117,7 +117,7 @@ func convergeCerrado(t *testing.T, r Repo, aceptado bool, motivo string) *Regist
 	return reg
 }
 
-var etapasAceptado = []string{"intencion", "integrar", "integrado", "publicado", "decidido", "limpiando", "registrado", "anotado", "sin-estado"}
+var etapasAceptado = []string{"intencion", "integrar", "integrado", "publicado", "decidido", "limpiando", "registrado", "anotado", "sin-refs"}
 
 func TestCierreAceptadoConvergeTrasCaidaEnCadaEtapa(t *testing.T) {
 	for _, etapa := range etapasAceptado {
@@ -159,7 +159,7 @@ func TestCierreAceptadoConvergeTrasCaidaEnCadaEtapa(t *testing.T) {
 	}
 }
 
-var etapasRechazo = []string{"intencion", "decidido", "limpiando", "registrado", "anotado", "sin-estado"}
+var etapasRechazo = []string{"intencion", "decidido", "limpiando", "registrado", "anotado", "sin-refs"}
 
 func TestCierreRechazadoConvergeTrasCaidaEnCadaEtapa(t *testing.T) {
 	for _, etapa := range etapasRechazo {
@@ -233,7 +233,7 @@ func TestCierreAnotaDecisionAntesDePublicarComo100(t *testing.T) {
 // orq keeps 1.0.0: none of the new boundaries exists.
 func TestEtapasNuevasNoExistenComo100(t *testing.T) {
 	t.Setenv("ORQ_NOMBRE", "orq")
-	for _, etapa := range []string{"intencion", "decidido", "registrado", "anotado", "sin-estado"} {
+	for _, etapa := range []string{"intencion", "decidido", "registrado", "anotado", "sin-refs"} {
 		r, _ := verde(t)
 		if conCaida(t, etapa, func() { r.Cerrar("01", true, "", t0) }) {
 			t.Fatalf("orq stopped at the new boundary %q", etapa)
@@ -362,5 +362,24 @@ func TestVerificarGuardaLaCopiaViejaComo100(t *testing.T) {
 	e, _ = r.Load("01")
 	if e.Fase != Bloqueado || len(e.Alcance) != 0 {
 		t.Fatalf("orq 1.0.0 saves the copy it loaded: %+v", e)
+	}
+}
+
+// A close that died after recording the Owner's decision cannot be turned into the other one.
+func TestIntencionDeCierreNoSeCambia(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	r, _ := verde(t)
+	if !conCaida(t, "intencion", func() { r.Cerrar("01", false, "no", t0) }) {
+		t.Fatal("did not stop")
+	}
+	if _, _, _, err := r.Cerrar("01", true, "", t0); err == nil || !strings.Contains(err.Error(), "rechazado") {
+		t.Fatalf("an accepted close over a recorded rejection must be refused: %v", err)
+	}
+	main, _ := Git(r.Root, "log", "--oneline", "main")
+	if strings.Contains(main, "slice S-01") {
+		t.Fatal("integrated over a recorded rejection")
+	}
+	if reg := convergeCerrado(t, r, false, "no"); reg.Result != "rechazado" {
+		t.Fatalf("%+v", reg)
 	}
 }
