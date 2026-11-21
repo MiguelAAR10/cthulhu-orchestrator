@@ -334,12 +334,12 @@ func (r Repo) integrar(e *Estado) (string, error) {
 		if err != nil {
 			return out, err
 		}
-		carpetas, sin, err := r.cobertura(sha, rutas)
+		carpetas, sin, err := r.cobertura(rutas, e.SHARojo, sha)
 		if err != nil {
 			return out, err
 		}
 		if sin != nil {
-			return out, fmt.Errorf("integrado en %s, pero %v. Tu rama %s no se tocó; nada se borró", sha[:8], errSinChecks(e.ID(), sin), e.Base)
+			return out, fmt.Errorf("integrado en %s, pero %v. Tu rama %s no se tocó; nada se borró: declara o exime esa carpeta en .orq/config.json y vuelve a cerrar (`orq slice cerrar --aceptado`)", sha[:8], errSinChecks(e.ID(), sin), e.Base)
 		}
 		checks, err := r.checksEn(e, sha, carpetas, true)
 		if err != nil {

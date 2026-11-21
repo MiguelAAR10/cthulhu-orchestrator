@@ -210,7 +210,7 @@ func (r Repo) Abrir(nn, titulo, test, cmd string, o Opciones, now time.Time) (*E
 	}
 	// Cada carpeta que la historia justifica tocar tiene que tener checks (o estar exenta).
 	if r.cubreCarpetas() {
-		if _, sin, err := r.cobertura(sha, o.Alcance); err != nil {
+		if _, sin, err := r.cobertura(o.Alcance, sha); err != nil {
 			return nil, "", err
 		} else if sin != nil {
 			return nil, "", errSinChecks("S-"+nn, sin)
@@ -376,7 +376,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if err != nil {
 		return e, "", err
 	}
-	carpetas, sin, err := r.cobertura(head, rutas)
+	carpetas, sin, err := r.cobertura(rutas, e.SHARojo, head)
 	if err != nil {
 		return e, "", err
 	}

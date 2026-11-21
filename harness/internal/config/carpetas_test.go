@@ -80,3 +80,15 @@ func TestCarpetasRechazadaComoOrq(t *testing.T) {
 		t.Fatalf("flat config under orq: %v", err)
 	}
 }
+
+// Under orq the schema check still names the struct Config in JSON type errors, as 1.0.0 did.
+func TestErrorDeTipoComoOrq(t *testing.T) {
+	t.Setenv("ORQ_ESCRIBA_MODELO", "")
+	for _, n := range []string{"orq", "orq2"} {
+		t.Setenv("ORQ_NOMBRE", n)
+		_, err := CargarDe(escribir(t, filepath.Join(t.TempDir(), "p.json"), `{"terminal": 3}`))
+		if err == nil || !strings.Contains(err.Error(), "Go struct field Config.terminal of type string") {
+			t.Fatalf("%s: err = %v", n, err)
+		}
+	}
+}

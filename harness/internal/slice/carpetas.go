@@ -62,10 +62,11 @@ func duenaDe(p string, carpetas []string) string {
 }
 
 // cobertura reparte rutas (alcance y diff del slice) entre sus carpetas dueñas, con los manifiestos
-// del commit sha. Devuelve las carpetas declaradas con checks que tocan, en orden, y las dueñas
-// sin checks ni exención, cada una con una ruta de ejemplo.
-func (r Repo) cobertura(sha string, rutas []string) (aplican []config.Carpeta, sin map[string]string, err error) {
-	if len(r.Carpetas) == 0 && !r.cubreCarpetas() {
+// de los commits shas (el rojo y el que se juzga: borrar un manifiesto no saca a su carpeta de la
+// regla). Devuelve las carpetas declaradas con checks que tocan, en orden, y las dueñas sin checks
+// ni exención, cada una con una ruta de ejemplo. Solo orq2: bajo orq no hace nada, como 1.0.0.
+func (r Repo) cobertura(rutas []string, shas ...string) (aplican []config.Carpeta, sin map[string]string, err error) {
+	if !r.Cobertura || (len(r.Carpetas) == 0 && !r.cubreCarpetas()) {
 		return nil, nil, nil
 	}
 	var todas []string
@@ -77,11 +78,17 @@ func (r Repo) cobertura(sha string, rutas []string) (aplican []config.Carpeta, s
 		}
 	}
 	if r.cubreCarpetas() {
-		ps, err := r.proyectosEn(sha)
-		if err != nil {
-			return nil, nil, err
+		for _, sha := range shas {
+			ps, err := r.proyectosEn(sha)
+			if err != nil {
+				return nil, nil, err
+			}
+			for _, p := range ps {
+				if !slices.Contains(todas, p) {
+					todas = append(todas, p)
+				}
+			}
 		}
-		todas = append(todas, ps...)
 	}
 	tocadas := map[string]bool{}
 	sin = map[string]string{}

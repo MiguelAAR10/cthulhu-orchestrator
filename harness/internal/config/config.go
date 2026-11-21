@@ -280,6 +280,21 @@ func Cargar(root string) (Config, error) {
 	return CargarDe(rutas...)
 }
 
+// esquemaOrq es el esquema de Config como lo leía orq 1.0.0: sin carpetas, que DisallowUnknownFields
+// rechaza. El tipo local se llama Config para que los errores de JSON digan lo mismo que 1.0.0.
+func esquemaOrq() any {
+	type Config struct {
+		Terminal string                       `json:"terminal"`
+		Roles    map[string]Agente            `json:"roles"`
+		Workers  map[string]map[string]Agente `json:"workers"`
+		Recursos Recursos                     `json:"recursos"`
+		Checks   map[string]Check             `json:"checks,omitempty"`
+		Skills   Skills                       `json:"skills"`
+		Alertas  Alertas                      `json:"alertas"`
+	}
+	return &Config{}
+}
+
 // CargarDe une el defecto con cada archivo, en orden; el último gana campo a campo.
 func CargarDe(rutas ...string) (Config, error) {
 	base, err := generico(Defecto())
@@ -300,10 +315,13 @@ func CargarDe(rutas ...string) (Config, error) {
 		}
 		archivos = append(archivos, Archivo{Ruta: ruta, Existe: true})
 		// Primero contra el esquema: un campo desconocido es un error, no se ignora.
-		var esquema Config
+		var esquema any = &Config{}
+		if !identidad.EsOrq2() {
+			esquema = esquemaOrq() // carpetas es solo de orq2: bajo orq se rechaza como en 1.0.0
+		}
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		dec.DisallowUnknownFields()
-		if err := dec.Decode(&esquema); err != nil {
+		if err := dec.Decode(esquema); err != nil {
 			return Config{}, fmt.Errorf("config: %s: %w", ruta, err)
 		}
 		if dec.More() {
