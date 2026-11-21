@@ -261,7 +261,8 @@ func TestStatusMuestraMaquinaYCapacidad(t *testing.T) {
 	}
 	// Con un presupuesto imposible, status dice que no cabe nadie y por qué.
 	os.MkdirAll(filepath.Join(dir, ".orq"), 0o755)
-	os.WriteFile(filepath.Join(dir, ".orq", "config.json"), []byte(`{"recursos":{"ram_por_agente_gb":100000}}`), 0o644)
+	// CPU y carga no deben limitar antes que la RAM, sea cual sea el host (agentes vivos reales).
+	os.WriteFile(filepath.Join(dir, ".orq", "config.json"), []byte(`{"recursos":{"ram_por_agente_gb":100000,"cpu_por_agente":0.001,"reserva_cpus":0,"carga_max":1000000}}`), 0o644)
 	out, _, _ = run(t, "status")
 	if !strings.Contains(out, "limita RAM") || !strings.Contains(out, "no cabe otro agente por RAM") {
 		t.Fatalf("status no explica la falta de RAM:\n%s", out)
