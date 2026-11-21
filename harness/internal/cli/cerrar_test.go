@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"orq/internal/canal"
 )
 
 // sliceVerde opens slice 01 on the toy repo, turns its exam green in the worker copy and verifies it.
@@ -77,4 +80,33 @@ func TestCerrarSinDocNoLlamaAlEscriba(t *testing.T) {
 			t.Fatalf("cerrar must warn and still close: %s", out)
 		}
 	})
+}
+
+// H2: closing a story archives its channel instead of deleting it, and the next story's
+// message ids continue after the archived ones.
+func TestCerrarArchivaElCanalYLosIdsSiguen(t *testing.T) {
+	sliceVerde(t)
+	root := os.Getenv("ORQ_ROOT")
+	t.Setenv("ORQ_SIN_DOC", "1")
+	out, errs, code := run(t, "msg", "send", "--de", "atena", "--para", "orquestador", "--tipo", "historia", "quiero el total")
+	if code != 0 {
+		t.Fatalf("send: %d %s %s", code, out, errs)
+	}
+	if out, errs, code := run(t, "slice", "cerrar", "--aceptado"); code != 0 {
+		t.Fatalf("cerrar: %d %s %s", code, out, errs)
+	}
+	arch := filepath.Join(root, ".orq", "canales", "S-01.jsonl")
+	raw, err := os.ReadFile(arch)
+	if err != nil || !strings.Contains(string(raw), "quiero el total") {
+		t.Fatalf("closing must archive the channel at %s: %v %q", arch, err, raw)
+	}
+	viejos, _ := canal.Load(arch)
+	out, errs, code = run(t, "msg", "send", "--de", "atena", "--para", "orquestador", "--tipo", "historia", "otra historia")
+	if code != 0 {
+		t.Fatalf("send: %d %s", code, errs)
+	}
+	want := fmt.Sprintf("c%d", len(viejos)+1)
+	if !strings.Contains(out, want) {
+		t.Fatalf("first id after the close must be %s (ids never restart): %s", want, out)
+	}
 }
