@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -18,7 +19,7 @@ func TestArchivarGuardaElCanalYLosIdsSiguen(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	arch, err := Archivar(p, "S-01")
+	arch, err := Archivar(p, "S-01", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +38,7 @@ func TestArchivarGuardaElCanalYLosIdsSiguen(t *testing.T) {
 		t.Fatalf("id after archiving = %s, want c4 (ids never restart)", m.ID)
 	}
 	// A second close of the same story never overwrites the first archive.
-	arch2, err := Archivar(p, "S-01")
+	arch2, err := Archivar(p, "S-01", nil)
 	if err != nil || arch2 == arch {
 		t.Fatalf("second archive %s (first %s): %v", arch2, arch, err)
 	}
@@ -64,7 +65,7 @@ func TestArchivarConcurrenteNoPierdeMensajes(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			if i%10 == 5 {
-				a, err := Archivar(p, "S-01")
+				a, err := Archivar(p, "S-01", nil)
 				if err != nil {
 					t.Error(err)
 				}
@@ -110,5 +111,47 @@ func TestAppendOrqIdComo100(t *testing.T) {
 	m = msg("d")
 	if Append(p, m); m.ID != "c6" {
 		t.Fatalf("orq2 id = %s, want c6 (after the highest)", m.ID)
+	}
+}
+
+// M2: closing S-01 archives only S-01's delivered messages. Other stories' messages and every
+// undelivered message stay in the live channel with their ids; ids keep growing.
+func TestArchivarSoloLaHistoriaQueCierra(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	p := filepath.Join(t.TempDir(), "canal.jsonl")
+	for _, a := range []string{"S-01/a1", "S-02/a1", "S-01/a1", ""} {
+		m := msg("de " + a)
+		m.Attempt = a
+		if err := Append(p, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, id := range []string{"c1", "c2", "c4"} { // c3 (S-01) stays undelivered
+		MarcarEntregado(p, id, t0)
+	}
+	arch, err := Archivar(p, "S-01", func(m Msg) bool { return m.Estado != "pendiente" && strings.HasPrefix(m.Attempt, "S-01/") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	viejos, _ := Load(arch)
+	if len(viejos) != 1 || viejos[0].ID != "c1" {
+		t.Fatalf("archive must hold only S-01's delivered c1: %+v", viejos)
+	}
+	vivos, _ := Load(p)
+	var ids []string
+	for _, m := range vivos {
+		ids = append(ids, m.ID+":"+m.Estado)
+	}
+	if strings.Join(ids, " ") != "c2:entregado c3:pendiente c4:entregado" {
+		t.Fatalf("live channel after archiving S-01: %v", ids)
+	}
+	m := msg("nuevo")
+	Append(p, m)
+	if m.ID != "c5" {
+		t.Fatalf("next id = %s, want c5", m.ID)
+	}
+	// The archive is its own file: messages sent later never show up in it.
+	if viejos, _ := Load(arch); len(viejos) != 1 {
+		t.Fatalf("the archive changed after archiving: %+v", viejos)
 	}
 }

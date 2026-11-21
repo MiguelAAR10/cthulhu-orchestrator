@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"orq/internal/canal"
 )
@@ -93,6 +94,9 @@ func TestCerrarArchivaElCanalYLosIdsSiguen(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("send: %d %s %s", code, out, errs)
 	}
+	for _, m := range mustLoad(t, filepath.Join(root, ".orq", "canal.jsonl")) {
+		canal.MarcarEntregado(filepath.Join(root, ".orq", "canal.jsonl"), m.ID, time.Now())
+	}
 	if out, errs, code := run(t, "slice", "cerrar", "--aceptado"); code != 0 {
 		t.Fatalf("cerrar: %d %s %s", code, out, errs)
 	}
@@ -110,4 +114,45 @@ func TestCerrarArchivaElCanalYLosIdsSiguen(t *testing.T) {
 	if !strings.Contains(out, want) {
 		t.Fatalf("first id after the close must be %s (ids never restart): %s", want, out)
 	}
+}
+
+// M2: closing S-01 leaves another story's messages and every undelivered message in the live channel.
+func TestCerrarArchivaSoloSuHistoria(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	sliceVerde(t)
+	root := os.Getenv("ORQ_ROOT")
+	t.Setenv("ORQ_SIN_DOC", "1")
+	path := filepath.Join(root, ".orq", "canal.jsonl")
+	add := func(attempt, texto string, entregado bool) {
+		m := &canal.Msg{De: "atena", Para: "orquestador", Tipo: "estado", Texto: texto, Attempt: attempt}
+		if err := canal.Append(path, m); err != nil {
+			t.Fatal(err)
+		}
+		if entregado {
+			canal.MarcarEntregado(path, m.ID, time.Now())
+		}
+	}
+	add("S-01/a1", "de S-01 entregado", true)
+	add("S-01/a1", "de S-01 sin entregar", false)
+	add("S-02/a1", "de S-02", true)
+	if out, errs, code := run(t, "slice", "cerrar", "--aceptado"); code != 0 {
+		t.Fatalf("cerrar: %d %s %s", code, out, errs)
+	}
+	arch, _ := os.ReadFile(filepath.Join(root, ".orq", "canales", "S-01.jsonl"))
+	vivo, _ := os.ReadFile(path)
+	if !strings.Contains(string(arch), "de S-01 entregado") || strings.Contains(string(arch), "S-02") || strings.Contains(string(arch), "sin entregar") {
+		t.Fatalf("archive must hold only S-01's delivered messages:\n%s", arch)
+	}
+	if !strings.Contains(string(vivo), "de S-02") || !strings.Contains(string(vivo), "de S-01 sin entregar") {
+		t.Fatalf("live channel must keep S-02 and undelivered messages:\n%s", vivo)
+	}
+}
+
+func mustLoad(t *testing.T, path string) []canal.Msg {
+	t.Helper()
+	ms, err := canal.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ms
 }

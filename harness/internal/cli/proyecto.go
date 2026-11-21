@@ -711,7 +711,14 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		// deleted and cleanup errors other than the memory one are not reported.
 		orq2 := identidad.EsOrq2()
 		if orq2 {
-			if _, err := canal.Archivar(p.CanalPath(), "S-"+reg.NN); err != nil {
+			// Only this story's delivered messages leave the live channel; with no other story
+			// open, untagged messages are this story's too. Undelivered ones always stay.
+			otros, _ := r.Abiertos()
+			deEsta := func(m canal.Msg) bool {
+				historia, _, _ := strings.Cut(m.Attempt, "/")
+				return m.Estado != "pendiente" && (historia == "S-"+reg.NN || m.Attempt == "" && len(otros) == 0)
+			}
+			if _, err := canal.Archivar(p.CanalPath(), "S-"+reg.NN, deEsta); err != nil {
 				pendiente = append(pendiente, fmt.Sprintf("el canal no se archivó (%v): sigue en %s", err, p.CanalPath()))
 			}
 		} else {

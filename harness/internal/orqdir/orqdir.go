@@ -36,6 +36,12 @@ func Root() (string, error) {
 	return root, nil
 }
 
+// EnClon says whether dir is inside a worker clone orq made (its marker exists upward).
+func EnClon(dir string) bool {
+	_, ok, _ := marcaArriba(dir)
+	return ok
+}
+
 // marcaArriba busca la marca de clon de worker desde dir hacia arriba (también desde un repo
 // anidado dentro del clon) y devuelve el checkout principal que nombra. Una marca que no nombra
 // un directorio absoluto existente es un error: nunca se cae al .orq propio del clon.

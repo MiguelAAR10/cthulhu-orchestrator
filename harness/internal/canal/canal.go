@@ -148,10 +148,13 @@ func ultimo(ms []Msg, base int) int {
 	return n
 }
 
-// Archivar mueve los mensajes del canal a <dir>/canales/<etiqueta>.jsonl (o -2, -3… si ya existe)
-// y deja el canal vacío con una base: el próximo id sigue al último archivado. Un canal sin
-// mensajes no se archiva y devuelve "".
-func Archivar(path, etiqueta string) (string, error) {
+// Archivar moves the messages archivar selects (all of them if nil) to
+// <dir>/canales/<etiqueta>.jsonl (or -2, -3… if taken) and rewrites the live channel with the
+// rest, plus a base so the next id follows the highest one. Kept messages keep their id and
+// delivery state. The archive is its own file, written before the live channel is swapped: a
+// crash in between leaves the messages in both places, never in neither. Nothing selected
+// archives nothing and returns "".
+func Archivar(path, etiqueta string, archivar func(Msg) bool) (string, error) {
 	f, err := abrirBloqueado(path)
 	if err != nil {
 		return "", err
@@ -162,7 +165,18 @@ func Archivar(path, etiqueta string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(ms) == 0 {
+	var van, quedan bytes.Buffer
+	n := 0
+	for _, m := range ms {
+		line, _ := json.Marshal(m)
+		if archivar == nil || archivar(m) {
+			van.Write(append(line, '\n'))
+			n++
+		} else {
+			quedan.Write(append(line, '\n'))
+		}
+	}
+	if n == 0 {
 		return "", nil
 	}
 	dir := filepath.Join(filepath.Dir(path), "canales")
@@ -170,12 +184,13 @@ func Archivar(path, etiqueta string) (string, error) {
 		return "", err
 	}
 	var arch string
+	var af *os.File
 	for i := 1; ; i++ {
 		arch = filepath.Join(dir, etiqueta+".jsonl")
 		if i > 1 {
 			arch = filepath.Join(dir, fmt.Sprintf("%s-%d.jsonl", etiqueta, i))
 		}
-		err = os.Link(path, arch)
+		af, err = os.OpenFile(arch, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
 			break
 		}
@@ -183,12 +198,19 @@ func Archivar(path, etiqueta string) (string, error) {
 			return "", err
 		}
 	}
-	// El canal nuevo reemplaza al viejo de una vez: nunca hay un instante sin canal ni sin base.
-	line, _ := json.Marshal(evento{ID: fmt.Sprintf("c%d", ultimo(ms, base)), Evento: "base", TS: time.Now().UTC().Truncate(time.Second)})
-	if err := orqdir.WriteAtomic(path, append(line, '\n')); err != nil {
+	_, err = af.Write(van.Bytes())
+	if err == nil {
+		err = af.Sync()
+	}
+	if errC := af.Close(); err == nil {
+		err = errC
+	}
+	if err != nil {
 		return arch, err
 	}
-	return arch, nil
+	// The new live channel replaces the old one at once: there is never a moment without a channel or a base.
+	line, _ := json.Marshal(evento{ID: fmt.Sprintf("c%d", ultimo(ms, base)), Evento: "base", TS: time.Now().UTC().Truncate(time.Second)})
+	return arch, orqdir.WriteAtomic(path, append(append(line, '\n'), quedan.Bytes()...))
 }
 
 // MarcarEntregado agrega el evento de entrega confirmada.

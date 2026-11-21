@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"orq/internal/slice"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -149,6 +151,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 			code = 2
 		}
 	}()
+	if identidad.EsOrq2() && !permitidoAWorker(args) {
+		if quien := comoWorker(); quien != "" {
+			fmt.Fprintf(stderr, "orq: `orq %s` changes project state and does not run %s. A worker only sends and reads messages (orq msg send|leer|reconciliar) and reads state; ask the orchestrator.\n", strings.Join(cabezaCmd(args), " "), quien)
+			return 1
+		}
+	}
 	switch args[0] {
 	case "gate":
 		return runGate(stdin, stderr)
@@ -458,4 +466,54 @@ func runHalt(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprint(stderr, uso())
 	return 1
+}
+
+// comoWorker says why this process is a worker under orq2: its role or its cwd inside a worker
+// clone. Inside a clone the project root comes from the clone marker, so only the commands in
+// permitidoAWorker may run there; "" means it is not a worker.
+func comoWorker() string {
+	if r := os.Getenv("ORQ_ROL"); strings.HasPrefix(r, "worker") {
+		return "as a worker (ORQ_ROL=" + r + ")"
+	}
+	if wd, err := os.Getwd(); err != nil || orqdir.EnClon(wd) {
+		return "from a worker clone"
+	}
+	return ""
+}
+
+// permitidoAWorker lists what a worker may run: messages, its checks and hooks, and reads.
+// Everything else changes project state (memory, plan, sessions, HALT, slices) and is refused.
+func permitidoAWorker(args []string) bool {
+	sub := ""
+	if len(args) > 1 {
+		sub = args[1]
+	}
+	en := func(xs ...string) bool { return slices.Contains(xs, sub) }
+	switch args[0] {
+	case "gate", "watch", "status", "check", "fase", "contexto", "doctor", "version", "skill", "--skill", "metricas", "sandbox", "alinear":
+		return true
+	case "msg":
+		return en("", "send", "leer", "reconciliar")
+	case "mem", "sesion", "config":
+		return en("", "ver")
+	case "plan":
+		return en("ver", "revisar")
+	case "aprender":
+		return en("", "ver", "confirmar", "refutar")
+	case "halt":
+		return sub == ""
+	case "slice":
+		return slices.Contains([]string{"", "estado", "recibo", "contrato"}, subcomando(args[1:]))
+	case "skills":
+		return en("", "ver")
+	}
+	return false
+}
+
+// cabezaCmd is the command and subcommand for the refusal message.
+func cabezaCmd(args []string) []string {
+	if len(args) > 1 && !strings.HasPrefix(args[1], "-") || len(args) > 1 && args[0] == "halt" {
+		return args[:2]
+	}
+	return args[:1]
 }
