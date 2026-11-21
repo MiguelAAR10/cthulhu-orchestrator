@@ -6,6 +6,7 @@ var comandos = map[string][]string{
 	"gate": nil, "watch": nil, "status": nil, "halt": nil, "init": nil, "check": nil, "fase": nil,
 	"contexto": nil, "doc": nil, "doctor": nil, "up": nil, "relevo": nil, "alinear": nil, "metricas": nil,
 	"pausar": nil, "reanudar": nil, "version": nil, "--skill": nil,
+	"update":   nil, // orq2 only; under orq it stays an unknown command
 	"historia": {"abrir", "pausar", "reanudar"},
 	"config":   {"ver"},
 	"skills":   {"fijar", "verificar"},

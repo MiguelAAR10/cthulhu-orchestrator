@@ -40,10 +40,21 @@ func version() string {
 // uso is the usage text; under orq2 its header names orq2 and VersionOrq2.
 func uso() string {
 	if identidad.EsOrq2() {
-		return strings.Replace(usage, "orq "+Version+" ·", "orq2 "+VersionOrq2+" ·", 1)
+		u := strings.Replace(usage, "orq "+Version+" ·", "orq2 "+VersionOrq2+" ·", 1)
+		return strings.Replace(u, "  orq version\n", usoUpdateOrq2+"  orq version\n", 1)
 	}
 	return usage
 }
+
+// usoUpdateOrq2 is the usage of `orq2 update`, shown only under orq2: orq's usage is 1.0.0's.
+const usoUpdateOrq2 = `  orq2 update [--ver | --volver]   el Owner, en su terminal: instala la punta harness-v2 de Cthulhu solo si
+                                 ese SHA tiene registro de puerta (revisión sin High y make ci exit 0) y
+                                 ningún slice se verifica ni se cierra; muestra el registro y pide escribir
+                                 el SHA corto; guarda la anterior para --volver (que se deshace con otro
+                                 --volver); --ver solo informa
+  orq2 update --registrar SHA --revisor QUIEN --veredicto sin-high --ci-exit 0 --ci-log ARCHIVO
+                                 el integrador: ARCHIVO es el log de make ci de ese SHA y debe nombrarlo
+`
 
 const usage = `orq ` + Version + ` · harness de orquestador-2
 
@@ -211,6 +222,13 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	case "version":
 		fmt.Fprintln(stdout, versionLine(debug.ReadBuildInfo()))
 		return 0
+	case "update":
+		// orq2 only: under orq, `update` stays an unknown command, exactly as in 1.0.0.
+		if identidad.EsOrq2() {
+			return runUpdate(args[1:], stdin, stdout, stderr)
+		}
+		fmt.Fprint(stderr, uso())
+		return 1
 	default:
 		fmt.Fprint(stderr, uso())
 		return 1
