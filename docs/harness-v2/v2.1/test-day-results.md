@@ -58,3 +58,8 @@ and M4 (kill + "continúa") on Y run in its review-findings round (filter-approv
 ## Route X approval (relayed)
 2026-11-21 12:00:50: "aprobado" pasted to Atena (route X), relayed by the filter on the Owner's instruction at ~11:45:
 "haré caso a las recomendaciones de Atena ya para poder cerrar esta historia". Atena's summary was her recommendation A.
+
+## Owner delegation (12:09, via the filter)
+For the rest of the test the filter answers product questions from either route on the Owner's behalf, following Atena's
+recommendations. Each such answer is recorded as "relayed by filter on Owner delegation" with its timestamp; Owner minutes for
+those answers = 0.
