@@ -65,7 +65,7 @@ by builders; S-01 is paused as is.
     "make_ci_on_69e251c": "INVALID again: filter committed docs dc06403/a28ff1a mid-run (25 pkgs ok, 0 FAIL); asked filter not to commit on harness-v2",
     "make_ci_on_8aa4f8b": "PASS exit 0, 15m51s (G2 + G6 code); gate record written (git note refs/notes/orq2-gate)",
     "docs_owner_pages": "merged 2485ee1 (D5-D12, debate response, test-day protocol draft 70ae851); filter commits Owner docs only on docs/owner-pages",
-    "test_day_prep": "protocol draft done (10 open questions for Owner, in the file); RS brownfield scout w47:p42 running (writes docs/harness-v2/v2.1/rs-brownfield-agenda.md on docs/owner-pages)",
+    "test_day_prep": "Owner 22:55: (A) no install of 8aa4f8b; one install after G3+G5. (B) OQ1-OQ10 answered (RS clones ~/worktrees/rs-prueba-orq2 and rs-prueba-simple, date 2026-11-21, 60 min/test, mutmut 20 mutants, kill >=70%, Opus builder + Opus reviewer both routes, blind Opus scorer). Sonnet w47 testday writing answers into the protocol + story parts draft (needs Owner approval) on docs/owner-pages. RS scout profile done fcd3800 (key: dashboard/ has no checks; SQL tests skip without DANTE_TEST_DB_URL so agenda exam must be hermetic; S-01 paused IMPLEMENTANDO 10/11 red)",
     "make_ci_on_f9a936b": "PASS exit 0, 9m36s (lint, gofmt, vet, race 24 pkgs ok, internal/slice 169s vs 302s before G0; e2e-v05 + aislamiento 14/0/0); log ~/.local/share/orq2-gate-logs/make-ci-f9a936b.log",
     "gate_record_f9a936b": "written: git note refs/notes/orq2-gate on f9a936b (orq2 update --registrar, ORQ_ROL=orquestador)",
     "clone_proof_f9a936b": "PASS: version 2.0.0-pilot rev f9a936b modified=false; doctor only the 3 real dead RS sessions; check --caja exit 0; over-cap card lists all 3 violations",
