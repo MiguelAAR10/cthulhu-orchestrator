@@ -1,0 +1,80 @@
+# orq2 v2.0 fixes · component plan
+
+Owner-approved 2026-11-20 ("apruebo todo esto de hallazgos"). Scale: **Medium, fast path**. T, C and A are done:
+the findings were produced by Astra and Fable and then checked against the code by an independent Opus.
+Start at **D (Development)**. Do not re-plan. Do not run Astra, Fable or Codex: the Owner forbade new sessions with them.
+
+## Translation (fixed)
+
+**Story.** As the Owner, I use orq2 v2.0 on a real story (one story at a time, I decide each one) and nothing is
+lost silently, writes do not clobber each other, approve/close survive a crash, the exam tests every folder the
+story touches, memory holds no unproven "confirmado", and an approved story never sits idle.
+
+**Out of scope (v2.1):** resident dispatcher, autopilot, seq/cause events, project id in agent names, fsync and torn-line
+guards in canal/WriteAtomic, capacity reservation, stronger approval identity (H6, H9, H16, H18–H20, H22, H23, H31, H34).
+Not done at all: H15, H28, H32.
+
+**Acceptance (Owner tests it through the pilot story "agenda de visitas" in Real State after install):**
+each group below merged into `harness-v2` with its red test, an independent Opus review with no High findings, and
+`make ci` green on the integrated revision. Then clone proof, `make install2` (Owner told first), story run.
+
+## Sources (read before briefing a worker)
+- Verified findings, one row per finding with `path:line`: `docs/harness-v2/research/hallazgos-verificados.md` (H1–H34)
+- Owner page: `docs/harness-v2/owner/orq2-hallazgos.html`
+- Reports: `docs/harness-v2/research/astra-arquitectura.md` (§4 failure table), `fable-arquitectura.md`, `astra-evaluacion.md`
+- Integration review in flight: `docs/harness-v2/reviews/review-v2-integration.md`
+
+## Activity table
+
+Two lanes, at most 2 builders at once. Each lane is one Herdr pane and one worktree. Groups within a lane go in
+order; each group is one or a few commits, red test first, then a fresh Opus reviewer pane checks it before merge.
+
+| ID | Group | Findings | Lane | Model | Base | Depends on | Verifier |
+|---|---|---|---|---|---|---|---|
+| R2 | Integration review fixes (H1 Zonas as paths, M1 no literal card sizes, M2 orq byte-identity + orq2 all violations, M3 SondaUvDe panic, L1, L3) | review-v2-integration.md | (being built now by the filter session, branch `v2/review2-fixes`, worktree `~/worktrees/cthulhu-r2`) | Opus | 309addf | — | fresh Opus review → `make ci` → clone proof → **install2 (tell Owner first)** |
+| G0 | Fast tests: `t.Parallel` in `internal/slice` where no env/cwd mutation; `make rapido` (gofmt, vet, `go test` changed pkgs, no -race) | H33 | A | Opus | harness-v2 tip | — | `internal/slice` wall time before/after; no test lost (count equal) |
+| G1 | Nothing lost silently: close never deletes the channel (archive per story, keep ids monotonic); `msg send` from a worker clone reaches the project `.orq`; save errors are returned (plan hecha/soltar/debatido, CerrarWorker on unreadable state, memoria.Add on close); one bad memory line does not hide all memory | H2, H17, H27, H7, H13 | A | Opus | after G0 merged | G0 | red tests per item |
+| G2 | Writes that do not clobber: lock + version check on `sesiones.json` and plan saves; two members closing at once still get exactly one verification; contract sent exactly once per task+generation; `MarcarEntregado` takes the channel lock | H3, H4, H5, H8 (+ unmentioned MarcarEntregado) | A | Opus | after G1 merged | G1 | concurrency tests (`-race`) |
+| G3 | Recoverable approve/close: durable intent + resume; "aceptado" logged only once the commit is on main; a crash at each boundary converges to one result (use existing `ORQ_FALLA_EN`) | H10, H11, H12, H29 | A | Opus | after G2 merged | G2 | crash-injection tests at each boundary |
+| G4 | Exam covers every touched folder: per-folder checks derived from scope/diff (Python + `dashboard/` pnpm with its own `node_modules`), re-run on the merge commit; a story touching a folder with no declared check does not open | H14, K8 | B | Opus | harness-v2 tip | — | Python green + dashboard red candidate must not pass |
+| G5 | Memory with evidence: merge/adapt `v2/memoria` (VerificarCita, Reemplazar); `confirmado` computed by orq2 from verifiable evidence, never self-declared; decisions stored only after the event; `mem add --reemplaza` honoured by every view | H24, H25, H26 | B | Opus | after G4 merged | G4 | replay m12/m13: m12 is intention or superseded, never confirmado |
+| G6 | Nothing approved sits idle: `orq2 pendientes` (read-only: who owes what since when) and `orq2 despachar --una-vez` (launch ready tasks of approved slices, idempotent); panel shows "aprobada, falta lanzar" | H1, H30 | B | Opus | after G5 merged | G5 | on a copy of the S-01 `.orq`: prints "aprobada hace N h, T1 lista, sin worker"; two `despachar` runs → one worker |
+
+Rules for every group: orq under identity `orq` stays byte-identical to 1.0.0 (no golden changes); stdlib only;
+English commits ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; no rebase, no `--force`,
+no `-D`; each builder merges `harness-v2` into its lane before delivery and resolves there; the orchestrator merges
+with `--no-ff`. Builders never run `make ci` or install; only the orchestrator does, never two `make ci` at once,
+and only with ≥8 GB RAM free. Tests use isolated `ORQ_STATE/ORQ_LIMITS/ORQ_WORKTREES/ORQ_CONFIG` in a `mktemp -d`.
+Real State (`~/projects/MiguelAR10-Builder/AI-Edge-Runners/products/real-estate/AI-Agent-RealState`) is never touched
+by builders; S-01 is paused as is.
+
+## Checkpoint
+
+```json
+{
+  "phase": "D",
+  "integration_branch": "harness-v2",
+  "integration_owner": "orchestrator pane w47:p3B (since 2026-11-20); filter session w47:p9 relays Owner",
+  "harness_v2_tip": "5f25823 (merge of R2 26a0b91, --no-ff)",
+  "installed": "~/bin/orq2 = see install2 / installed_version; rollback = rollback_binary",
+  "in_flight": {
+    "R2": "integrated 5f25823. Independent Opus review of 309addf..bdf40db: VERDICT no High, no Medium; Lows for v2.1 notes: (a) aviso_ram_gb 0 now invalidates limits.json under orq2 and blocks all Bash (fails closed, release note) (b) card preamble gives one error per line under orq2 (c) lines in duplicate/unknown sections not checked in same pass (d) literal caps in cli.go:93 usage are orq 1.0.0 text, keep. Reviewer pane closed, review worktree removed. Next: make ci on 5f25823, clone proof, tell filter before install2",
+    "clone_proof_5f25823": "PASS (throwaway RS clone + copied .orq/.venv in session scratchpad, isolated ORQ_*): version 2.0.0-pilot rev 5f25823 modified=false; doctor lists only 3 RS sessions that really no longer exist (S-01 paused; correct report, no harness defect); check --caja exit 0 (lint/types/tests run in box; first run failed only because the copied .venv kept shebangs to the live path, rewritten in the copy); over-cap card: orq2 lists all 3 violations in one run, orq name returns only the first (1.0.0)",
+    "make_ci_on_5f25823": "PASS exit 0, 14m54s: lint, gofmt, vet, go test -race 24 pkgs ok (internal/slice 302s), e2e-v05 and aislamiento 14/0/0 (orchestrator-run; modified=true only from untracked docs copied by ci)",
+    "install2": "Owner GO 2026-11-20 (via filter) for 5f25823 code; built from the docs-only commit on top of it so modified=false; result recorded below after install",
+    "rollback_binary": "~/.local/share/orq2-rollback/orq2-24f2438 (copy of previous ~/bin/orq2, reports 1.0.0 revision=24f2438 modified=false); restore: cp -p it to ~/bin/.orq2.new && mv -f ~/bin/.orq2.new ~/bin/orq2",
+    "make_ci_on_309addf": "PASS exit 0, e2e + aislamiento green, 19m19s (filter-run, relayed 2026-11-20); internal/slice 319s under contention",
+    "309addf_installable": "NO: fresh Opus review found 1 High (H1 Zonas) + 3 Medium, all in R2 scope"
+  },
+  "lanes": {
+    "A": {"group": "G0", "state": "in progress", "attempt": 1, "pane": "w47:p3C (agent g0-rapido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g0", "branch": "v2/g0-rapido", "base": "309addf", "started": "2026-11-20"},
+    "B": {"group": "G4", "state": "delivered b6ed893 (base 309addf); follow-up in progress: merge 5f25823, folder checks in orq2 check, orq-gating evidence; then fresh Opus review", "owner_note": "after G4 is installed, RS S-01 will be refused until Owner adds a carpetas.dashboard block to RS .orq/config.json (builder proposed: pnpm run lint / pnpm exec tsc --noEmit / pnpm run test, build optional)", "attempt": 1, "pane": "w47:p3D (agent g4-examen, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g4", "branch": "v2/g4-examen", "base": "309addf", "started": "2026-11-20"}
+  },
+  "lane_A2": {"group": "G1", "state": "in progress", "attempt": 1, "pane": "w47:p3F (agent g1-nada-perdido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g1", "branch": "v2/g1-nada-perdido", "base": "309addf", "note": "Owner 2026-11-20: G1 runs in parallel with G0, merges G0 at delivery; G5 still waits for G4"},
+  "briefs": "session scratchpad brief-g0.md / brief-g4.md (also re-derivable from this plan's rows)",
+  "parked": ["v2/panel", "v2/locks", "v2/memoria (input to G5)", "v2/tui (branch only)"],
+  "attempts": {"G0": 1, "G4": 1, "G1": 1, "R2_review": 1},
+  "owner_last_update": "2026-11-20 evening: approved all findings, asked for speed",
+  "next_action": "review G1 then G4 sequentially with ONE fresh Opus reviewer (machine loaded). Poll A and B every ~10 min; on delivery: diff check, fresh Opus reviewer pane, merge --no-ff into harness-v2, then make ci (one at a time, >=8 GB free); wait for R2 delivery and make ci result from filter"
+}
+```
