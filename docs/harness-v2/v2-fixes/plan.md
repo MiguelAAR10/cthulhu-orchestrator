@@ -39,6 +39,7 @@ order; each group is one or a few commits, red test first, then a fresh Opus rev
 | G4 | Exam covers every touched folder: per-folder checks derived from scope/diff (Python + `dashboard/` pnpm with its own `node_modules`), re-run on the merge commit; a story touching a folder with no declared check does not open | H14, K8 | B | Opus | harness-v2 tip | — | Python green + dashboard red candidate must not pass |
 | G5 | Memory with evidence: merge/adapt `v2/memoria` (VerificarCita, Reemplazar); `confirmado` computed by orq2 from verifiable evidence, never self-declared; decisions stored only after the event; `mem add --reemplaza` honoured by every view | H24, H25, H26 | B | Opus | after G4 merged | G4 | replay m12/m13: m12 is intention or superseded, never confirmado |
 | G6 | Nothing approved sits idle: `orq2 pendientes` (read-only: who owes what since when) and `orq2 despachar --una-vez` (launch ready tasks of approved slices, idempotent); panel shows "aprobada, falta lanzar" | H1, H30 | B | Opus | after G5 merged | G5 | on a copy of the S-01 `.orq`: prints "aprobada hace N h, T1 lista, sin worker"; two `despachar` runs → one worker |
+| G7 | Self-update (Owner request 2026-11-20): `orq2 update` installs the harness-v2 tip of this repo only if that exact SHA has a gate record (independent review no High + `make ci` exit 0 for that SHA; small gate record file written by the integrator); refuses while any slice is verifying or closing; keeps the current binary as rollback; atomic install to `~/bin/orq2` only; prints old→new revision. `--ver` only reports whether a newer gated version exists; `--volver` restores the rollback. Owner-only from a TTY; never under identity `orq` | Owner request | first free lane (A after G0 merged), else B after G6 | Opus | harness-v2 tip at launch | — (no collision with G1/G4 beyond cli wiring) | red tests: ungated SHA refused, slice verifying refused, non-TTY refused, orq identity has no `update`, `--volver` restores byte-identical, `--ver` read-only |
 
 Rules for every group: orq under identity `orq` stays byte-identical to 1.0.0 (no golden changes); stdlib only;
 English commits ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; no rebase, no `--force`,
@@ -73,6 +74,8 @@ by builders; S-01 is paused as is.
   },
   "lane_A2": {"group": "G1", "state": "in progress", "attempt": 1, "pane": "w47:p3F (agent g1-nada-perdido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g1", "branch": "v2/g1-nada-perdido", "base": "309addf", "note": "Owner 2026-11-20: G1 runs in parallel with G0, merges G0 at delivery; G5 still waits for G4"},
   "briefs": "session scratchpad brief-g0.md / brief-g4.md (also re-derivable from this plan's rows)",
+  "queued": {"G7": "launch in lane A as soon as G0 is merged; gate record format defined by G7 builder, integrator writes it for each gated SHA"},
+  "owner_held": {"RS carpetas.dashboard config": "proposal held; Owner approves when next RS story (agenda de visitas) starts"},
   "parked": ["v2/panel", "v2/locks", "v2/memoria (input to G5)", "v2/tui (branch only)"],
   "attempts": {"G0": 1, "G4": 1, "G1": 1, "R2_review": 1},
   "owner_last_update": "2026-11-20 evening: approved all findings, asked for speed",
