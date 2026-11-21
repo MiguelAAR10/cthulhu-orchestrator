@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>orq2 · Mapa de la v2.0</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna; arriba "ahora mismo", luego el método (pipeline), fase 1 y fase 2 paso a paso, después el bucle tipo Kubernetes y el orden de la v2.1. */
+:root{
+  --paper:#f2f1ed; --pen:#121212; --soft:#5d5b55; --rule:#121212; --tint:#e4e2dc;
+  --alert:#c1121f; --ok:#2f6b3a; --wait:#9a6a00; --shadow:#121212;
+  --f-display:"Pixelify Sans","IBM Plex Mono",monospace;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0a0a09; --pen:#e9e7e1; --soft:#a6a39b; --rule:#e9e7e1; --tint:#1b1a18;
+  --alert:#ff4d5a; --ok:#6cc27a; --wait:#e0b040; --shadow:#e9e7e1; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0a0a09; --pen:#e9e7e1; --soft:#a6a39b; --rule:#e9e7e1; --tint:#1b1a18;
+  --alert:#ff4d5a; --ok:#6cc27a; --wait:#e0b040; --shadow:#e9e7e1; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--pen);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px}
+.wrap{max-width:920px;margin:0 auto;display:grid;gap:44px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,5vw,42px);line-height:1.05}
+h2{font-size:22px;border-bottom:3px solid var(--rule);padding-bottom:6px;margin-bottom:14px}
+h3{font-size:17px}
+p{margin:0;max-width:70ch}
+section{display:grid;gap:12px}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--tint);padding:1px 5px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+.lead{font-size:17px}
+.now{border:3px solid var(--alert);box-shadow:6px 6px 0 var(--shadow);padding:16px 18px;display:grid;gap:10px}
+.now h2{border:0;padding:0;margin:0;color:var(--alert)}
+.now ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:11.5px;padding:1px 7px;border:2px solid currentColor;font-weight:500;white-space:nowrap}
+.pill.red{color:var(--alert)} .pill.ok{color:var(--ok)} .pill.wait{color:var(--wait)} .pill.dim{color:var(--soft)}
+.diagram{border:2px solid var(--rule);padding:12px;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:640px;height:auto}
+svg .box{fill:var(--paper);stroke:var(--pen);stroke-width:2}
+svg .box.hot{stroke:var(--alert);stroke-width:3}
+svg .box.tint{fill:var(--tint)}
+svg text{fill:var(--pen);font-family:var(--f-mono);font-size:13px}
+svg text.t{font-family:var(--f-display);font-size:15px}
+svg text.s{fill:var(--soft);font-size:11.5px}
+svg text.r{fill:var(--alert)}
+svg .ln{stroke:var(--pen);stroke-width:2;fill:none}
+svg .ln.hot{stroke:var(--alert)}
+svg .ln.dash{stroke-dasharray:5 4}
+svg .ah{fill:var(--pen)} svg .ah.hot{fill:var(--alert)}
+.steps{display:grid;gap:0;border-top:2px solid var(--rule)}
+.step{display:grid;grid-template-columns:64px 1fr;gap:14px;padding:14px 0;border-bottom:1px solid var(--tint)}
+.step .n{font-family:var(--f-display);font-size:20px}
+.step .b{display:grid;gap:6px;min-width:0}
+.step .m{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.step .gate{font-size:13.5px;color:var(--soft)} .step .gate b{color:var(--pen)}
+.step pre{margin:0;background:var(--tint);padding:8px 10px;overflow-x:auto;font-family:var(--f-mono);font-size:12.5px;line-height:1.5}
+.tbl{overflow-x:auto;border:2px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:640px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--tint)}
+th{font-family:var(--f-mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;background:var(--tint)}
+tr:last-child td{border-bottom:0}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.rule{border:2px solid var(--rule);padding:12px;display:grid;gap:4px;align-content:start}
+.rule b{font-family:var(--f-display);font-weight:500;font-size:16px}
+.rule span{font-size:13.5px;color:var(--soft)}
+.k8s{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.k8s div{border-left:6px solid var(--pen);background:var(--tint);padding:10px 12px;display:grid;gap:2px}
+.k8s .k{font-family:var(--f-mono);font-size:12px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em}
+@media (max-width:560px){.step{grid-template-columns:44px 1fr}}
+footer{font-size:13px;color:var(--soft)}
+a{color:var(--pen)}
+:focus-visible{outline:3px solid var(--alert);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header style="display:grid;gap:10px">
+  <span class="eyebrow">orq2 v2.0 · mapa · 20 nov 2026, 21:35 Lima · <a href="orq2-hallazgos.html">hallazgos</a> · <a href="orq2-ejecucion.html">plan de ejecución</a></span>
+  <h1>Qué estamos construyendo y cómo sabemos que mejora</h1>
+  <p class="lead">Cada arreglo nace de un fallo comprobado en el código. Cada uno se apoya en un principio de ingeniería conocido y se demuestra con una prueba que primero falla y después pasa. Al final lo medimos con una historia real.</p>
+</header>
+
+<section class="now" aria-labelledby="valor">
+  <h2 id="valor">El valor que buscamos</h2>
+  <p><b>Que tú solo escribas la historia y orq2 la entregue en main, con pruebas y demo, sin que tengas que vigilarla ni revisar el código.</b></p>
+  <ol>
+    <li><b>Métrica principal:</b> tus minutos por historia aceptada. La meta es 10 min o menos, desde que está verificada hasta que la decides.</li>
+    <li><b>Lo que hace falta para eso:</b> que nada se pierda, que nada se rompa con una caída, que el examen pruebe todo, que la memoria no mienta y que nada aprobado se quede quieto.</li>
+    <li><b>La v2.0 lo hace seguro con una historia a la vez, y tú decides.</b> La v2.1 lo vuelve autónomo con el despachador al estilo Kubernetes.</li>
+  </ol>
+</section>
+
+<section aria-labelledby="sistema">
+  <h2 id="sistema">El mapa: qué guarda orq2 y qué grupo protege cada pieza</h2>
+  <p>orq2 no tiene base de datos ni servidor: todo vive en archivos dentro de <code>.orq/</code> y en Git. Cada fallo era una forma en que uno de esos archivos podía quedar mal.</p>
+  <div class="diagram" role="img" aria-label="Archivos de orq2 y qué grupo protege cada uno">
+    <svg viewBox="0 0 900 360" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="box hot" x="330" y="20" width="240" height="56"/><text class="t r" x="346" y="46">Comandos orq2</text><text class="s" x="346" y="66">agentes y tú los ejecutan</text>
+      <rect class="box tint" x="20" y="130" width="190" height="64"/><text class="t" x="34" y="156">canal.jsonl</text><text class="s" x="34" y="178">mensajes entre agentes</text>
+      <rect class="box tint" x="230" y="130" width="190" height="64"/><text class="t" x="244" y="156">sesiones.json + plan</text><text class="s" x="244" y="178">quién trabaja en qué</text>
+      <rect class="box tint" x="440" y="130" width="210" height="64"/><text class="t" x="454" y="156">slices/NN + Git</text><text class="s" x="454" y="178">tarjeta, contrato, examen</text>
+      <rect class="box tint" x="670" y="130" width="210" height="64"/><text class="t" x="684" y="156">memoria.jsonl</text><text class="s" x="684" y="178">hechos y decisiones</text>
+      <path class="ln" d="M450,76 V100 H115 V128" marker-end="url(#m)"/><path class="ln" d="M450,76 V100 H325 V128" marker-end="url(#m)"/>
+      <path class="ln" d="M450,76 V100 H545 V128" marker-end="url(#m)"/><path class="ln" d="M450,76 V100 H775 V128" marker-end="url(#m)"/>
+      <rect class="box" x="20" y="230" width="190" height="110"/><text class="t" x="34" y="256">G1</text><text x="34" y="278">no se borra al cerrar</text><text x="34" y="296">no se pierde un mensaje</text><text x="34" y="314">errores visibles</text>
+      <rect class="box" x="230" y="230" width="190" height="110"/><text class="t" x="244" y="256">G2</text><text x="244" y="278">candado + versión</text><text x="244" y="296">una sola verificación</text><text x="244" y="314">contrato 1 vez</text>
+      <rect class="box" x="440" y="230" width="210" height="110"/><text class="t" x="454" y="256">G3 · G4 · G6</text><text x="454" y="278">G3: sobrevive caídas</text><text x="454" y="296">G4: examen por carpeta</text><text x="454" y="314">G6: nada quieto</text>
+      <rect class="box" x="670" y="230" width="210" height="110"/><text class="t" x="684" y="256">G5</text><text x="684" y="278">confirmado = evidencia</text><text x="684" y="296">el rol sale del registro</text><text x="684" y="314">reemplazos formales</text>
+      <path class="ln dash" d="M115,194 V228"/><path class="ln dash" d="M325,194 V228"/><path class="ln dash" d="M545,194 V228"/><path class="ln dash" d="M775,194 V228"/>
+    </svg>
+  </div>
+</section>
+
+<section aria-labelledby="logica">
+  <h2 id="logica">La lógica de cada grupo: fallo, hipótesis, principio, prueba</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Grupo</th><th>Fallo comprobado</th><th>Hipótesis</th><th>Principio y referencia</th><th>Cómo lo probamos</th><th>Estado</th></tr></thead>
+    <tbody>
+      <tr><td>G0</td><td>115 pruebas en fila. CI de 15 a 19 min</td><td>Correr en paralelo las que no comparten estado baja el tiempo sin perder cobertura</td><td>Aislamiento de pruebas (<code>t.Parallel</code> de Go). Una pirámide de pruebas rápida para el día a día</td><td>Mismas 115 pruebas antes y después, y el tiempo medido</td><td><span class="pill ok">302 s → 169 s · CI 9,6 min</span></td></tr>
+      <tr><td>G1</td><td>Cerrar borraba el canal. Errores de guardado escondidos</td><td>Si nada se borra y todo error se ve, no se pierde trabajo en silencio</td><td><b>Registro de solo agregar</b> (append-only log, base del event sourcing). <b>Fallar a la vista</b> (fail loudly)</td><td>Prueba en rojo por cada caso: cerrar conserva los mensajes; un guardado que falla devuelve error</td><td><span class="pill ok">integrado</span></td></tr>
+      <tr><td>G2</td><td>Dos procesos reescriben <code>sesiones.json</code> entero y uno pisa al otro</td><td>Con un candado y un número de versión, una escritura vieja se rechaza en vez de pisar</td><td><b>Concurrencia optimista</b> (compare-and-swap, como los ETag de HTTP o el <code>resourceVersion</code> de Kubernetes) y exclusión mutua con <code>flock</code></td><td>Pruebas con dos procesos a la vez y el detector de carreras <code>-race</code>: siempre hay exactamente un resultado</td><td><span class="pill wait">segunda revisión hecha</span></td></tr>
+      <tr><td>G3</td><td>Una caída a mitad de aprobar o cerrar deja todo trabado, y "aceptado" se anota antes de llegar a main</td><td>Si primero se anota la intención y después se actúa, siempre se puede retomar</td><td><b>Write-ahead log</b> (como las bases de datos) e <b>idempotencia</b> (repetir da un solo resultado, como las idempotency keys de los pagos)</td><td><b>Inyección de fallos</b>: se corta el proceso en cada frontera (<code>ORQ_FALLA_EN</code>) y debe converger a un solo resultado</td><td><span class="pill dim">después de G2</span></td></tr>
+      <tr><td>G4</td><td>El examen solo corría Python. El tablero web quedaba sin probar</td><td>Si cada carpeta tocada tiene sus checks y se repiten sobre el commit final, nada roto pasa</td><td><b>Fallar cerrado</b> (fail-closed): una carpeta sin check no se abre. Se verifica exactamente lo que se publica</td><td>Un candidato con Python en verde y el tablero roto <b>no</b> debe pasar</td><td><span class="pill ok">integrado</span></td></tr>
+      <tr><td>G5</td><td>"Confirmado" lo decidía el mismo agente que escribía. Así nació el hecho falso m12</td><td>Si la confianza la calcula orq2 desde evidencia que él mismo escribió, no entra nada falso</td><td><b>Procedencia</b> (provenance): de dónde sale cada dato. <b>Separar a quien escribe de quien da fe</b></td><td>Se repite el caso m12: debe quedar como intención y nunca como confirmado. Tampoco sirve un agente que se hace pasar por otro rol</td><td><span class="pill red">último intento</span></td></tr>
+      <tr><td>G6</td><td>S-01 pasó 17 h aprobada sin worker</td><td>Si una función calcula lo que falta y otra lo lanza sin duplicar, nada queda quieto</td><td><b>Reconciliación</b> de los controladores de Kubernetes: comparar lo deseado con lo real. Esta es la versión "una vez"; la residente llega en la v2.1</td><td>Sobre una copia de S-01 dice "aprobada hace 17 h, T1 lista". Dos <code>despachar</code> dejan un solo worker</td><td><span class="pill wait">entregado</span></td></tr>
+      <tr><td>G7</td><td>Actualizar era manual y propenso a errores</td><td>Instalar solo lo que pasó el control, con confirmación tuya, evita versiones malas</td><td><b>Promoción por control</b> (como un pipeline de despliegue con aprobación) y <b>rollback</b> siempre disponible</td><td>Un agente no puede instalar. Un commit sin registro de control se rechaza</td><td><span class="pill ok">integrado</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section aria-labelledby="metodo">
+  <h2 id="metodo">Cómo medimos que la hipótesis se cumple</h2>
+  <div class="rules">
+    <div class="rule"><b>1 · Prueba en rojo primero</b><span>La prueba reproduce el fallo y falla. Después del arreglo pasa. Si se revierte el arreglo, vuelve a fallar: así sabemos que la prueba mide de verdad.</span></div>
+    <div class="rule"><b>2 · Revisor independiente</b><span>Un Opus que no escribió el código lo ataca. Hasta ahora cazó <b>8 problemas altos</b> antes de que llegaran a tu máquina: 1 en la integración de la v2 (las zonas, que corrigió R2), 1 en G7 (cualquier agente podía instalar un binario), 1 en G2 y 5 en G5 (la memoria). Además encontró problemas medios en G1, G4 y G6. Uno de ellos habría roto <code>orq</code> 1.0.0.</span></div>
+    <div class="rule"><b>3 · CI completa</b><span>gofmt, vet, staticcheck, 24 paquetes con <code>-race</code>, 86 pruebas e2e y 14 de aislamiento que intentan escaparse de la caja.</span></div>
+    <div class="rule"><b>4 · Clon real</b><span>El binario candidato se prueba en una copia de Real State antes de instalarlo.</span></div>
+    <div class="rule"><b>5 · Compatibilidad</b><span><code>orq</code> 1.0.0 debe quedar byte a byte igual. Los goldens no se tocan.</span></div>
+    <div class="rule"><b>6 · Historia real</b><span>Agenda de visitas en Real State: tus minutos, los tiempos de cada etapa, RAM, CPU, costo, la memoria y si decidiste sin abrir el código.</span></div>
+  </div>
+</section>
+
+<section aria-labelledby="refs">
+  <h2 id="refs">Referencias de arquitectura que usamos</h2>
+  <div class="k8s">
+    <div><span class="k">Kubernetes</span><b>Controladores y reconciliación</b><span>Despachador de la v2.1, con G6 como primer paso. Lease con latido y un solo líder por proyecto.</span></div>
+    <div><span class="k">Bases de datos</span><b>Write-ahead log</b><span>G3: primero la intención durable, después la acción.</span></div>
+    <div><span class="k">Event sourcing</span><b>Log de solo agregar</b><span>El diario como fuente de verdad. G1 deja de borrar. En la v2.1, el diario es el bus.</span></div>
+    <div><span class="k">HTTP / Kubernetes</span><b>Concurrencia optimista</b><span>G2: versión en cada escritura; si el archivo cambió, se rechaza en vez de pisar.</span></div>
+    <div><span class="k">Pagos</span><b>Idempotencia</b><span>G3 y G6: repetir aprobar, lanzar o cerrar da un solo resultado.</span></div>
+    <div><span class="k">Seguridad</span><b>Fallar cerrado y mínimo privilegio</b><span>G4, G5 y G7: ante la duda se bloquea. Un agente no instala ni da fe de sí mismo.</span></div>
+  </div>
+  <p style="margin-top:10px"><b>Lo que decidimos no usar</b>, de acuerdo con Fable y Astra: un bus con agentes suscritos, una base de datos o cola externa, un servidor o un segundo orquestador hecho con un modelo. Agregan costo y puntos de fallo sin acercar el valor.</p>
+</section>
+
+<footer>Fuentes: <code>docs/harness-v2/v2-fixes/plan.md</code> (checkpoint del Orquestador), <code>research/hallazgos-verificados.md</code>, los informes de Fable y Astra, y los logs de CI en <code>~/.local/share/orq2-gate-logs/</code>. Los conteos de problemas altos salen del checkpoint y de los avisos del Orquestador.</footer>
+</div>
+</body>
+</html>

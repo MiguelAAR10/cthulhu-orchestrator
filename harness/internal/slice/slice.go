@@ -300,6 +300,22 @@ func (r Repo) Abiertos() ([]*Estado, error) {
 	return out, nil
 }
 
+// Leidos returns the open slices like Abiertos, but never migrates nor writes anything: it is for
+// strictly read-only views (orq2 pendientes).
+func (r Repo) Leidos() ([]*Estado, error) {
+	m, _ := filepath.Glob(filepath.Join(r.dirSlices(), "*.json"))
+	slices.Sort(m)
+	var out []*Estado
+	for _, f := range m {
+		e, err := leerEstado(f)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
 // ErrVarios: hay más de un slice abierto y no se dijo cuál.
 var ErrVarios = errors.New("hay varios slices abiertos")
 
