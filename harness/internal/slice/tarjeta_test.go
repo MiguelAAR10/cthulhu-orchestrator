@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"orq/internal/diario"
 )
@@ -231,4 +232,107 @@ func TestTopesTarjetaDiceLasConstantes(t *testing.T) {
 			t.Errorf("caps sentence lacks %d: %s", n, TopesTarjeta())
 		}
 	}
+}
+
+// M2: under orq every invalid card gives the exact error 1.0.0 gave (the first in document order);
+// under orq2 the same cards give every violation, structural ones included.
+func TestLeerTarjetaErroresComo100(t *testing.T) {
+	cambiar := func(s, viejo, nuevo string) string { return strings.Replace(s, viejo, nuevo, 1) }
+	larga := cambiar(tarjetaBuena, "Ve el recibo al terminar.", strings.Repeat("x", 201))
+	historia := cambiar(tarjetaBuena, "Ve el recibo al terminar.\n", "a\nb\nc\n")
+	casos := map[string]string{
+		"larga y desconocida":        cambiar(larga, "## Preguntas", "## Otra\nalgo\n## Preguntas"),
+		"larga y repetida":           cambiar(larga, "## Preguntas", "## Fuera\notra\n## Preguntas"),
+		"larga y preguntas repetida": larga + "\n" + "## Preguntas\nx\n",
+		"historia y desconocida":     cambiar(historia, "## Preguntas", "## Otra\n## Preguntas"),
+		"zona y repetida":            cambiar(cambiar(tarjetaBuena, "web/carrito", "../otro"), "## Preguntas", "## Zonas\nsrc\n## Preguntas"),
+		"texto suelto y larga":       "hola\n" + larga,
+		"palabras y zona":            cambiar(cambiar(tarjetaBuena, "pagos en cuotas", strings.Repeat(strings.Repeat("a ", 90)+"\n", 5)), "web/carrito", "/etc"),
+		"falta y zona":               cambiar(cambiar(tarjetaBuena, "* ninguna\n", ""), "web/carrito", "."),
+	}
+	t.Setenv("ORQ_NOMBRE", "")
+	for nombre, texto := range casos {
+		_, got := LeerTarjeta(texto)
+		_, want := leerTarjeta100(texto)
+		if got == nil || want == nil || got.Error() != want.Error() {
+			t.Errorf("orq %s: got %v, 1.0.0 gave %v", nombre, got, want)
+		}
+	}
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	todas := map[string][]string{
+		"larga y desconocida":        {"201 caracteres", "sección desconocida \"Otra\""},
+		"larga y repetida":           {"201 caracteres", "la sección Fuera está dos veces"},
+		"larga y preguntas repetida": {"201 caracteres", "la sección Preguntas está dos veces"},
+		"texto suelto y larga":       {"texto fuera de una sección: \"hola\"", "201 caracteres"},
+		"zona y repetida":            {"la sección Zonas está dos veces", "\"../otro\""},
+	}
+	for nombre, quiere := range todas {
+		_, err := LeerTarjeta(casos[nombre])
+		for _, q := range quiere {
+			if err == nil || !strings.Contains(err.Error(), q) {
+				t.Errorf("orq2 %s: missing %q in %v", nombre, q, err)
+			}
+		}
+	}
+}
+
+// leerTarjeta100 is LeerTarjeta as released in orq 1.0.0, kept to compare error output byte by byte.
+func leerTarjeta100(texto string) (Tarjeta, error) {
+	partes := map[string][]string{}
+	actual, palabras := "", 0
+	for _, l := range strings.Split(texto, "\n") {
+		l = strings.TrimSpace(l)
+		if titulo, ok := strings.CutPrefix(l, "## "); ok {
+			actual = ""
+			for _, s := range seccionesTarjeta {
+				if strings.EqualFold(strings.TrimSpace(titulo), s) {
+					actual = s
+				}
+			}
+			if actual == "" {
+				return Tarjeta{}, fmt.Errorf("sección desconocida %q: la tarjeta tiene %s", titulo, strings.Join(seccionesTarjeta, ", "))
+			}
+			if _, ya := partes[actual]; ya {
+				return Tarjeta{}, fmt.Errorf("la sección %s está dos veces", actual)
+			}
+			partes[actual] = nil
+			continue
+		}
+		if l == "" || actual == "" && strings.HasPrefix(l, "# ") {
+			continue
+		}
+		if actual == "" {
+			return Tarjeta{}, fmt.Errorf("texto fuera de una sección: %q", l)
+		}
+		l = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(l, "- "), "* "))
+		if n := utf8.RuneCountInString(l); n > maxCaracteres {
+			return Tarjeta{}, fmt.Errorf("en %s, una línea tiene %d caracteres; el tope es %d", actual, n, maxCaracteres)
+		}
+		palabras += len(strings.Fields(l))
+		partes[actual] = append(partes[actual], l)
+	}
+	if palabras > maxPalabras {
+		return Tarjeta{}, fmt.Errorf("la tarjeta tiene %d palabras; el tope es %d (se lee en 3 minutos)", palabras, maxPalabras)
+	}
+	for _, s := range seccionesTarjeta {
+		tope := maxLineasSeccion
+		if s == "Historia" {
+			tope = maxLineasHistoria
+		}
+		switch n := len(partes[s]); {
+		case n == 0:
+			return Tarjeta{}, fmt.Errorf("falta la sección %s o está vacía (si no hay nada, escribe «ninguna»)", s)
+		case n > tope:
+			return Tarjeta{}, fmt.Errorf("la sección %s tiene %d líneas; el tope es %d", s, n, tope)
+		}
+	}
+	for _, z := range partes["Zonas"] {
+		if filepath.IsAbs(z) || z == ".." || strings.HasPrefix(filepath.Clean(z), "../") {
+			return Tarjeta{}, fmt.Errorf("en Zonas, %q no es una ruta dentro del repo", z)
+		}
+		if c := strings.Trim(filepath.Clean(z), "/"); c == "." || c == "" {
+			return Tarjeta{}, fmt.Errorf("en Zonas, %q cubre todo el repo: nombra las carpetas o archivos que se tocan, no la raíz", z)
+		}
+	}
+	return Tarjeta{Historia: partes["Historia"], Fuera: partes["Fuera"], Examen: partes["Examen"], Zonas: partes["Zonas"], Preguntas: partes["Preguntas"]}, nil
 }

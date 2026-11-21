@@ -43,6 +43,21 @@ type Limits struct {
 	AvisoRAMGB *float64 `json:"aviso_ram_gb,omitempty"`
 }
 
+// limitsOrq es Limits como lo leía orq 1.0.0: sin aviso_ram_gb, que DisallowUnknownFields rechaza.
+// Tiene los mismos campos que Limits (la conversión no compila si divergen); solo cambia la etiqueta.
+type limitsOrq struct {
+	MinFreeGB         map[string]float64 `json:"min_free_gb"`
+	MaxWorkers        *int               `json:"max_workers"`
+	Scratch           Scratch            `json:"scratch"`
+	StateMaxAgeHours  *float64           `json:"state_max_age_hours"`
+	Protected         []string           `json:"protected"`
+	WorkerProcessName []string           `json:"worker_process_names"`
+	PushRamas         []string           `json:"push_ramas,omitempty"`
+	MaxSlices         int                `json:"max_slices,omitempty"`
+	Sandbox           Sandbox            `json:"sandbox,omitempty"`
+	AvisoRAMGB        *float64           `json:"-"`
+}
+
 // AvisoRAMPorDefecto is the RAM warning in GB when limits.json does not set aviso_ram_gb.
 const AvisoRAMPorDefecto = 5.0
 
@@ -71,7 +86,14 @@ func Load(path string) (Limits, error) {
 	}
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&l); err != nil {
+	if identidad.EsOrq2() {
+		err = dec.Decode(&l)
+	} else {
+		var lo limitsOrq
+		err = dec.Decode(&lo)
+		l = Limits(lo)
+	}
+	if err != nil {
 		return l, fmt.Errorf("limits: JSON inválido en %s: %w", path, err)
 	}
 	if err := l.validate(); err != nil {
@@ -98,6 +120,8 @@ func (l Limits) validate() error {
 		return fmt.Errorf("falta max_workers")
 	case l.MaxWorkers != nil && *l.MaxWorkers < 0 && identidad.EsOrq2():
 		return fmt.Errorf("max_workers no puede ser negativo (%d); quítalo para que decidan RAM, CPU y carga", *l.MaxWorkers)
+	case l.AvisoRAMGB != nil && !(*l.AvisoRAMGB > 0):
+		return fmt.Errorf("aviso_ram_gb debe ser mayor que 0 (%g); quítalo para avisar con %g GB", *l.AvisoRAMGB, AvisoRAMPorDefecto)
 	case l.StateMaxAgeHours == nil:
 		return fmt.Errorf("falta state_max_age_hours")
 	case len(l.Scratch.Paths) == 0:
