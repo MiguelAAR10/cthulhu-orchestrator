@@ -635,12 +635,17 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s: huella tomada del rojo (%s), el examen es idéntico. Vuelve a verificar\n", e.Attempt(), slice.Corto(e.SHARojo))
 		return 0
 	case "reabrir":
+		args, revoca, errRev := revocaRechazo(args)
+		if errRev != nil {
+			fmt.Fprintln(stderr, "orq slice:", errRev)
+			return 1
+		}
 		if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {
 			fmt.Fprintln(stderr, "uso: orq slice reabrir \"qué se repara y quién lo pidió\"")
 			return 1
 		}
 		motivo := strings.Join(args[1:], " ")
-		e, err := r.Reabrir(nn, motivo)
+		e, err := r.Reabrir(nn, motivo, revoca(motivo)...)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
@@ -650,6 +655,11 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s reabierto en el mismo worktree, con su trabajo. El recibo ya no vale: lanza la reparación y vuelve a verificar\n", e.Attempt())
 		return 0
 	case "reintentar":
+		args, revoca, errRev := revocaRechazo(args)
+		if errRev != nil {
+			fmt.Fprintln(stderr, "orq slice:", errRev)
+			return 1
+		}
 		owner, causa := false, ""
 		var resto []string
 		for i := 1; i < len(args); i++ {
@@ -668,7 +678,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		args = append(args[:1], resto...)
-		e, err := r.Reintentar(nn, strings.Join(resto, " "), causa, owner)
+		e, err := r.Reintentar(nn, strings.Join(resto, " "), causa, owner, revoca(strings.Join(resto, " "))...)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
@@ -997,4 +1007,19 @@ func partir(s string) []string {
 		}
 	}
 	return out
+}
+
+// revocaRechazo takes --revoca-rechazo out of args (orq2 only; under orq it stays part of the text,
+// as in 1.0.0). Revoking a rejection the Owner decided is the Owner's: only from the Owner's
+// terminal. The returned func builds the override with the command's reason.
+func revocaRechazo(args []string) ([]string, func(string) []slice.RevocaRechazo, error) {
+	nada := func(string) []slice.RevocaRechazo { return nil }
+	if !identidad.EsOrq2() || !slices.Contains(args, "--revoca-rechazo") {
+		return args, nada, nil
+	}
+	if err := soloOwner(os.Stdin); err != nil {
+		return args, nada, fmt.Errorf("revocar un rechazo %w", err)
+	}
+	resto := slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--revoca-rechazo" })
+	return resto, func(por string) []slice.RevocaRechazo { return []slice.RevocaRechazo{{Por: por}} }, nil
 }

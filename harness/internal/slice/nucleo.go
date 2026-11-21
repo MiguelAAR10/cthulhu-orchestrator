@@ -461,6 +461,10 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 		return e, out, err
 	}
 	if identidad.EsOrq2() {
+		// A close the Owner decided while the exam ran wins over its receipt.
+		if err := ahora.CierrePendiente(); err != nil {
+			return ahora, out, err
+		}
 		// The exam ran on the contract loaded at the start: a receipt is issued only if it still holds.
 		// The result is written on the state as it is now, so nothing changed meanwhile is lost.
 		if dif := difContrato(e, ahora); len(dif) > 0 {
@@ -520,6 +524,34 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 // RevocaRechazo is the Owner's explicit override of a rejection still being closed (orq2): Por
 // says why. The CLI only builds it from the Owner's terminal.
 type RevocaRechazo struct{ Por string }
+
+// soltarCierre clears e's close decision before a reopen or a new attempt (only orq2 records one).
+// An accepted close that stopped is no longer under way and is dropped. A rejection the Owner
+// decided is never dropped silently: it is finished with cerrar --rechazado, or revoked by the
+// Owner's explicit override, which the diario records. The caller saves e.
+func (r Repo) soltarCierre(e *Estado, revoca []RevocaRechazo) error {
+	switch {
+	case e.Cierre == nil:
+		return nil
+	case e.Cierre.Resultado != "rechazado":
+		e.Cierre = nil
+		return nil
+	case len(revoca) == 0 || strings.TrimSpace(revoca[0].Por) == "":
+		return fmt.Errorf("%s: el Owner ya decidió rechazarlo (%q); termina el rechazo: `%s slice --slice %s cerrar --rechazado %q`. Solo el Owner lo revoca, desde su terminal, con --revoca-rechazo",
+			e.ID(), e.Cierre.Motivo, identidad.Nombre(), e.NN, e.Cierre.Motivo)
+	}
+	decidido := e.Cierre.TS.UTC().Format(time.RFC3339Nano)
+	ev := diario.Evento{Tipo: "revocacion", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(), Resultado: "rechazado", Detalle: revoca[0].Por,
+		Datos: map[string]any{"motivo": e.Cierre.Motivo, "decidido": decidido}}
+	if err := r.anotarUnaVez(ev, func(x diario.Evento) bool {
+		d, _ := x.Datos["decidido"].(string)
+		return x.Tipo == "revocacion" && x.Slice == e.NN && x.Intento == e.Intento && d == decidido
+	}); err != nil {
+		return err
+	}
+	e.Cierre = nil
+	return nil
+}
 
 // difContrato lists the contract fields that changed between two copies of a slice's state; the
 // card does not count (approving it does not change what a receipt proves).
@@ -594,6 +626,9 @@ func (r Repo) Reintentar(nn, cambio, causa string, decisionOwner bool, revoca ..
 	if e.Intento >= MaxIntentos && !decisionOwner {
 		return e, fmt.Errorf("%s ya lleva %d intentos: el siguiente lo decide el Owner (el Atena pregunta y luego --decision-owner), o se parte la historia", e.ID(), e.Intento)
 	}
+	if err := r.soltarCierre(e, revoca); err != nil {
+		return e, err
+	}
 	if err := r.sellarRecibo(e.NN, nil); err != nil {
 		return e, err
 	}
@@ -604,7 +639,6 @@ func (r Repo) Reintentar(nn, cambio, causa string, decisionOwner bool, revoca ..
 	}
 	e.FirmaFallo = ""
 	e.Fase, e.Fallos, e.HeadFallo, e.Recibo, e.Motivo, e.Escritor = Implementando, 0, "", nil, "", ""
-	e.Cierre = nil // a new attempt is a new decision (only orq2 records one)
 	return e, r.save(e)
 }
 
@@ -771,11 +805,13 @@ func (r Repo) Reabrir(nn, motivo string, revoca ...RevocaRechazo) (*Estado, erro
 	if strings.TrimSpace(motivo) == "" {
 		return e, errors.New("di qué se repara; reabrir sin motivo no vale")
 	}
+	if err := r.soltarCierre(e, revoca); err != nil {
+		return e, err
+	}
 	if err := errors.Join(r.sellarRecibo(e.NN, nil), r.borrarRef(refIntegrado(e.NN))); err != nil {
 		return e, err
 	}
 	e.Fase, e.Recibo, e.Integrado, e.Motivo = Implementando, nil, "", motivo
-	e.Cierre = nil // reopening drops the close that stopped (only orq2 records one)
 	if len(e.Equipo) > 0 {
 		e.Escritor = "equipo"
 	}

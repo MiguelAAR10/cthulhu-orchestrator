@@ -128,12 +128,19 @@ func (e *Estado) CierrePendiente() error {
 	if e.Cierre.Resultado == "aceptado" && e.Fase != Integrando && e.Fase != Cerrando {
 		return nil // stale: the accepted close is no longer under way
 	}
-	flag := "--aceptado"
-	if e.Cierre.Resultado == "rechazado" {
-		flag = fmt.Sprintf("--rechazado %q", e.Cierre.Motivo)
+	orq, cuando := identidad.Nombre(), e.Cierre.TS.Local().Format("2006-01-02 15:04")
+	if e.Cierre.Resultado != "rechazado" {
+		return fmt.Errorf("%s se está cerrando como aceptado (decidido %s): no se verifica ni se lanza nada; termina el cierre: `%s slice --slice %s cerrar --aceptado`", e.ID(), cuando, orq, e.NN)
 	}
-	return fmt.Errorf("%s se está cerrando como %s (decidido %s): no se verifica ni se lanza nada; termina el cierre con `%s slice --slice %s cerrar %s`, o reábrelo / reintenta si el Owner cambió de opinión",
-		e.ID(), e.Cierre.Resultado, e.Cierre.TS.Local().Format("2006-01-02 15:04"), identidad.Nombre(), e.NN, flag)
+	msg := fmt.Sprintf("%s se está cerrando como rechazado (decidido %s): no se verifica ni se lanza nada; termina el rechazo: `%s slice --slice %s cerrar --rechazado %q`", e.ID(), cuando, orq, e.NN, e.Cierre.Motivo)
+	// The only other way out is the Owner's override, and only where that command exists.
+	switch e.Fase {
+	case Verificado:
+		msg += fmt.Sprintf(". Si el Owner cambió de opinión, solo él lo revoca, desde su terminal: `%s slice --slice %s reabrir \"qué se repara\" --revoca-rechazo`", orq, e.NN)
+	case Bloqueado:
+		msg += fmt.Sprintf(". Si el Owner cambió de opinión, solo él lo revoca, desde su terminal: `%s slice --slice %s reintentar \"qué cambia\" --causa worker|examen --revoca-rechazo`", orq, e.NN)
+	}
+	return errors.New(msg)
 }
 
 // IntencionCierre is a close the Owner asked for: accepted or rejected, why, and when.
