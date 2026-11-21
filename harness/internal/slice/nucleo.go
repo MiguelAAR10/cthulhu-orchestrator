@@ -327,6 +327,9 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if e.Fase != Implementando && e.Fase != Verificado {
 		return e, "", fmt.Errorf("%s está en %s; no se verifica ahora", e.ID(), e.Fase)
 	}
+	if err := e.CierrePendiente(); err != nil {
+		return e, "", err
+	}
 	if err = r.confiable(e); err != nil {
 		return e, "", err
 	}
@@ -597,6 +600,7 @@ func (r Repo) Reintentar(nn, cambio, causa string, decisionOwner bool) (*Estado,
 	}
 	e.FirmaFallo = ""
 	e.Fase, e.Fallos, e.HeadFallo, e.Recibo, e.Motivo, e.Escritor = Implementando, 0, "", nil, "", ""
+	e.Cierre = nil // a new attempt is a new decision (only orq2 records one)
 	return e, r.save(e)
 }
 
@@ -767,6 +771,7 @@ func (r Repo) Reabrir(nn, motivo string) (*Estado, error) {
 		return e, err
 	}
 	e.Fase, e.Recibo, e.Integrado, e.Motivo = Implementando, nil, "", motivo
+	e.Cierre = nil // reopening drops the close that stopped (only orq2 records one)
 	if len(e.Equipo) > 0 {
 		e.Escritor = "equipo"
 	}

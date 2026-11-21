@@ -19,6 +19,7 @@ import (
 
 	"orq/internal/config"
 	"orq/internal/gitx"
+	"orq/internal/identidad"
 	"orq/internal/sysinfo"
 )
 
@@ -116,6 +117,23 @@ type Estado struct {
 	// Cierre is the Owner's close decision, recorded before anything is done (orq2 only), so a re-run
 	// after a crash resumes that same decision.
 	Cierre *IntencionCierre `json:"cierre,omitempty"`
+}
+
+// CierrePendiente stops work on a slice whose close the Owner already decided (orq2 records it):
+// nothing is verified or launched until that close is finished, or the slice is reopened or retried.
+func (e *Estado) CierrePendiente() error {
+	if e.Cierre == nil {
+		return nil
+	}
+	if e.Cierre.Resultado == "aceptado" && e.Fase != Integrando && e.Fase != Cerrando {
+		return nil // stale: the accepted close is no longer under way
+	}
+	flag := "--aceptado"
+	if e.Cierre.Resultado == "rechazado" {
+		flag = fmt.Sprintf("--rechazado %q", e.Cierre.Motivo)
+	}
+	return fmt.Errorf("%s se está cerrando como %s (decidido %s): no se verifica ni se lanza nada; termina el cierre con `%s slice --slice %s cerrar %s`, o reábrelo / reintenta si el Owner cambió de opinión",
+		e.ID(), e.Cierre.Resultado, e.Cierre.TS.Local().Format("2006-01-02 15:04"), identidad.Nombre(), e.NN, flag)
 }
 
 // IntencionCierre is a close the Owner asked for: accepted or rejected, why, and when.

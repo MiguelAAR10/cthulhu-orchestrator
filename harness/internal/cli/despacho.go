@@ -62,6 +62,9 @@ func lineaPendiente(x app.Pendiente, now time.Time) string {
 	case app.PendBloqueado:
 		return s + "bloqueado hace " + hace + ": " + app.Recortar(x.Texto, 80) + debe("orq2 slice reintentar --slice "+x.Slice+" \"qué cambia\" --causa worker|examen")
 	case app.PendCierre:
+		if x.Texto != "" { // orq2: a close the Owner decided, stopped before it changed the phase
+			return s + "cierre como " + x.Texto + " a medias desde hace " + hace + debe("orq2 slice estado --slice "+x.Slice+" (dice cómo terminarlo)")
+		}
 		return s + "cierre a medias desde hace " + hace + debe("orq2 slice cerrar --slice "+x.Slice+" (repetirlo continúa)")
 	case app.PendEntrega:
 		return fmt.Sprintf("mensaje %s %s sin entrega confirmada hace %s", x.Ref, x.Texto, hace) + debe("orq2 msg reconciliar")

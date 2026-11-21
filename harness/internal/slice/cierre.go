@@ -84,6 +84,9 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 		if fila, ok := r.filaDe(e); ok {
 			return r.terminarCierre(e, &fila, nil, "")
 		}
+		if e.Cierre != nil && e.Cierre.Resultado == "aceptado" && e.Fase != Integrando && e.Fase != Cerrando {
+			e.Cierre = nil // stale: that accepted close is no longer under way (the slice was reopened)
+		}
 		if e.Cierre != nil && (e.Cierre.Resultado == "aceptado") != aceptado {
 			return nil, nil, "", fmt.Errorf("%s ya se está cerrando como %s (%s): repite ese cierre, continúa donde quedó", e.ID(), e.Cierre.Resultado, e.Cierre.TS.Local().Format("2006-01-02 15:04"))
 		}
@@ -339,13 +342,15 @@ func (r Repo) anotarUnaVez(ev diario.Evento, igual func(diario.Evento) bool) err
 	return diario.Anotar(diario.Ruta(r.OrqDir), ev)
 }
 
-// anotarDecisionUnaVez logs the Owner's close decision, at the time the Owner took it, once.
+// anotarDecisionUnaVez logs the Owner's close decision once.
 func (r Repo) anotarDecisionUnaVez(e *Estado, now time.Time) error {
 	d := IntencionCierre{Resultado: "aceptado", TS: now}
 	if e.Cierre != nil {
 		d = *e.Cierre
 	}
-	ev := diario.Evento{TS: d.TS, Tipo: "decision", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(), Resultado: d.Resultado, Detalle: d.Motivo}
+	// Stamped when written (for an accepted close, once main has the commit); the Owner's time is a field.
+	ev := diario.Evento{TS: now, Tipo: "decision", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(), Resultado: d.Resultado, Detalle: d.Motivo,
+		Datos: map[string]any{"decidido": d.TS.UTC().Format(time.RFC3339Nano)}}
 	return r.anotarUnaVez(ev, func(x diario.Evento) bool {
 		return x.Tipo == "decision" && x.Slice == e.NN && x.Intento == e.Intento && x.Resultado == d.Resultado
 	})
