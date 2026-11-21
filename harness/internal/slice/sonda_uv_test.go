@@ -95,6 +95,8 @@ func TestSondaUvSaltaValorDeFlag(t *testing.T) {
 		"uv run --python=3.12 --no-sync ruff check .":   "uv run --python=3.12 --no-sync ruff --version",
 		"uv run --no-sync -- pytest":                    "uv run --no-sync -- pytest --version",
 		"uv run --group dev --extra x --no-sync pytest": "uv run --group dev --extra x --no-sync pytest --version",
+		"uv run --no-sync -p":                           "",
+		"uv run --offline --no-sync --with":             "",
 	} {
 		if got := SondaUvDe(cmd); got != want {
 			t.Errorf("%q: got %q want %q", cmd, got, want)
