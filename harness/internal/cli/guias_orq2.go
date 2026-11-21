@@ -17,6 +17,9 @@ var cambiosOrq2 = map[string][][2]string{
 	"orq-orchestrator": {{"The exam runs on a clean copy of the commit; `--en-sitio \"reason\"` opts out (stored, shown in the receipt). ",
 		"The exam always runs in the box on a clean copy of the commit, with no opt-out. "}},
 	"orq-planner": {{"(`orq canal` message, `orq mem ver`)", "(`orq msg leer` message, `orq mem ver`)"}},
+	// A worker cannot confirm or refute lessons (orq2 refuses it): it proposes them to the Orchestrator.
+	"worker": {{"Misled you → `orq aprender refutar ID`; saved a failure → `orq aprender confirmar ID`.",
+		"If one misled you or saved a failure, tell the Orchestrator: `orq msg send --para orquestador --tipo estado \"lesson ID misled me|saved a failure: why\"`."}},
 }
 
 // reglasOrq2 son las líneas que orq2 suma al final de la guía o skill nombre.
