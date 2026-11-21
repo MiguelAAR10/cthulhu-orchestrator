@@ -83,7 +83,7 @@ Final v2.0 state, 2026-11-20 23:45. Earlier checkpoint history is in Git (`git l
     "evidence": "~/cthulhu-evidence/2026-11-21/ (blind pack and sealed map alongside)"
   },
   "remote": "harness-v2 pushed to origin by the orchestrator at the filter's request (2026-11-21); main untouched",
-  "worktrees": "~/worktrees/cthulhu-docs (filter), the RS test clones rs-prueba-orq2 (+1 leftover orq2 worktree after S-02 close), rs-prueba-simple",
+  "worktrees": "~/worktrees/cthulhu-docs (filter), the RS test clones rs-prueba-orq2, rs-prueba-simple",
   "panes": "w47:p9 (filter), w47:p3B (orchestrator); all project sessions closed; resource sampler stopped",
   "branches_not_merged": "v2/g5-memoria (K10), v2/panel (K11), v2/tui (K12), v2/locks (K13), v2/memoria (K14); each has a backlog line",
   "v2_1_notes": "orq2 update installs the tip while docs commits move past the gated SHA; G7 Lows; G2 L1/L3/L5 and relevo; G6 L2/L6; G4 L2/L3 and e2e per folder; G3 L-3/L-4 and --revoca-rechazo has no gate raw-text rule; K10 G5 resume plan",
