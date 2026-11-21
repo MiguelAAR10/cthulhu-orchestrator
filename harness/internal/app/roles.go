@@ -140,3 +140,11 @@ func (p Proyecto) SesionViva(ctx context.Context, s canal.Sesion) bool {
 	v, err := p.Term.Estado(ctx, s.Agente)
 	return err != nil && !errors.Is(err, terminal.ErrNoExiste) || v != terminal.Ausente
 }
+
+// AbrirRol is `orq sesion abrir planificador|astra`: it opens the role only if it has no session.
+func (p Proyecto) AbrirRol(ctx context.Context, ses map[string]canal.Sesion, rol string, pedido config.Agente) (canal.Sesion, config.Agente, error) {
+	if s, ok := ses[rol]; ok {
+		return s, pedido, fmt.Errorf("%w: %s (%s, panel %s)", ErrYaHay, rol, s.Agente, s.Pane)
+	}
+	return p.LanzarRol(ctx, ses, rol, pedido)
+}
