@@ -56,7 +56,7 @@ by builders; S-01 is paused as is.
   "phase": "D",
   "integration_branch": "harness-v2",
   "integration_owner": "orchestrator pane w47:p3B (since 2026-11-20); filter session w47:p9 relays Owner",
-  "harness_v2_tip": "299d02d (docs-only commit on 5f25823 = R2 merge)",
+  "harness_v2_tip": "8683242 (G0 merged on top of docs commits); installed is still 299d02d",
   "installed": "~/bin/orq2 = see install2 / installed_version; rollback = rollback_binary",
   "in_flight": {
     "R2": "integrated 5f25823. Independent Opus review of 309addf..bdf40db: VERDICT no High, no Medium; Lows for v2.1 notes: (a) aviso_ram_gb 0 now invalidates limits.json under orq2 and blocks all Bash (fails closed, release note) (b) card preamble gives one error per line under orq2 (c) lines in duplicate/unknown sections not checked in same pass (d) literal caps in cli.go:93 usage are orq 1.0.0 text, keep. Reviewer pane closed, review worktree removed. Next: make ci on 5f25823, clone proof, tell filter before install2",
@@ -69,12 +69,13 @@ by builders; S-01 is paused as is.
     "309addf_installable": "NO: fresh Opus review found 1 High (H1 Zonas) + 3 Medium, all in R2 scope"
   },
   "lanes": {
-    "A": {"group": "G0", "state": "in progress", "attempt": 1, "pane": "w47:p3C (agent g0-rapido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g0", "branch": "v2/g0-rapido", "base": "309addf", "started": "2026-11-20"},
-    "B": {"group": "G4", "state": "delivered 68770f7 (merged 5f25823, orq2 check folder checks, gating + merge-failure tests; 4 pkgs green -p 1); independent review in progress pane w47:p3G (agent rev-g4g1, Opus 5.5) on detached ~/worktrees/cthulhu-rev; same reviewer reviews G1 next", "owner_note": "after G4 is installed, RS S-01 will be refused until Owner adds a carpetas.dashboard block to RS .orq/config.json (builder proposed: pnpm run lint / pnpm exec tsc --noEmit / pnpm run test, build optional)", "attempt": 1, "pane": "w47:p3D (agent g4-examen, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g4", "branch": "v2/g4-examen", "base": "309addf", "started": "2026-11-20"}
+    "A": {"group": "G7", "state": "in progress", "attempt": 1, "pane": "w47:p3H (agent g7-update, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g7", "branch": "v2/g7-update", "base": "8683242"},
+    "G0": "integrated 8683242 (orchestrator diff check: only t.Parallel lines + make rapido; 115 tests before/after; 3 runs + -race slice PASS; ~20-35% faster under load). Pane closed, worktree removed, branch deleted. make ci pending: batched with G4/G1 merge",
+    "B": {"group": "G4", "state": "review of 68770f7: no High, 2 Medium (M1 manifest at red commit not seen -> coverage dodge by deleting go.mod; M2 carpetas key accepted under orq -> breaks 1.0.0 identity). Builder fixing M1, M2 (+L4 message), attempt 1 review-fix; reviewer re-checks delta", "owner_note": "after G4 is installed, RS S-01 will be refused until Owner adds a carpetas.dashboard block to RS .orq/config.json (builder proposed: pnpm run lint / pnpm exec tsc --noEmit / pnpm run test, build optional)", "attempt": 1, "pane": "w47:p3D (agent g4-examen, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g4", "branch": "v2/g4-examen", "base": "309addf", "started": "2026-11-20"}
   },
-  "lane_A2": {"group": "G1", "state": "in progress", "attempt": 1, "pane": "w47:p3F (agent g1-nada-perdido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g1", "branch": "v2/g1-nada-perdido", "base": "309addf", "note": "Owner 2026-11-20: G1 runs in parallel with G0, merges G0 at delivery; G5 still waits for G4"},
+  "lane_A2": {"group": "G1", "state": "delivered d60dc8b; asked to merge 8683242 and gate any orq-visible change (cerrar exit 1 on cleanup failure, archive, root, memory) before review", "attempt": 1, "pane": "w47:p3F (agent g1-nada-perdido, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g1", "branch": "v2/g1-nada-perdido", "base": "309addf", "note": "Owner 2026-11-20: G1 runs in parallel with G0, merges G0 at delivery; G5 still waits for G4"},
   "briefs": "session scratchpad brief-g0.md / brief-g4.md (also re-derivable from this plan's rows)",
-  "queued": {"G7": "launch in lane A as soon as G0 is merged; gate record format defined by G7 builder, integrator writes it for each gated SHA"},
+  "queued": {},
   "owner_held": {"RS carpetas.dashboard config": "proposal held; Owner approves when next RS story (agenda de visitas) starts"},
   "parked": ["v2/panel", "v2/locks", "v2/memoria (input to G5)", "v2/tui (branch only)"],
   "attempts": {"G0": 1, "G4": 1, "G1": 1, "R2_review": 1},
