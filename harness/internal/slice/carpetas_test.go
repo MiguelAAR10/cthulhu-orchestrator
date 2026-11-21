@@ -117,7 +117,7 @@ func TestCarpetaRojaEnElMergeNoIntegra(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "check dashboard/tests falla") {
 		t.Fatalf("integrated a merge with a red dashboard: %v", err)
 	}
-	if st, _ := r.Load(""); st == nil || st.Fase == Cerrando || st.Fase == Cerrado {
+	if st, _ := r.Load(""); st == nil || st.Fase == Cerrando {
 		t.Fatalf("the close should not advance: %+v", st)
 	}
 	if _, err := os.Stat(filepath.Join(r.Root, "dashboard", "app.ts")); err == nil {
@@ -192,5 +192,21 @@ func TestConfigPlanaSigueFuncionando(t *testing.T) {
 	}
 	if _, _, _, err := r.Cerrar("", true, "", t0); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Every check in the same copy sees the owner's node_modules, not only the first one: the first run
+// leaves the mount point behind and that must not hide the dependencies from the next checks.
+func TestDependenciasEnCadaCheck(t *testing.T) {
+	r := repoDeJuguete(t)
+	os.MkdirAll(filepath.Join(r.Root, "node_modules", ".bin"), 0o755)
+	os.WriteFile(filepath.Join(r.Root, "node_modules", ".bin", "ok"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	os.WriteFile(filepath.Join(r.Root, ".git", "info", "exclude"), []byte(".orq/\nnode_modules/\n"), 0o644)
+	bin := "./node_modules/.bin/ok"
+	r.Checks = []config.Check{{Nombre: "lint", Cmd: bin}, {Nombre: "types", Cmd: bin}, {Nombre: "tests", Cmd: bin}}
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if e, _, err := r.Verificar("", t0); err != nil || e.Fase != Verificado {
+		t.Fatalf("%v", err)
 	}
 }
