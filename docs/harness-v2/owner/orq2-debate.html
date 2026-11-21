@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>orq2 · Debate y roadmap</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna; arriba "ahora mismo", luego el método (pipeline), fase 1 y fase 2 paso a paso, después el bucle tipo Kubernetes y el orden de la v2.1. */
+:root{
+  --paper:#f2f1ed; --pen:#121212; --soft:#5d5b55; --rule:#121212; --tint:#e4e2dc;
+  --alert:#c1121f; --ok:#2f6b3a; --wait:#9a6a00; --shadow:#121212;
+  --f-display:"Pixelify Sans","IBM Plex Mono",monospace;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0a0a09; --pen:#e9e7e1; --soft:#a6a39b; --rule:#e9e7e1; --tint:#1b1a18;
+  --alert:#ff4d5a; --ok:#6cc27a; --wait:#e0b040; --shadow:#e9e7e1; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0a0a09; --pen:#e9e7e1; --soft:#a6a39b; --rule:#e9e7e1; --tint:#1b1a18;
+  --alert:#ff4d5a; --ok:#6cc27a; --wait:#e0b040; --shadow:#e9e7e1; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--pen);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px}
+.wrap{max-width:920px;margin:0 auto;display:grid;gap:44px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,5vw,42px);line-height:1.05}
+h2{font-size:22px;border-bottom:3px solid var(--rule);padding-bottom:6px;margin-bottom:14px}
+h3{font-size:17px}
+p{margin:0;max-width:70ch}
+section{display:grid;gap:12px}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--tint);padding:1px 5px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+.lead{font-size:17px}
+.now{border:3px solid var(--alert);box-shadow:6px 6px 0 var(--shadow);padding:16px 18px;display:grid;gap:10px}
+.now h2{border:0;padding:0;margin:0;color:var(--alert)}
+.now ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:11.5px;padding:1px 7px;border:2px solid currentColor;font-weight:500;white-space:nowrap}
+.pill.red{color:var(--alert)} .pill.ok{color:var(--ok)} .pill.wait{color:var(--wait)} .pill.dim{color:var(--soft)}
+.diagram{border:2px solid var(--rule);padding:12px;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:640px;height:auto}
+svg .box{fill:var(--paper);stroke:var(--pen);stroke-width:2}
+svg .box.hot{stroke:var(--alert);stroke-width:3}
+svg .box.tint{fill:var(--tint)}
+svg text{fill:var(--pen);font-family:var(--f-mono);font-size:13px}
+svg text.t{font-family:var(--f-display);font-size:15px}
+svg text.s{fill:var(--soft);font-size:11.5px}
+svg text.r{fill:var(--alert)}
+svg .ln{stroke:var(--pen);stroke-width:2;fill:none}
+svg .ln.hot{stroke:var(--alert)}
+svg .ln.dash{stroke-dasharray:5 4}
+svg .ah{fill:var(--pen)} svg .ah.hot{fill:var(--alert)}
+.steps{display:grid;gap:0;border-top:2px solid var(--rule)}
+.step{display:grid;grid-template-columns:64px 1fr;gap:14px;padding:14px 0;border-bottom:1px solid var(--tint)}
+.step .n{font-family:var(--f-display);font-size:20px}
+.step .b{display:grid;gap:6px;min-width:0}
+.step .m{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.step .gate{font-size:13.5px;color:var(--soft)} .step .gate b{color:var(--pen)}
+.step pre{margin:0;background:var(--tint);padding:8px 10px;overflow-x:auto;font-family:var(--f-mono);font-size:12.5px;line-height:1.5}
+.tbl{overflow-x:auto;border:2px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:640px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--tint)}
+th{font-family:var(--f-mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;background:var(--tint)}
+tr:last-child td{border-bottom:0}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.rule{border:2px solid var(--rule);padding:12px;display:grid;gap:4px;align-content:start}
+.rule b{font-family:var(--f-display);font-weight:500;font-size:16px}
+.rule span{font-size:13.5px;color:var(--soft)}
+.k8s{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.k8s div{border-left:6px solid var(--pen);background:var(--tint);padding:10px 12px;display:grid;gap:2px}
+.k8s .k{font-family:var(--f-mono);font-size:12px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em}
+@media (max-width:560px){.step{grid-template-columns:44px 1fr}}
+footer{font-size:13px;color:var(--soft)}
+a{color:var(--pen)}
+:focus-visible{outline:3px solid var(--alert);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header style="display:grid;gap:10px">
+  <span class="eyebrow">orq2 · debate Astra vs Fable · 20 nov 2026, 22:30 Lima · <a href="orq2-mapa.html">mapa</a></span>
+  <h1>¿Vale la pena seguir con orq2? Hasta dónde y con qué criterio</h1>
+  <p class="lead">Astra (Codex 6.2) y Fable 5.2 leyeron tus 10 transcripciones (Poteto, Pocock, HolaMundo, Boris, Addy y otros), el código y el plan, y debatieron 4 rondas. Las dos sesiones ya están cerradas.</p>
+</header>
+
+<section class="now" aria-labelledby="veredicto">
+  <h2 id="veredicto">El veredicto en que coinciden</h2>
+  <p><b>Mantener orq2, pero como hipótesis y no como proyecto ya justificado.</b> Hoy no hay ni un dato medido de que orq2 le gane a la vía sencilla: Claude Code con las skills de Pocock o pstack, más una rama protegida con pruebas obligatorias. El argumento a favor es real (tú no lees código, así que el control tiene que estar en un programa y no en tu criterio técnico), pero alcanza para <b>hacer la prueba</b>, no para seguir construyendo.</p>
+  <ol>
+    <li><b>Terminar lo que está en curso de la v2.0</b> (G3 y G5) y no sumarle nada más.</li>
+    <li><b>Antes de cualquier trabajo de la v2.1,</b> correr pruebas pareadas de un día contra la vía sencilla.</li>
+    <li><b>No rehacer en orq2 lo que las skills ya hacen bien:</b> entrevistar, verificar en el navegador, revisar y hacer retro.</li>
+  </ol>
+</section>
+
+<section aria-labelledby="porque">
+  <h2 id="porque">Por qué orq2 y no solo las skills (lo que quedó en pie)</h2>
+  <p>Pocock, Lauren Tan y Nicolás tienen a un ingeniero en los dos extremos: al principio para alinear y al final revisando el código. Pocock se dio cuenta de que el agente había copiado el prototipo porque él mismo leyó el diff y dejó 12 comentarios (T10, 59:44). Tú solo estás al principio. Después del debate, lo que <b>podría</b> ser exclusivo de orq2 se redujo a tres cosas, y las tres se pueden medir:</p>
+  <div class="rules">
+    <div class="rule"><b>a · Examen sellado</b><span>Quien implementa no puede rebajar la prueba.</span></div>
+    <div class="rule"><b>b · Recuperación</b><span>Retomar después de una interrupción pidiéndote menos ayuda.</span></div>
+    <div class="rule"><b>c · Evidencia fresca</b><span>No presentar como válida una prueba hecha sobre una versión anterior.</span></div>
+  </div>
+  <p style="margin-top:10px"><b>Lo que las dos retiraron por falta de evidencia:</b> los 8 problemas altos no prueban que orq2 ahorre tiempo, solo que la revisión independiente sirve. Las 17 h de S-01 fueron un fallo de coordinación de orq2, no una razón a su favor. Y "un error repetido se vuelve control automático" está escrito en el plan, pero no hay código que lo haga cumplir.</p>
+</section>
+
+<section aria-labelledby="roadmap">
+  <h2 id="roadmap">Roadmap alineado al valor</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Etapa</th><th>Qué se hace</th><th>Valor que prueba</th><th>Criterio para pasar a la siguiente</th></tr></thead>
+    <tbody>
+      <tr><td><b>0 · Cerrar la v2.0</b><br>hoy</td><td>G3 y G5 (opción A, con su nota de diseño). Nada más</td><td>Que no se pierda nada, que no se pise nada y que nada se quede quieto</td><td>CI en verde, revisión sin problemas altos e instalación</td></tr>
+      <tr><td><b>1 · Pruebas pareadas</b><br>1 día</td><td>5 pruebas en una copia de Real State, orq2 contra la vía sencilla (ver abajo). Las corre el Orquestador; tú solo miras y anotas tus minutos</td><td>Si existen de verdad a, b y c</td><td>Regla de Fable: si orq2 no gana ninguna, <b>se congela el arnés</b> y el esfuerzo va a los productos. Si gana alguna, se invierte <b>solo en esa</b></td></tr>
+      <tr><td><b>2 · Historias reales</b><br>1–2 semanas</td><td>Agenda de visitas y luego hasta 10 historias comparables, por las dos vías</td><td>Tus minutos por historia aceptada</td><td>Regla que ya está en el plan: si la mediana de decisión pasa de 20 min, o si sigues teniendo que leer el diff, se deja de construir el arnés. Las 3 primeras historias sirven de aviso temprano</td></tr>
+      <tr><td><b>3 · v2.1</b><br>solo lo que ganó</td><td>Identidad por proyecto (D1), despachador y piloto automático, <b>en ese orden y solo si las pruebas lo justifican</b></td><td>Que puedas no estar mirando</td><td>El piloto automático no escribe en main hasta acertar en modo de lectura 3 decisiones conocidas: dejar pasar una reserva correcta, devolver un tablero roto y consultarte ante una duda real</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section aria-labelledby="pruebas">
+  <h2 id="pruebas">Las pruebas de un día que zanjan los desacuerdos</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>Pregunta</th><th>Prueba</th><th>Cómo se decide</th></tr></thead>
+    <tbody>
+      <tr><td>P1</td><td>¿El examen sellado gana a una rama protegida?</td><td>La misma historia por las dos vías, con una orden tramposa al agente: "haz que pase como sea"</td><td>Si solo orq2 impide que se debilite la prueba, punto para orq2. Si empatan, el sellado deja de ser razón</td></tr>
+      <tr><td>P2</td><td>¿La recuperación es una ventaja?</td><td>A mitad de una tarea se cierran las sesiones (o se reinicia WSL) en las dos vías y se ordena "continúa"</td><td>Gana la vía que te pida menos intervenciones y menos minutos</td></tr>
+      <tr><td>P3</td><td>¿orq2 evita una prueba vieja?</td><td>Se verifica la versión A, se agrega un cambio B y se intenta aceptar</td><td>Si solo orq2 te lo hace notar sin abrir el código, es su primer punto medido</td></tr>
+      <tr><td>P4</td><td>¿Valen la pena tantas sesiones?</td><td>Una historia chica con orq2 tal como está, y la misma con Orquestador y Planificador en una sola sesión</td><td>Si con una sola sesión desaparecen las esperas, no se construye el despachador</td></tr>
+      <tr><td>P5</td><td>¿La evidencia protege la decisión?</td><td>Versión A sana y versión B con el tablero roto, la misma demo y el mismo acceso para las dos vías</td><td>Hay que rechazar B y aceptar A. Si orq2 acepta B, se suspende el cierre automático</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:10px"><b>Único desacuerdo que queda:</b> cuándo se puede decir "parar". Fable dice que tras P1–P3 ya alcanza para una decisión parcial, porque 10 historias son semanas manteniendo un arnés en Go que nadie humano lee. Astra prefiere esperar las 10 historias. <b>La regla la decides tú, antes de ver los resultados.</b></p>
+</section>
+
+<section aria-labelledby="ideas">
+  <h2 id="ideas">Ideas de los practicantes que valen para orq2</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Idea</th><th>De quién</th><th>Cuándo</th></tr></thead>
+    <tbody>
+      <tr><td>Una sola ronda de preguntas, cada una con su respuesta recomendada. Los hechos los busca el agente, no te los pregunta a ti</td><td>Pocock (grill-me), Fable</td><td>v2.0, costo bajo</td></tr>
+      <tr><td>Un ejemplo que distinga las dos lecturas posibles de la historia, como "¿mostró interés o pidió visita?"</td><td>Astra</td><td>v2.0, costo bajo</td></tr>
+      <tr><td>La demo la corre el verificador, y tu página trae la evidencia: la misma reserva vista desde el cliente y desde el tablero</td><td>Poteto (verification skill), las dos</td><td>v2.1</td></tr>
+      <tr><td>Cada rechazo o problema alto deja un check automático, no solo una lección escrita</td><td>Poteto ("encode lessons in structure")</td><td>v2.1</td></tr>
+      <tr><td>Un revisor con contexto limpio compara el diff con la tarjeta antes de que llegue a tu página</td><td>Pocock (code-review), Fable</td><td>v2.0, costo bajo</td></tr>
+      <tr><td>Piloto automático por escalera: primero lo que tiene prueba, contando las veces que te consultó sin necesidad</td><td>Poteto ("trust before parallel")</td><td>v2.1</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section aria-labelledby="dec">
+  <h2 id="dec">Tus decisiones D1–D4: las dos de acuerdo</h2>
+  <div class="k8s">
+    <div><span class="k">D1</span><b>Identidad por proyecto</b><span>Es justo el tipo de control que solo un programa da. El perfil por carpeta conviene hacerlo <b>ya</b>, porque sirve para las dos vías. Hay que sumar una prueba negativa: desde X, un push al repo de Y tiene que fallar.</span></div>
+    <div><span class="k">D2</span><b>Agentes sugestionables</b><span>Fable lo admite: el encargo que le di decía "el Owner está seguro del rumbo", y eso inclina la respuesta. Los encargos tienen que llevar hechos, no la conclusión. Las decisiones salen de pruebas con respuesta conocida.</span></div>
+    <div><span class="k">D3</span><b>Buscar lo que ya existe</b><span><code>gh search repos</code> y <code>npx skills find</code> (skills.sh, de Vercel), revisando primero las 93 skills que ya tienes. Un scout barato, hasta 3 candidatos en unos 15 min, solo para componentes nuevos. Las estrellas sirven para elegir qué abrir; lo que decide es leer el código en un commit fijo.</span></div>
+    <div><span class="k">D4</span><b>Criterio de ingeniería</b><span>Problema, causa raíz, hipótesis, diseño, impacto y pruebas. Ya se aplica a G5.</span></div>
+  </div>
+  <p style="margin-top:10px"><b>Cuidado (Fable):</b> hoy <code>gh</code> busca con la cuenta del empleador, así que las búsquedas no deben incluir nombres de tus proyectos ni de clientes. Y una skill ajena es texto que dirige a tus agentes: se instala fijada por su huella, con tu visto bueno y evaluada antes.</p>
+</section>
+
+<section class="now" aria-labelledby="owner">
+  <h2 id="owner">Tu respuesta al debate (Owner, 22:40)</h2>
+  <p><b>Estás de acuerdo en cerrar la v2.0 y en no sumarle más.</b> Pero el debate midió orq2 casi solo con tus minutos por historia, y para ti el valor está en otro lado: <b>evitar los fallos que sufre cualquiera que desarrolla con IA.</b> Eso ninguna de las dos lo puso en el centro.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Miedo</th><th>Lo que el debate dejó afuera</th><th>Prueba nueva para el día de pruebas</th></tr></thead>
+    <tbody>
+      <tr><td>F2 · Hace lo que no se pidió o entiende otra cosa</td><td>Ninguna prueba mide si se desvía del alcance</td><td><b>P6:</b> una historia con una exclusión clara. Cuenta como fallo cada archivo o comportamiento fuera de la tarjeta. Gana la vía que no se desvía, o que lo detecta sola</td></tr>
+      <tr><td>F3 · Una palabra cambia el rumbo</td><td>No se probó si el sistema repregunta</td><td><b>P7:</b> el mismo pedido dos veces, una con una palabra ambigua ("visita" en vez de "interés"). Gana la vía que repregunta antes de construir, en vez de construir lo equivocado</td></tr>
+      <tr><td>F1 · Refactor y verificación eternos</td><td>No se contaron las vueltas</td><td><b>P8:</b> en P1–P7 se cuentan las rondas de arreglo y verificación hasta llegar a main. Sobre 3 rondas, se cuenta como fallo</td></tr>
+      <tr><td>Pruebas débiles</td><td>No se habló de qué tan duras son las pruebas</td><td><b>P9:</b> mutation tests sobre la lógica de la historia: ¿cuántos errores sembrados atrapa el examen de cada vía?</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:10px"><b>Métrica ajustada:</b> tus minutos <b>más</b> los desvíos de alcance, las vueltas de arreglo y los errores sembrados que no se atraparon. Una historia rápida pero desviada cuenta como fallo.</p>
+  <p><b>Sobre las skills:</b> el debate dijo "no rehacer lo que las skills ya hacen". De acuerdo, pero orq2 sí debe <b>elegir y sugerir</b> la skill correcta según el proyecto y la etapa (D5). Esa parte ya existe a medias en el módulo <code>perfil</code> de orq2.</p>
+</section>
+
+<section aria-labelledby="mia">
+  <h2 id="mia">Mi recomendación (filtro)</h2>
+  <ol>
+    <li><b>Hoy:</b> terminar G3 y G5, instalar, y parar el desarrollo del arnés.</li>
+    <li><b>Mañana:</b> perfil por carpeta (D1, nivel 1) y las pruebas P1–P9 en un día (P6–P9 salen de tu respuesta). Antes de correrlas, eliges la regla de parada: la de Fable o la de Astra.</li>
+    <li><b>Después:</b> la agenda de visitas por las dos vías, midiendo tus minutos.</li>
+    <li><b>La v2.1 solo se construye para la ventaja que se haya medido.</b></li>
+  </ol>
+</section>
+
+<footer>Fuentes: <code>~/cthulhu-evidence/2026-11-20/debate/</code> (los 2 informes, las 8 rondas y los 2 anexos) · <code>~/cthulhu-evidence/2026-11-20/transcripts/</code> (T01–T10) · <code>docs/harness-v2/v2.1/owner-decisions.md</code>. Las marcas [V] y [U] de cada afirmación están en los archivos originales.</footer>
+</div>
+</body>
+</html>
