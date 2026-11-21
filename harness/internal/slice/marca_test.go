@@ -10,6 +10,7 @@ import (
 
 // The marker of a worker clone is found through a repo nested inside it.
 func TestLeerMarcaAtraviesaRepoAnidado(t *testing.T) {
+	t.Parallel()
 	clon := filepath.Join(t.TempDir(), "clon")
 	if _, err := Git(t.TempDir(), "init", "-q", clon); err != nil {
 		t.Fatal(err)
@@ -47,6 +48,7 @@ func TestLeerMarcaCwdVacioORelativo(t *testing.T) {
 
 // Corto never panics on a short, empty or ref-name value read from the state.
 func TestCortoNoEntraEnPanico(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{"": "", "abc": "abc", "slice/01": "slice/01", "0123456789abcdef": "01234567"} {
 		if got := Corto(in); got != want {
 			t.Errorf("Corto(%q) = %q, want %q", in, got, want)
@@ -56,6 +58,7 @@ func TestCortoNoEntraEnPanico(t *testing.T) {
 
 // The report names each test; a TAP number is dropped, since it shifts when fewer tests run.
 func TestContarNombres(t *testing.T) {
+	t.Parallel()
 	casos := []struct{ formato, raw, fallo, paso string }{
 		{"tap", "not ok 1 - cart total # expected 170\nok 2 page loads\n", "cart total", "page loads"},
 		{"junit", `<testsuites><testcase classname="a.spec.ts" name="x"><failure/></testcase><testcase name="y"/></testsuites>`, "a.spec.ts › x", "y"},
