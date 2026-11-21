@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"orq/internal/diario"
@@ -85,5 +86,23 @@ func TestCerrarWorkerEstadoIlegibleNoCierra(t *testing.T) {
 	os.Remove(estado)
 	if _, err := p.CerrarWorker(context.Background(), "worker-claude-s01"); err != nil {
 		t.Fatalf("closed slice: %v", err)
+	}
+}
+
+// H27: the relevo and the worker contract say when memory could not be read, instead of
+// silently handing a session less memory than exists.
+func TestRelevoYContratoAvisanMemoriaIncompleta(t *testing.T) {
+	p, _, e := proyectoDePrueba(t, "")
+	os.WriteFile(p.MemPath(), []byte(`{"id":"m1","imp":"alta","cat":"decision","fuente":"atena","texto":"pago con tarjeta"}`+"\n{roto\n"), 0o644)
+	rv := p.DatosRelevo("orquestador")
+	if !strings.Contains(rv.Memoria, "memoria.jsonl:2") || len(rv.Decisiones) != 1 {
+		t.Fatalf("relevo: memoria %q decisiones %v", rv.Memoria, rv.Decisiones)
+	}
+	if md := rv.Markdown("hoy", ""); !strings.Contains(md, "## Memoria incompleta") {
+		t.Fatalf("relevo markdown:\n%s", md)
+	}
+	c, err := p.Contrato(e.NN, "worker-claude-s01", "x", "", "10 min")
+	if err != nil || !strings.Contains(c, "memoria.jsonl:2") || !strings.Contains(c, "pago con tarjeta") {
+		t.Fatalf("contrato (%v):\n%s", err, c)
 	}
 }

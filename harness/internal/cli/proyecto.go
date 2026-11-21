@@ -83,7 +83,9 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		items, err := memoria.Load(p.MemPath())
 		if err != nil {
 			fmt.Fprintln(stderr, err)
-			return 1
+			if memoria.Legible(err) != nil {
+				return 1
+			}
 		}
 		if len(items) == 0 {
 			fmt.Fprintln(stdout, "memoria vacía")
@@ -365,7 +367,8 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	est, _ := json.Marshal(rv)
-	ahora, err := p.Escriba().Relevo(rol, memoria.Render(p.MemVigente(), ""), string(est), msgs.String(), lineasRelevo)
+	vigente, _ := p.MemVigente() // its read problem travels in rv.Memoria
+	ahora, err := p.Escriba().Relevo(rol, memoria.Render(vigente, ""), string(est), msgs.String(), lineasRelevo)
 	if err != nil {
 		ahora = ""
 		fmt.Fprintf(stderr, "aviso: sin resumen del escriba (%v); el relevo lleva solo datos comprobados\n", err)
