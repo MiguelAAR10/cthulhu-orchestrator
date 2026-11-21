@@ -5,12 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"orq/internal/canal"
+	"orq/internal/config"
 	"orq/internal/diario"
+	"orq/internal/limits"
+	"orq/internal/orqdir"
 	"orq/internal/plan"
 	"orq/internal/slice"
 	"orq/internal/terminal"
@@ -34,6 +39,7 @@ func NombreWorker(agente, nn, zona string) string {
 const (
 	PendFaltaLanzar  = "falta_lanzar"        // approved slice, agreed plan, ready tasks, nobody on them
 	PendCortado      = "lanzamiento_cortado" // task taken, its worker never got the contract
+	PendReintento    = "reintento"           // task en_curso from an earlier attempt: the orchestrator decides
 	PendPausa        = "pausa"               // ready tasks, but the project or story is paused
 	PendSinPlan      = "sin_plan"            // approved slice (full route) with no plan and no worker
 	PendSinDebate    = "plan_sin_debatir"    // plan loaded, Planner and Astra have not agreed
@@ -67,6 +73,40 @@ func contratoEntregado(evs []diario.Evento, worker, nn string, intento int, tare
 	})
 }
 
+// intentoDeTarea is the latest attempt with a trace of that task for that worker (its contract or
+// a despacho intent); 0 when there is none.
+func intentoDeTarea(evs []diario.Evento, worker, nn, tarea string) int {
+	k := 0
+	for _, ev := range evs {
+		if ev.Slice != nn || ev.Intento <= k {
+			continue
+		}
+		contrato := ev.Tipo == "lanzamiento" && ev.Actor == worker && ev.Paso == "contrato:"+tarea
+		intento := ev.Tipo == "despacho" && ev.Paso == "intento" && fmt.Sprint(ev.Datos["tarea"]) == tarea
+		if contrato || intento {
+			k = ev.Intento
+		}
+	}
+	return k
+}
+
+// Kinds of a task en_curso, for the current attempt.
+const (
+	tareaTrabaja   = iota // its worker got the contract in this attempt
+	tareaCortada          // taken in this attempt (or with no trace), contract never delivered
+	tareaReintento        // taken in an earlier attempt: after reintentar the orchestrator decides
+)
+
+func claseEnCurso(evs []diario.Evento, e *slice.Estado, t plan.Tarea) int {
+	if contratoEntregado(evs, t.Worker, e.NN, e.Intento, t.ID) {
+		return tareaTrabaja
+	}
+	if k := intentoDeTarea(evs, t.Worker, e.NN, t.ID); k > 0 && k < e.Intento {
+		return tareaReintento
+	}
+	return tareaCortada
+}
+
 // trabajaEnElSlice says whether anyone writes the slice without a plan: a writer, a team member or a
 // worker session of the slice.
 func trabajaEnElSlice(e *slice.Estado, ses map[string]canal.Sesion) bool {
@@ -89,6 +129,24 @@ func desdeFase(e *slice.Estado, evs []diario.Evento) time.Time {
 		return u.TS
 	}
 	return e.Abierto
+}
+
+// AbrirLectura opens the project of cwd without creating anything: no .orq, no terminal. ok is
+// false when the project has no .orq yet.
+func AbrirLectura() (p Proyecto, ok bool, err error) {
+	root, err := orqdir.Root()
+	if err != nil {
+		return Proyecto{}, false, errors.New("orq: no estás dentro de un repositorio git")
+	}
+	dir := filepath.Join(root, ".orq")
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return Proyecto{Root: root, Dir: dir}, false, nil
+	}
+	cfg, err := config.Cargar(root)
+	if err != nil {
+		return Proyecto{}, false, fmt.Errorf("orq: %w. Revísala con `orq config ver`", err)
+	}
+	return Proyecto{Root: root, Dir: dir, Cfg: cfg, Ahora: time.Now}, true, nil
 }
 
 // Pendientes lists who owes what since when, the oldest first. It only reads: no journal line,
@@ -169,9 +227,18 @@ func (p Proyecto) Pendientes() ([]Pendiente, error) {
 			continue
 		}
 		for _, t := range pl.Tareas {
-			if t.Estado == "en_curso" && t.Worker != "" && !contratoEntregado(evs, t.Worker, e.NN, e.Intento, t.ID) {
+			if t.Estado != "en_curso" || t.Worker == "" {
+				continue
+			}
+			switch claseEnCurso(evs, e, t) {
+			case tareaCortada:
 				x := base
 				x.Tipo, x.Debe, x.Tareas, x.Worker = PendCortado, "orquestador", []string{t.ID}, t.Worker
+				add(x)
+			case tareaReintento:
+				x := base
+				x.Tipo, x.Debe, x.Tareas, x.Worker = PendReintento, "orquestador", []string{t.ID}, t.Worker
+				x.Texto = fmt.Sprintf("a%d", intentoDeTarea(evs, t.Worker, e.NN, t.ID))
 				add(x)
 			}
 		}
@@ -216,7 +283,7 @@ func (p Proyecto) Pendientes() ([]Pendiente, error) {
 // Despacho is what `despachar --una-vez` did with one task.
 type Despacho struct {
 	Slice, Tarea, Worker string
-	Resultado            string // lanzado | ya_estaba | espera | fallo | desconocido
+	Resultado            string // lanzado | adoptado | tarea_nueva | espera | fallo | desconocido
 	Detalle              string
 }
 
@@ -281,7 +348,7 @@ func (p Proyecto) DespacharUnaVez(ctx context.Context, agente string) ([]Despach
 // contract, then a ready one. A ready task whose worker is busy with another task waits.
 func siguienteTarea(pl *plan.Plan, e *slice.Estado, evs []diario.Evento, agente string, vistos map[string]bool) (*plan.Tarea, string, *Despacho) {
 	for i, t := range pl.Tareas {
-		if t.Estado == "en_curso" && t.Worker != "" && !vistos[t.ID] && !contratoEntregado(evs, t.Worker, e.NN, e.Intento, t.ID) {
+		if t.Estado == "en_curso" && t.Worker != "" && !vistos[t.ID] && claseEnCurso(evs, e, t) == tareaCortada {
 			return &pl.Tareas[i], t.Worker, nil
 		}
 	}
@@ -302,21 +369,32 @@ func siguienteTarea(pl *plan.Plan, e *slice.Estado, evs []diario.Evento, agente 
 
 func (p Proyecto) despacharTarea(ctx context.Context, e *slice.Estado, t plan.Tarea, nombre, agente string) (Despacho, error) {
 	d := Despacho{Slice: e.NN, Tarea: t.ID, Worker: nombre}
+	vivo := false
+	if v, err := p.Term.Estado(ctx, nombre); err == nil && v == terminal.Vivo {
+		vivo = true
+	}
+	// A full machine is a wait, not a failure: no intent, no journal noise on every re-run.
+	if !vivo {
+		if l, err := limits.Load(limits.DefaultPath()); err == nil {
+			if c, _, err := Capacidad(p.Cfg, l, p.medir()); err == nil && !c.Cabe() {
+				d.Resultado, d.Detalle = "espera", c.Motivo()
+				return d, nil
+			}
+		}
+	}
 	ev := diario.Evento{Tipo: "despacho", Paso: "intento", Slice: e.NN, Intento: e.Intento,
 		Datos: map[string]any{"tarea": t.ID, "worker": nombre}}
 	if err := p.anotar(ev); err != nil {
 		d.Resultado, d.Detalle = "fallo", err.Error()
 		return d, err
 	}
-	vivo := false
-	if v, err := p.Term.Estado(ctx, nombre); err == nil && v == terminal.Vivo {
-		vivo = true
-	}
 	_, _, err := p.LanzarWorker(ctx, PedidoWorker{Slice: e.NN, Agente: agente, Tarea: t.ID,
 		Alcance: AlcancePorDefecto, Presupuesto: PresupuestoPorDefecto})
 	switch {
+	case err == nil && vivo && t.Estado == "en_curso":
+		d.Resultado = "adoptado" // a cut-short launch whose agent was alive: adopted, contract delivered
 	case err == nil && vivo:
-		d.Resultado = "ya_estaba"
+		d.Resultado = "tarea_nueva" // a live worker took a new task: a new contract
 	case err == nil:
 		d.Resultado = "lanzado"
 	case errors.Is(err, terminal.ErrDesconocido):

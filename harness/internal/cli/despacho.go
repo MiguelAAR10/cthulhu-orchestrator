@@ -18,8 +18,9 @@ const usoDespachoOrq2 = `  orq2 pendientes                 quién debe qué y de
                                  worker, tarjetas y decisiones del Owner, bloqueos, cierres a medias,
                                  mensajes sin entrega y preguntas sin respuesta. Solo lee
   orq2 despachar --una-vez [--agente claude]   lanza, una vez, las tareas listas de los slices aprobados
-                                 con plan debatido; repetirlo no lanza otro worker y retoma un
-                                 lanzamiento cortado (anota la intención antes de lanzar)
+                                 con plan debatido; una corrida a la vez: repetirla no lanza otro worker
+                                 y retoma un lanzamiento cortado (anota la intención antes de lanzar).
+                                 Máquina llena = espera; una tarea de un intento anterior no se relanza
 `
 
 // tareasTxt is "T1 lista" or "T1, T5 listas".
@@ -43,6 +44,8 @@ func lineaPendiente(x app.Pendiente, now time.Time) string {
 		return s + "aprobada hace " + hace + ", " + tareasTxt(x.Tareas) + ", sin worker" + debe("orq2 despachar --una-vez")
 	case app.PendCortado:
 		return s + fmt.Sprintf("%s en curso para %s, que nunca recibió el contrato (lanzamiento cortado; aprobada hace %s)", x.Tareas[0], x.Worker, hace) + debe("orq2 despachar --una-vez")
+	case app.PendReintento:
+		return s + fmt.Sprintf("%s en curso para %s desde el intento %s; reintento: el orquestador decide qué cambia", x.Tareas[0], x.Worker, x.Texto) + debe("orq2 plan --slice "+x.Slice+" soltar "+x.Tareas[0]+" (luego orq2 despachar --una-vez)")
 	case app.PendPausa:
 		return s + "aprobada hace " + hace + ", " + tareasTxt(x.Tareas) + ", en pausa (" + x.Texto + ")" + debe("orq2 reanudar")
 	case app.PendSinPlan:
@@ -73,10 +76,14 @@ func runPendientes(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "uso: orq2 pendientes")
 		return 1
 	}
-	p, err := abrirProyecto()
+	p, hay, err := app.AbrirLectura()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
+	}
+	if !hay {
+		fmt.Fprintf(stdout, "pendientes: ninguno (sin .orq en %s)\n", p.Root)
+		return 0
 	}
 	ps, err := p.Pendientes()
 	if err != nil {
@@ -100,7 +107,7 @@ func runDespachar(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("despachar", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	unaVez := fs.Bool("una-vez", false, "lanza las tareas listas una vez y termina")
-	agente := fs.String("agente", "claude", "claude | codex")
+	agente := fs.String("agente", "claude", "agente de los workers: claude")
 	if fs.Parse(args) != nil || fs.NArg() != 0 || !*unaVez {
 		fmt.Fprintln(stderr, "uso: orq2 despachar --una-vez [--agente claude]  (el despachador residente llega en v2.1)")
 		return 1
