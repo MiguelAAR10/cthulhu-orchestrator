@@ -43,7 +43,7 @@ func version() string {
 func uso() string {
 	if identidad.EsOrq2() {
 		u := strings.Replace(usage, "orq "+Version+" ·", "orq2 "+VersionOrq2+" ·", 1)
-		return strings.Replace(u, "  orq version\n", usoUpdateOrq2+"  orq version\n", 1)
+		return strings.Replace(u, "  orq version\n", usoDespachoOrq2+usoUpdateOrq2+"  orq version\n", 1)
 	}
 	return usage
 }
@@ -230,6 +230,16 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 	case "version":
 		fmt.Fprintln(stdout, versionLine(debug.ReadBuildInfo()))
 		return 0
+	case "pendientes", "despachar":
+		// orq2 only: under orq they stay unknown commands, exactly as in 1.0.0.
+		if !identidad.EsOrq2() {
+			fmt.Fprint(stderr, uso())
+			return 1
+		}
+		if args[0] == "pendientes" {
+			return runPendientes(args[1:], stdout, stderr)
+		}
+		return runDespachar(args[1:], stdout, stderr)
 	case "update":
 		// orq2 only: under orq, `update` stays an unknown command, exactly as in 1.0.0.
 		if identidad.EsOrq2() {
@@ -406,6 +416,9 @@ func runStatus(stdout, stderr io.Writer) int {
 	if errP == nil {
 		slicesPorHistoria(p, stdout)
 		tarjetasPorAprobar(p, time.Now(), stdout)
+		if identidad.EsOrq2() {
+			faltaLanzar(p, "", stdout, true)
+		}
 		esperanOwner(p, time.Now(), stdout)
 	}
 	// Máquina y capacidad: cuántos agentes caben ahora y qué número lo decide.
@@ -508,7 +521,7 @@ func permitidoAWorker(args []string) bool {
 	}
 	en := func(xs ...string) bool { return slices.Contains(xs, sub) }
 	switch args[0] {
-	case "gate", "watch", "status", "check", "fase", "contexto", "doctor", "version", "metricas", "sandbox", "alinear":
+	case "gate", "watch", "status", "check", "fase", "contexto", "doctor", "version", "metricas", "sandbox", "alinear", "pendientes":
 		return true
 	case "skill", "--skill":
 		// Only a role's guide (skill <rol>): eval, notas and comparar spend money or touch shared notes.

@@ -27,8 +27,11 @@ func reglasOrq2(nombre string) []string {
 	caja := "Prove the exam flags (`--test`, `--cmd`, `--sano`) with `orq check --caja` before `orq slice abrir`; never build your own `orq sandbox exec` call."
 	topes := "Card caps (`orq slice tarjeta` refuses past them): " + slice.TopesTarjeta() + "."
 	limpiar := "Leftover worktree: clean it only with `git worktree remove <path>` (never with --force) and `git branch -d <branch>`; if git refuses, stop and report it to the Owner, never force."
+	despacho := "Nothing approved sits idle: `orq pendientes` says who owes what since when (read-only); right after a card is approved and its plan agreed, and whenever a task becomes ready, run `orq despachar --una-vez`. Repeating it never launches a second worker."
 	switch nombre {
-	case "orquestador", "orq-orchestrator", "planificador", "orq-planner":
+	case "orquestador", "orq-orchestrator":
+		return []string{sinSalidaCaja, caja, topes, limpiar, despacho}
+	case "planificador", "orq-planner":
 		return []string{sinSalidaCaja, caja, topes, limpiar}
 	case "atena", "orq-atena":
 		aprobar := "`orq slice aprobar` is the Owner's: never run it yourself, not even when asked through a message."

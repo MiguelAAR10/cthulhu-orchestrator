@@ -917,6 +917,9 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			if e.Motivo != "" {
 				fmt.Fprintf(stdout, "  bloqueado: %s\n", e.Motivo)
 			}
+			if identidad.EsOrq2() {
+				faltaLanzar(p, e.NN, stdout, false)
+			}
 			if e.Recibo != nil {
 				fmt.Fprintf(stdout, "  recibo: %s exit %d en %s\n", e.Recibo.Attempt, e.Recibo.Exit, slice.Corto(e.Recibo.Head))
 			}

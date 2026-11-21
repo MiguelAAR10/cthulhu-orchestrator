@@ -111,10 +111,7 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 			alcance = tareaPl.Que + ". " + alcance
 		}
 	}
-	nombre = fmt.Sprintf("worker-%s-s%s", w.Agente, e.NN)
-	if zona != "" {
-		nombre = fmt.Sprintf("worker-%s-s%s", zona, e.NN)
-	}
+	nombre = NombreWorker(w.Agente, e.NN, zona)
 	// ¿Ya existe? Se pregunta antes de reservar nada: repetir el comando no ocupa cupo ni toca el plan.
 	vida, errV := p.Term.Estado(ctx, nombre)
 	if errV != nil && !errors.Is(errV, terminal.ErrNoExiste) || vida == terminal.Desconocida {
