@@ -6,14 +6,55 @@
 
 **Agents write the code. A program decides when it's done.**
 
-`orq` — a multi-agent coding harness in Go, standard library only.<br>
+`orq` / `orq2` — a multi-agent coding harness in Go, standard library only.<br>
 The in-house dev tool of **[AI EDGE RUNNERS](https://ai-edgerunners-landing.vercel.app)**.
 
-`Go 1.25 · stdlib only` · `~9k lines` · `86 tests` · `22 commands` · `v1.0.0`
+`Go 1.25 · stdlib only` · `~22k lines` · `29 packages` · `553 Go tests` · `orq v1.0.0` · `orq2 v2.0`
 
 </div>
 
 ---
+
+## What's new in orq2 v2.0 (2026-11-20)
+
+`orq2` is the second generation. It installs **beside** `orq` 1.0.0 (which stays byte-identical) and adds a sandbox, a sealed per-folder exam and recovery from crashes. v2.0 closes the defects found by an external evaluation, each with a red test first, an independent review and a full CI run.
+
+| Group | Guarantee | Principle |
+|---|---|---|
+| G0 | Fast tests: core slice suite 302 s → 169 s, full CI ~8–10 min | test isolation (`t.Parallel`) |
+| G1 | Nothing is lost silently: closing archives the channel, write errors surface | append-only log, fail loudly |
+| G2 | Two processes never clobber each other's state | optimistic concurrency + `flock` |
+| G3 | A crash mid approve/close can be resumed; an Owner rejection is never undone by accident | write-ahead intent, idempotency |
+| G4 | The exam runs the checks of **every folder** the story touches, on the exact commit | fail closed |
+| G6 | `orq2 pendientes` + `orq2 despachar --una-vez`: an approved story never sits without a worker | reconcile loop (Kubernetes controllers) |
+| G7 | `orq2 update`: installs only a SHA with a gate record, Owner-confirmed, with rollback | gated promotion |
+
+Independent reviews caught **10 High findings** before install (integration 1, G7 1, G2 1, G3 1, memory 7). The memory group (G5) did not pass and is parked for v2.1.
+
+**Read the manual:** [`docs/manual/index.html`](docs/manual/index.html) — concepts, C4 architecture, the end-to-end workflow with a real use case, what is proven, limits, and a command dictionary. Owner pages: [`docs/harness-v2/owner/`](docs/harness-v2/owner/).
+
+### The commands that matter
+
+| Intent | Command | Who |
+|---|---|---|
+| Set up a project (detect stack, checks, hooks, skills) | `orq2 init` | Owner |
+| Start the orchestration team | `orq2 up` | Owner |
+| Run the project checks before asking for verification | `orq2 check` (`--caja` = inside the sandbox) | worker |
+| Approve the story card | `orq2 slice aprobar NN` | Owner, own terminal |
+| What is owed and since when | `orq2 pendientes` | anyone |
+| Launch ready tasks once, no duplicates | `orq2 despachar --una-vez` | orchestrator |
+| Run the sealed exam and write a receipt | `orq2 slice verificar` | orchestrator |
+| Accept or reject | `orq2 slice cerrar --aceptado` / `--rechazado "motivo"` | Owner |
+| Health of worktrees, branches, sessions | `orq2 doctor` · `orq2 status` | anyone |
+| Update orq2 safely (or roll back) | `orq2 update` (`--ver`, `--volver`) | Owner, own terminal |
+
+`orq2 --help` lists everything; `orq2 skill ROL` prints the guide of a role.
+
+### Honest limits
+
+- **One Linux user runs every agent.** Owner-terminal confirmations (`slice aprobar`, `update`, `--revoca-rechazo`) are speed bumps against mistakes, not locks against a determined agent. Per-project identity is planned for v2.1.
+- **Memory with evidence is not in v2.0** (G5 parked).
+- **No measured advantage yet** over a plain route (Claude Code + skills + a protected branch). A paired test day ([protocol](docs/harness-v2/v2.1/test-day-protocol.md)) decides what v2.1 builds.
 
 ## What it is
 
@@ -93,6 +134,12 @@ Every number lives in `~/.config/orq/limits.json` (template in [`templates/limit
 Requires Go 1.25+.
 
 ```bash
+# orq2 (v2.0), side by side with orq: writes only ~/bin/orq2
+make ci            # gofmt, vet, staticcheck, go test -race, e2e and sandbox-escape suites
+make install2      # first install; afterwards use `orq2 update`
+orq2 version       # 2.0.0-pilot revision=<sha> modified=false
+
+# orq (v1.0.0)
 make test          # go vet + go test ./...
 make install       # builds ~/bin/orq and writes default limits to ~/.config/orq/limits.json
 orq watch          # first disk measurement (can take a few minutes)
@@ -106,11 +153,11 @@ The Claude Code hook is installed **per project**, not globally: copy [`template
 ## Layout
 
 ```text
-harness/      orq — Go, standard library only (cmd/orq + 15 internal packages)
+harness/      orq and orq2 — Go, standard library only (cmd/orq + 29 internal packages)
 skills/       the role prompts: interviewer, orchestrator, planner
 templates/    story.md, limits.json, the per-project Claude Code hook
 validacion/   the cheating test and the end-to-end suite
-docs/         the rulebook: what every number protects
+docs/         the rulebook, the manual (docs/manual/) and the v2 plans and Owner pages (docs/harness-v2/)
 assets/       the octopuses
 ```
 
@@ -118,7 +165,9 @@ assets/       the octopuses
 
 **Works today:** the gate · the slice state machine (implementing → verified → integrating → closing / blocked) · fingerprinted exams, counted green, receipts · 1–4 workers in worktrees and zones · task-graph planning, memory and handoff · parallel slices.
 
-**Next:** a full Orca adapter · sandboxed workers · cost and human-time metrics per slice · hidden test variants · a judge for chat quality.
+**Works in orq2 v2.0:** sandboxed exam (bwrap) · per-folder checks · crash-safe approve/close · locks and versioned state · `pendientes` / `despachar` · gated `update` with rollback.
+
+**Next (v2.1, only where the test day shows value):** per-project identity and credentials · memory with evidence · a resident dispatcher and autopilot · `orq2 ayuda "<intent>"` and a generated command dictionary for agents · cost and Owner-time metrics per story.
 
 ---
 
