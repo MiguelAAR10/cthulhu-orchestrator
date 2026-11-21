@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"orq/internal/gitx"
+	"orq/internal/identidad"
 	"orq/internal/sandbox"
 )
 
@@ -100,6 +101,9 @@ func entornoExamen() map[string]string {
 // dependencias del proyecto que se ven de solo lectura dentro de una copia: node_modules se monta
 // en la copia; .venv se monta en su ruta real (un venv lleva rutas absolutas) con un enlace en la copia.
 func (r Repo) depsEn(copia string) (ro []string, vinculos []sandbox.Vinculo) {
+	if !identidad.EsOrq2() {
+		return r.depsOrq(copia)
+	}
 	subs := []string{""}
 	for _, ca := range r.Carpetas {
 		if len(ca.Lista) > 0 {
@@ -124,6 +128,26 @@ func (r Repo) depsEn(copia string) (ro []string, vinculos []sandbox.Vinculo) {
 			if l, err := os.Readlink(enlace); err == nil && l == venv {
 				ro = append(ro, venv)
 			} else if _, err := os.Lstat(enlace); errors.Is(err, os.ErrNotExist) && os.Symlink(venv, enlace) == nil {
+				ro = append(ro, venv)
+			}
+		}
+	}
+	return ro, vinculos
+}
+
+// depsOrq es depsEn tal como era en orq 1.0.0, que la identidad orq conserva byte a byte: solo la
+// raíz, y solo si la copia aún no tiene node_modules ni .venv (así, en una copia donde ya corrió un
+// comando, los siguientes no los ven; orq2 lo corrige).
+func (r Repo) depsOrq(copia string) (ro []string, vinculos []sandbox.Vinculo) {
+	if fi, err := os.Stat(filepath.Join(r.Root, "node_modules")); err == nil && fi.IsDir() {
+		if _, err := os.Lstat(filepath.Join(copia, "node_modules")); errors.Is(err, os.ErrNotExist) {
+			vinculos = append(vinculos, sandbox.Vinculo{Origen: filepath.Join(r.Root, "node_modules"), Destino: filepath.Join(copia, "node_modules")})
+		}
+	}
+	venv := filepath.Join(r.Root, ".venv")
+	if fi, err := os.Stat(venv); err == nil && fi.IsDir() {
+		if _, err := os.Lstat(filepath.Join(copia, ".venv")); errors.Is(err, os.ErrNotExist) {
+			if os.Symlink(venv, filepath.Join(copia, ".venv")) == nil {
 				ro = append(ro, venv)
 			}
 		}

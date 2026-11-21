@@ -29,6 +29,7 @@ func repoConDashboard(t *testing.T, codigo string) Repo {
 	Git(r.Root, "commit", "-qm", "dashboard")
 	r.Checks = checksRaizVerdes
 	r.Cobertura = true
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	r.Carpetas = []config.Carpeta{{Ruta: "dashboard", Lista: []config.Check{
 		{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "./node_modules/.bin/fake-test"}}}}
 	return r
@@ -145,6 +146,7 @@ func TestCarpetaRojaEnElMergeNoIntegra(t *testing.T) {
 func TestChecksRaizSeRecorrenEnElMerge(t *testing.T) {
 	r := repoDeJuguete(t)
 	r.Cobertura = true
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "test ! -f roto"}}
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
@@ -179,6 +181,7 @@ func TestAbrirRechazaCarpetaSinChecks(t *testing.T) {
 func TestVerificarRechazaDiffEnCarpetaSinChecks(t *testing.T) {
 	r := repoDeJuguete(t)
 	r.Cobertura = true
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	r.Checks = checksRaizVerdes
 	e := abrir(t, r)
 	os.MkdirAll(filepath.Join(e.Worktree, "web"), 0o755)
@@ -197,6 +200,7 @@ func TestVerificarRechazaDiffEnCarpetaSinChecks(t *testing.T) {
 func TestConfigPlanaSigueFuncionando(t *testing.T) {
 	r := repoDeJuguete(t)
 	r.Cobertura = true
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	r.Checks = checksRaizVerdes
 	e, err := abrirCon(t, r, "total.txt", "README.md")
 	if err != nil {
@@ -211,19 +215,44 @@ func TestConfigPlanaSigueFuncionando(t *testing.T) {
 	}
 }
 
-// Every check in the same copy sees the owner's node_modules, not only the first one: the first run
-// leaves the mount point behind and that must not hide the dependencies from the next checks.
-func TestDependenciasEnCadaCheck(t *testing.T) {
+// repoConNodeModules has a root node_modules (ignored by git) whose .bin/ok exits 0, and the three
+// base checks all call it.
+func repoConNodeModules(t *testing.T) Repo {
+	t.Helper()
 	r := repoDeJuguete(t)
 	os.MkdirAll(filepath.Join(r.Root, "node_modules", ".bin"), 0o755)
 	os.WriteFile(filepath.Join(r.Root, "node_modules", ".bin", "ok"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
 	os.WriteFile(filepath.Join(r.Root, ".git", "info", "exclude"), []byte(".orq/\nnode_modules/\n"), 0o644)
 	bin := "./node_modules/.bin/ok"
 	r.Checks = []config.Check{{Nombre: "lint", Cmd: bin}, {Nombre: "types", Cmd: bin}, {Nombre: "tests", Cmd: bin}}
+	return r
+}
+
+// orq2: every check in the same copy sees the owner's node_modules, not only the first one: the first
+// run leaves the mount point behind and that must not hide the dependencies from the next checks.
+func TestDependenciasEnCadaCheck(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	r := repoConNodeModules(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
 	if e, _, err := r.Verificar("", t0); err != nil || e.Fase != Verificado {
 		t.Fatalf("%v", err)
+	}
+}
+
+// orq keeps 1.0.0 byte for byte, bug included: only the first command in a copy (lint) gets
+// node_modules; types fails with 127 because its mount point is already there.
+func TestDependenciasSoloPrimerCheckComoOrq(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq")
+	r := repoConNodeModules(t)
+	e := abrir(t, r)
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	e, _, err := r.Verificar("", t0)
+	if err == nil || !strings.Contains(err.Error(), "check types falla (exit 127)") || strings.Contains(err.Error(), "check lint falla") {
+		t.Fatalf("orq must keep the 1.0.0 behaviour (lint passes, types 127): %v", err)
+	}
+	if e.Fase == Verificado {
+		t.Fatal("verified")
 	}
 }
 
@@ -232,6 +261,7 @@ func TestDependenciasEnCadaCheck(t *testing.T) {
 func TestSinCoberturaComoAntes(t *testing.T) {
 	r := repoConDashboard(t, "0")
 	r.Cobertura, r.Carpetas = false, nil
+	t.Setenv("ORQ_NOMBRE", "orq")
 	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "test ! -f roto"}}
 	e, err := abrirCon(t, r, "total.txt", "dashboard/app.ts")
 	if err != nil {
@@ -258,6 +288,7 @@ func TestBorrarManifiestoNoEsquivaCobertura(t *testing.T) {
 	Git(r.Root, "add", "-A")
 	Git(r.Root, "commit", "-qm", "svc")
 	r.Cobertura = true
+	t.Setenv("ORQ_NOMBRE", "orq2")
 	r.Checks = checksRaizVerdes
 	e := abrir(t, r)
 	if _, err := Git(e.Worktree, "rm", "-q", "svc/go.mod"); err != nil {
