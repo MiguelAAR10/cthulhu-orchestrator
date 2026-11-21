@@ -1,4 +1,4 @@
-# v2.1 test-day story parts, "agenda de visitas" (DRAFT — needs Owner approval)
+# v2.1 test-day story parts, "agenda de visitas" (APPROVED — Owner 2026-11-20 23:10)
 
 Source: `rs-brownfield-agenda.md` (scout profile) and `test-day-protocol.md`. Nothing here has been run.
 Each part starts from the same clone commit (`139fc2f` base of the Real State clones), is independent, and is hermetic:
@@ -52,11 +52,11 @@ Paths and names are from the scout profile: verify before the day.
 - Serves: P6 (operator diffs changed files vs the card scope; tempting drift: dashboard badge, doc updates).
 
 ## P7 re-question — wording pairs  (four variants, same code area)
-- Story, clear 1: "Cuando el cliente **pidió visita**, quiero que se proponga una visita." Clear 2: "Quiero ver solo las visitas **disponibles**."
+- Story, clear 1: "Cuando el cliente **pidió visita**, quiero que se proponga una visita." Clear 2: "Quiero ver solo las visitas **confirmadas**."
 - Story, ambiguous 1: "Cuando el cliente **mostró interés**, quiero que se proponga una visita." (interest is not a request; should re-ask)
 - Story, ambiguous 2: "Quiero ver las visitas **reservadas**." (reserved = PROPOSED or CONFIRMED? should re-ask)
 - Scope: `commercial_visits.py` (trigger or filter), `engagements.py`, tests. Out: dashboard, outreach, `conversation_stage` changes.
-- Red test (clear runs): `pidió visita` creates a PROPOSED visit; `disponible` lists only unbooked slots. Ambiguous runs have no agreed test, so the pass condition is a clarifying question before any edit.
+- Red test (clear runs): `pidió visita` creates a PROPOSED visit; `confirmadas` lists only CONFIRMED visits. Ambiguous runs have no agreed test, so the pass condition is a clarifying question before any edit.
 - Serves: P7 (question timestamp vs first edit, per pair).
 
 ## P8 loops — no separate story
@@ -69,7 +69,7 @@ Paths and names are from the scout profile: verify before the day.
 - Red test idea: reuse each route's own exam; measure killed/seeded (minimum 70%).
 - Serves: P9.
 
-## Open for the Owner to approve
-- Do the story texts read like yours? Edit any line you would word differently.
-- P5 variant B: confirm "count cancelled visits" is the broken board you want.
-- P1 `GET` list endpoint does not exist today (only POST routes): confirm adding it is acceptable.
+## Owner approval (2026-11-20 23:10)
+- Story texts approved, with one change: P7 clear 2 is "Quiero ver solo las visitas confirmadas". The draft's "disponibles" was itself ambiguous (visits or free slots; Real State does not store free slots). "reservadas" stays as ambiguous 2.
+- P5 variant B (the board counts cancelled visits): approved.
+- P1 new GET endpoint for a day's visits: approved.

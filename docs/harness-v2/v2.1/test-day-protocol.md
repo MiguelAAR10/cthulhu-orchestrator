@@ -102,3 +102,10 @@ One verdict file per test (PASS/FAIL, evidence paths, Owner minutes) written by 
 - OQ8: minimum kill ratio 70%.
 - OQ9: same models on both routes: Opus builder, separate Opus reviewer.
 - OQ10: a fresh Opus scorer blind to which route it scores, plus the Owner's own minutes sheet.
+
+## Owner approval: dashboard checks (2026-11-20 23:00)
+- `.orq/config.json` of both clones (`~/worktrees/rs-prueba-orq2`, `~/worktrees/rs-prueba-simple`, both at Real State `139fc2f`) declares `carpetas.dashboard`: lint `pnpm run lint`, types `pnpm exec tsc --noEmit`, tests `pnpm run test`. Build is optional, not required. orq2 runs them inside `dashboard/`.
+- The plain route must pass the same checks, in the same folders, so both routes are judged equally.
+- The real Real State repo is untouched until the Owner decides.
+- Agenda exams are hermetic (in-memory store + TestClient, no Supabase test DB). A skipped SQL test never counts as a pass.
+- Clone prep (2026-11-20 22:38): `git clone --no-hardlinks` of Real State `main`, origin removed; `.venv` and `dashboard/node_modules` copied from Real State (no install), `.venv` shebangs rewritten to the clone. Fresh `.orq/` holds only `config.json` (no S-01 state). Check run in rs-prueba-orq2/dashboard: lint exit 0 (21 s), tsc exit 0 (19 s), vitest exit 0 (7 s).
