@@ -86,3 +86,18 @@ func (p Proyecto) CerrarWorker(ctx context.Context, nombre string) (string, erro
 	informe = append(informe, fmt.Sprintf("%s verificado en %s", e.Attempt(), slice.Corto(e.Recibo.Head)))
 	return strings.Join(informe, "\n"), p.anotar(fila)
 }
+
+// CerrarMiembro is `orq sesion cerrar NOMBRE`: the worker's merge and verification, then its pane.
+// It returns the report, the sessions closed, and why it did not close.
+func (p Proyecto) CerrarMiembro(ctx context.Context, nombre string) (string, []string, error) {
+	ses, err := canal.LoadSesiones(p.SesPath())
+	if err != nil {
+		return "", nil, err
+	}
+	informe, err := p.CerrarWorker(ctx, nombre)
+	if err != nil {
+		return informe, nil, err
+	}
+	cerradas, err := p.CerrarSesiones(ctx, ses, func(k string) bool { return k == nombre })
+	return informe, cerradas, err
+}
