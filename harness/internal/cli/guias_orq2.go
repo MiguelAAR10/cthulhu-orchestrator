@@ -27,7 +27,7 @@ func reglasOrq2(nombre string) []string {
 	caja := "Prove the exam flags (`--test`, `--cmd`, `--sano`) with `orq check --caja` before `orq slice abrir`; never build your own `orq sandbox exec` call."
 	topes := "Card caps (`orq slice tarjeta` refuses past them): " + slice.TopesTarjeta() + "."
 	limpiar := "Leftover worktree: clean it only with `git worktree remove <path>` (never with --force) and `git branch -d <branch>`; if git refuses, stop and report it to the Owner, never force."
-	despacho := "Nothing approved sits idle: `orq pendientes` says who owes what since when (read-only); right after a card is approved and its plan agreed, and whenever a task becomes ready, run `orq despachar --una-vez`, one run at a time: repeating it then never launches a second worker. After `orq slice reintentar`, tasks still en_curso from the earlier attempt are yours to decide (`orq plan soltar ID` makes one ready again)."
+	despacho := "Nothing approved sits idle: `orq pendientes` says who owes what since when (read-only); right after a card is approved and its plan agreed, and whenever a task becomes ready, run `orq despachar --una-vez`; repeating it, even at the same time, never launches a second worker. After `orq slice reintentar`, tasks still en_curso from the earlier attempt are yours to decide (`orq plan soltar ID` makes one ready again)."
 	switch nombre {
 	case "orquestador", "orq-orchestrator":
 		return []string{sinSalidaCaja, caja, topes, limpiar, despacho}

@@ -39,6 +39,41 @@ type PedidoWorker struct {
 	// RechazarOcupado refuses a new task for a zone worker that is alive and still has another
 	// task in progress (for automatic dispatch). Without it, as in 1.0.0, the worker gets it too.
 	RechazarOcupado bool
+	// Intencion, when set, runs under the launch lock right before anything is taken or started,
+	// after every refusal (busy worker, full machine): automatic dispatch records its intent there.
+	Intencion func(nombre string) error
+}
+
+// Lanzamiento says what one launch call did, decided under the launch lock.
+type Lanzamiento struct {
+	Nombre     string
+	YaEstaba   bool // as LanzarWorker: the agent existed and its contract had been delivered
+	Arranco    bool // this call started the agent
+	Contrato   bool // this call delivered the contract
+	TareaNueva bool // this call took a plan task for the worker
+}
+
+// ErrOcupado and ErrSinCapacidad mark refusals that mean "wait", not "failed".
+var (
+	ErrOcupado      = errors.New("worker ocupado con otra tarea")
+	ErrSinCapacidad = errors.New("sin capacidad en la máquina")
+)
+
+// espera keeps a refusal's message and makes errors.Is find its kind.
+type espera struct {
+	msg  string
+	tipo error
+}
+
+func (e espera) Error() string        { return e.msg }
+func (e espera) Is(target error) bool { return target == e.tipo }
+
+// Lanzar is LanzarWorker that also says what it did.
+func (p Proyecto) Lanzar(ctx context.Context, w PedidoWorker) (Lanzamiento, error) {
+	var l Lanzamiento
+	n, ya, err := p.lanzar(ctx, w, &l)
+	l.Nombre, l.YaEstaba = n, ya
+	return l, err
 }
 
 // gitComun es el directorio git compartido de un worktree enlazado ("" si no se pudo leer).
@@ -56,6 +91,10 @@ func (p Proyecto) gitComun(ctx context.Context, dir string) string {
 //
 // Es repetible: si el worker ya existe no se lanza otro, y el contrato se entrega una sola vez.
 func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre string, yaEstaba bool, err error) {
+	return p.lanzar(ctx, w, &Lanzamiento{})
+}
+
+func (p Proyecto) lanzar(ctx context.Context, w PedidoWorker, out *Lanzamiento) (nombre string, yaEstaba bool, err error) {
 	if err := p.Dentro(); err != nil {
 		return "", false, err
 	}
@@ -159,16 +198,22 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 			return "", false, fmt.Errorf("sin medir la máquina no se lanza: %w", err)
 		}
 		if !c.Cabe() {
-			return "", false, errors.New(c.Motivo())
+			return "", false, espera{c.Motivo(), ErrSinCapacidad}
 		}
 	}
 	if w.RechazarOcupado && existe && tareaPl != nil && tareaPl.Worker != nombre {
 		for _, t := range pl.Tareas {
 			if t.Estado == "en_curso" && t.Worker == nombre && t.ID != tareaPl.ID {
-				return nombre, false, fmt.Errorf("%s sigue con %s: %s espera a que termine", nombre, t.ID, tareaPl.ID)
+				return nombre, false, espera{fmt.Sprintf("%s sigue con %s: %s espera a que termine", nombre, t.ID, tareaPl.ID), ErrOcupado}
 			}
 		}
 	}
+	if w.Intencion != nil {
+		if err := w.Intencion(nombre); err != nil {
+			return nombre, false, err
+		}
+	}
+	out.TareaNueva = tareaPl != nil && tareaPl.Worker != nombre
 	modelo, esfuerzo := p.Cfg.Worker(w.Agente, dificultad)
 	// Repetición pura: el worker vive y no trae tarea nueva. No se toca el equipo ni el plan.
 	repeticion := existe && (tareaPl == nil || tareaPl.Worker == nombre)
@@ -242,6 +287,7 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 		return nombre, false, err
 	}
 	arranco = true
+	out.Arranco = res == terminal.Arranco
 	if panel.Pestana == "" {
 		panel.Pestana = otro.Tab
 	}
@@ -265,6 +311,7 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	if err != nil {
 		return nombre, false, fmt.Errorf("worker abierto pero no recibió el contrato: %w", err)
 	}
+	out.Contrato = !entregado
 	return nombre, res == terminal.YaEstaba && entregado, nil
 }
 

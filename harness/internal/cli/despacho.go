@@ -18,9 +18,10 @@ const usoDespachoOrq2 = `  orq2 pendientes                 quién debe qué y de
                                  worker, tarjetas y decisiones del Owner, bloqueos, cierres a medias,
                                  mensajes sin entrega y preguntas sin respuesta. Solo lee
   orq2 despachar --una-vez [--agente claude]   lanza, una vez, las tareas listas de los slices aprobados
-                                 con plan debatido; una corrida a la vez: repetirla no lanza otro worker
-                                 y retoma un lanzamiento cortado (anota la intención antes de lanzar).
-                                 Máquina llena = espera; una tarea de un intento anterior no se relanza
+                                 con plan debatido; repetirlo, aun a la vez, no lanza otro worker y
+                                 retoma un lanzamiento cortado (anota la intención antes de lanzar).
+                                 Máquina llena o worker ocupado = espera; una tarea de un intento
+                                 anterior no se relanza
 `
 
 // tareasTxt is "T1 lista" or "T1, T5 listas".

@@ -14,7 +14,6 @@ import (
 	"orq/internal/canal"
 	"orq/internal/config"
 	"orq/internal/diario"
-	"orq/internal/limits"
 	"orq/internal/orqdir"
 	"orq/internal/plan"
 	"orq/internal/slice"
@@ -324,12 +323,7 @@ func (p Proyecto) DespacharUnaVez(ctx context.Context, agente string) ([]Despach
 			if err != nil {
 				return out, errors.Join(append(errs, err)...)
 			}
-			t, nombre, espera := siguienteTarea(pl, e, evs, agente, vistos)
-			if espera != nil {
-				vistos[espera.Tarea] = true
-				out = append(out, *espera)
-				continue
-			}
+			t, nombre := siguienteTarea(pl, e, evs, agente, vistos)
 			if t == nil {
 				break
 			}
@@ -345,62 +339,55 @@ func (p Proyecto) DespacharUnaVez(ctx context.Context, agente string) ([]Despach
 }
 
 // siguienteTarea picks the next task to launch: first a taken task whose worker never got the
-// contract, then a ready one. A ready task whose worker is busy with another task waits.
-func siguienteTarea(pl *plan.Plan, e *slice.Estado, evs []diario.Evento, agente string, vistos map[string]bool) (*plan.Tarea, string, *Despacho) {
+// contract in this attempt, then a ready one. A busy worker is refused under the launch lock.
+func siguienteTarea(pl *plan.Plan, e *slice.Estado, evs []diario.Evento, agente string, vistos map[string]bool) (*plan.Tarea, string) {
 	for i, t := range pl.Tareas {
 		if t.Estado == "en_curso" && t.Worker != "" && !vistos[t.ID] && claseEnCurso(evs, e, t) == tareaCortada {
-			return &pl.Tareas[i], t.Worker, nil
+			return &pl.Tareas[i], t.Worker
 		}
 	}
 	listas, _ := plan.Listas(pl)
 	for _, t := range listas {
-		if vistos[t.ID] {
-			continue
+		if !vistos[t.ID] {
+			return &t, NombreWorker(agente, e.NN, t.Zona)
 		}
-		nombre := NombreWorker(agente, e.NN, t.Zona)
-		if i := slices.IndexFunc(pl.Tareas, func(x plan.Tarea) bool { return x.Estado == "en_curso" && x.Worker == nombre }); i >= 0 {
-			return nil, "", &Despacho{Slice: e.NN, Tarea: t.ID, Worker: nombre, Resultado: "espera",
-				Detalle: fmt.Sprintf("%s está con %s", nombre, pl.Tareas[i].ID)}
-		}
-		return &t, nombre, nil
 	}
-	return nil, "", nil
+	return nil, ""
 }
 
 func (p Proyecto) despacharTarea(ctx context.Context, e *slice.Estado, t plan.Tarea, nombre, agente string) (Despacho, error) {
 	d := Despacho{Slice: e.NN, Tarea: t.ID, Worker: nombre}
-	vivo := false
-	if v, err := p.Term.Estado(ctx, nombre); err == nil && v == terminal.Vivo {
-		vivo = true
-	}
-	// A full machine is a wait, not a failure: no intent, no journal noise on every re-run.
-	if !vivo {
-		if l, err := limits.Load(limits.DefaultPath()); err == nil {
-			if c, _, err := Capacidad(p.Cfg, l, p.medir()); err == nil && !c.Cabe() {
-				d.Resultado, d.Detalle = "espera", c.Motivo()
-				return d, nil
-			}
-		}
-	}
 	ev := diario.Evento{Tipo: "despacho", Paso: "intento", Slice: e.NN, Intento: e.Intento,
 		Datos: map[string]any{"tarea": t.ID, "worker": nombre}}
-	if err := p.anotar(ev); err != nil {
-		d.Resultado, d.Detalle = "fallo", err.Error()
-		return d, err
-	}
-	_, _, err := p.LanzarWorker(ctx, PedidoWorker{Slice: e.NN, Agente: agente, Tarea: t.ID,
-		Alcance: AlcancePorDefecto, Presupuesto: PresupuestoPorDefecto})
+	anotado := false
+	// The intent is written under the launch lock, after the refusals: a busy worker or a full
+	// machine leaves no line. What happened is decided there too (Lanzamiento), so two runs at the
+	// same time never both record a launch.
+	l, err := p.Lanzar(ctx, PedidoWorker{Slice: e.NN, Agente: agente, Tarea: t.ID,
+		Alcance: AlcancePorDefecto, Presupuesto: PresupuestoPorDefecto, RechazarOcupado: true,
+		Intencion: func(string) error {
+			anotado = true
+			return p.anotar(ev)
+		}})
 	switch {
-	case err == nil && vivo && t.Estado == "en_curso":
-		d.Resultado = "adoptado" // a cut-short launch whose agent was alive: adopted, contract delivered
-	case err == nil && vivo:
-		d.Resultado = "tarea_nueva" // a live worker took a new task: a new contract
-	case err == nil:
+	case errors.Is(err, ErrOcupado) || errors.Is(err, ErrSinCapacidad):
+		d.Resultado, d.Detalle = "espera", err.Error()
+		return d, nil
+	case err == nil && l.Arranco:
 		d.Resultado = "lanzado"
+	case err == nil && l.Contrato && l.TareaNueva:
+		d.Resultado = "tarea_nueva" // a live worker took a new task: a new contract
+	case err == nil && l.Contrato:
+		d.Resultado = "adoptado" // a cut-short launch whose agent was alive: adopted, contract delivered
+	case err == nil:
+		d.Resultado = "ya_estaba" // another run did it meanwhile: nothing new
 	case errors.Is(err, terminal.ErrDesconocido):
 		d.Resultado, d.Detalle = "desconocido", err.Error()
 	default:
 		d.Resultado, d.Detalle = "fallo", err.Error()
+	}
+	if !anotado {
+		return d, err
 	}
 	ev.Paso, ev.Resultado, ev.Detalle = "resultado", d.Resultado, d.Detalle
 	return d, errors.Join(err, p.anotar(ev))
