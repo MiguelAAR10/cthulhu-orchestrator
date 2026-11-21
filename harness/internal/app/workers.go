@@ -36,6 +36,9 @@ type PedidoWorker struct {
 	Presupuesto string
 	Dificultad  string
 	Tarea       string // id del plan o «siguiente»
+	// RechazarOcupado refuses a new task for a zone worker that is alive and still has another
+	// task in progress (for automatic dispatch). Without it, as in 1.0.0, the worker gets it too.
+	RechazarOcupado bool
 }
 
 // gitComun es el directorio git compartido de un worktree enlazado ("" si no se pudo leer).

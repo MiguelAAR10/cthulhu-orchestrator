@@ -193,3 +193,11 @@ func (p Proyecto) candadoRol(ses map[string]canal.Sesion, rol string) (func(), e
 	maps.Copy(ses, fresco)
 	return soltar, nil
 }
+
+// RelevarRol is `orq relevo ROL`: it opens the role's next session. visto is the session the
+// command saw when it started; anterior is the session the new one replaces.
+func (p Proyecto) RelevarRol(ctx context.Context, ses map[string]canal.Sesion, rol string, pedido config.Agente, visto canal.Sesion, forzar bool) (nueva, anterior canal.Sesion, err error) {
+	anterior = ses[rol]
+	nueva, _, err = p.LanzarRol(ctx, ses, rol, pedido)
+	return nueva, anterior, err
+}
