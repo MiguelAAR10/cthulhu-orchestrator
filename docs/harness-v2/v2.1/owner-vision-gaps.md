@@ -30,3 +30,21 @@ participation, and a way for people to say "this far I can go, from here I do it
 - The Owner's minutes are not the only metric: participation he chooses (D16) is value, not cost.
 - Next step when the project resumes: decide with the Owner which of D14–D22 enter v2.1 next to the lean plan,
   and which wait for a v3 (product stages before the story).
+
+## Second round of the Owner's vision (same day): D23–D29
+
+What is already validated and stays: parallel agents, architecture criteria, communication protocols
+(agent-to-agent research), memory read through a graph context. The Owner does not consider the work wrong; he
+wants the base widened.
+
+| # | What the Owner wants | Gap today |
+|---|---|---|
+| D23 | **Living, very short, agent-specialised context.** An agent starts from zero and searches for how to set up the environment and run tests; tests fail because backend, frontend or a messaging DB are not in sync, and it loops. Base criteria per kind of test (unit, integration, e2e, several services) must be written once as live, brief documents agents read first. | Each agent rediscovers the environment; no per-test-kind context (overlaps D13) |
+| D24 | **Code as a database.** Index, tags and metadata per component/file so we know which files implement which capability and find faults fast (inspiration: the metadata layer behind Spark/Databricks tables — take the useful detail, not the over-engineering). Graph context for efficient reading. | `docs/mapa.md` from init; graphify exists as a skill but is not part of orq2 |
+| D25 | **Architecture that an expert would write.** Modular, isolated services, encapsulation, maintainable and understandable code, efficient for what is needed; scalability where the project needs it. Depends on the project type, so orq2 must understand the goal and leave patterns. | No architecture stage or review criteria beyond the card |
+| D26 | **Self-improving skills for scopes and reviews.** Scopes should prevent everything; reviews use dynamic skills that improve after each miss (what a scope or review let through becomes a rule). | Fixed skills; misses go to a ledger by hand (this file, `orq2-defects.md`) |
+| D27 | **The user defines the level.** Interface level, capabilities, mockup depth, difficulty, time, innovation; frontend criteria chosen and understood by the user. | Not asked |
+| D28 | **Smart routing, lean and reversible.** Show architecture only when the work is large; a short fix or a plain question must not trigger the whole system. Flexible, reversible, works for short fixes too (fast with an indexed codebase). Everything traced in logs and metrics to detect patterns. | Route fix/slice exists (D6) but the ceremony is the same; no metrics per run (cost `n/d`) |
+| D29 | **The interface inside Claude Code.** Fastest path: in Claude Code itself, ASCII art (the octopus), options, a script that reads available models and quota and suggests a setup, the user selects by talking to Claude. | Nothing (extends D14, D15) |
+
+Token rule: this is the Owner's work tool, not his core work. Development resumes only when he has spare tokens.
