@@ -51,53 +51,44 @@ by builders; S-01 is paused as is.
 
 ## Checkpoint
 
+Final v2.0 state, 2026-11-20 23:45. Earlier checkpoint history is in Git (`git log -p -- docs/harness-v2/v2-fixes/plan.md`).
+
 ```json
 {
-  "phase": "D",
+  "phase": "D (development) closed for v2.0; next: test day 2026-11-21, then D2 documentation (Haiku, writing-for-agents)",
   "integration_branch": "harness-v2",
-  "integration_owner": "orchestrator pane w47:p3B (since 2026-11-20); filter session w47:p9 relays Owner",
-  "harness_v2_tip": "97d4a72 — G0, G4, G7, G1, G2, G6 merged",
-  "installed": "~/bin/orq2 = see install2 / installed_version; rollback = rollback_binary",
-  "in_flight": {
-    "R2": "integrated 5f25823. Independent Opus review of 309addf..bdf40db: VERDICT no High, no Medium; Lows for v2.1 notes: (a) aviso_ram_gb 0 now invalidates limits.json under orq2 and blocks all Bash (fails closed, release note) (b) card preamble gives one error per line under orq2 (c) lines in duplicate/unknown sections not checked in same pass (d) literal caps in cli.go:93 usage are orq 1.0.0 text, keep. Reviewer pane closed, review worktree removed. Next: make ci on 5f25823, clone proof, tell filter before install2",
-    "clone_proof_5f25823": "PASS (throwaway RS clone + copied .orq/.venv in session scratchpad, isolated ORQ_*): version 2.0.0-pilot rev 5f25823 modified=false; doctor lists only 3 RS sessions that really no longer exist (S-01 paused; correct report, no harness defect); check --caja exit 0 (lint/types/tests run in box; first run failed only because the copied .venv kept shebangs to the live path, rewritten in the copy); over-cap card: orq2 lists all 3 violations in one run, orq name returns only the first (1.0.0)",
-    "make_ci_on_97d4a72": "INVALID (not a code failure): e2e refused because HEAD moved during the run (orchestrator committed a checkpoint mid-ci). Rule: never commit on harness-v2 while make ci runs",
-    "make_ci_on_69e251c": "INVALID again: filter committed docs dc06403/a28ff1a mid-run (25 pkgs ok, 0 FAIL); asked filter not to commit on harness-v2",
-    "make_ci_on_8aa4f8b": "PASS exit 0, 15m51s (G2 + G6 code); gate record written (git note refs/notes/orq2-gate)",
-    "make_ci_on_795560f": "PASS exit 0, 7m50s (G2+G6+G3 + hermetic status test); gate record written",
-    "install_candidate": "795560f (G2+G6+G3, gate record written); clone proof PASS 22:58 (version modified=false, doctor 3 dead RS sessions only, check --caja 0, 3 card violations); waiting Owner GO via filter",
-    "docs_owner_pages": "merged 2485ee1 (D5-D12, debate response, test-day protocol draft 70ae851); filter commits Owner docs only on docs/owner-pages",
-    "test_day_prep": "Owner 22:55: (A) no install of 8aa4f8b; one install after G3+G5. (B) OQ1-OQ10 answered (RS clones ~/worktrees/rs-prueba-orq2 and rs-prueba-simple, date 2026-11-21, 60 min/test, mutmut 20 mutants, kill >=70%, Opus builder + Opus reviewer both routes, blind Opus scorer). Sonnet w47 testday writing answers into the protocol + story parts draft (needs Owner approval) on docs/owner-pages. RS scout profile done fcd3800 (key: dashboard/ has no checks; SQL tests skip without DANTE_TEST_DB_URL so agenda exam must be hermetic; S-01 paused IMPLEMENTANDO 10/11 red). Owner 23:00 dashboard checks approved; 23:10 stories APPROVED (P7 confirmadas). Clones created 22:38 at RS 139fc2f: ~/worktrees/rs-prueba-orq2 and rs-prueba-simple (no remote, .venv+node_modules copied, fresh .orq/config.json with carpetas.dashboard; dashboard lint/tsc/vitest exit 0)",
-    "make_ci_on_f9a936b": "PASS exit 0, 9m36s (lint, gofmt, vet, race 24 pkgs ok, internal/slice 169s vs 302s before G0; e2e-v05 + aislamiento 14/0/0); log ~/.local/share/orq2-gate-logs/make-ci-f9a936b.log",
-    "gate_record_f9a936b": "written: git note refs/notes/orq2-gate on f9a936b (orq2 update --registrar, ORQ_ROL=orquestador)",
-    "clone_proof_f9a936b": "PASS: version 2.0.0-pilot rev f9a936b modified=false; doctor only the 3 real dead RS sessions; check --caja exit 0; over-cap card lists all 3 violations",
-    "install2_f9a936b": "DONE (Owner GO); next install will include G2, G6, G3 (+G5 if unblocked)",
-    "review_policy": "Owner 2026-11-20: one fresh Opus review per group; second review only for G2 and G3 or when the first finds a High. Reviewer panes closed after each review",
-    "gate_logs": "~/.local/share/orq2-gate-logs/ (durable, for orq2 update --registrar)",
-    "make_ci_on_5f25823": "PASS exit 0, 14m54s: lint, gofmt, vet, go test -race 24 pkgs ok (internal/slice 302s), e2e-v05 and aislamiento 14/0/0 (orchestrator-run; modified=true only from untracked docs copied by ci)",
-    "install2": "Owner GO 2026-11-20 (via filter) for 5f25823 code; built from the docs-only commit on top of it so modified=false; result recorded below after install",
-    "installed_version": "~/bin/orq2 = 2.0.0-pilot revision=f9a936b16e4bec493af303f21cea9f46d00e2f46 modified=false (installed 2026-11-20 ~21:40 after Owner GO, built -trimpath from a clean clone at f9a936b); ~/bin/orq untouched (1.0.0)",
-    "rollback_binary": "~/.local/share/orq2-rollback/orq2-299d02d (previous install) and orq2-24f2438 (older); identity follows the file name, so a copy reports 1.0.0 until restored as ~/bin/orq2. Restore: cp -p <copy> ~/bin/.orq2.new && mv -f ~/bin/.orq2.new ~/bin/orq2",
-    "make_ci_on_309addf": "PASS exit 0, e2e + aislamiento green, 19m19s (filter-run, relayed 2026-11-20); internal/slice 319s under contention",
-    "309addf_installable": "NO: fresh Opus review found 1 High (H1 Zonas) + 3 Medium, all in R2 scope"
+  "integration_owner": "orchestrator pane w47:p3B; filter session w47:p9 relays the Owner and commits Owner docs only on docs/owner-pages",
+  "rules": "never commit on harness-v2 while make ci runs (moves HEAD, e2e refuses the candidate); one make ci at a time; builders run targeted tests -p 1",
+  "installed": "~/bin/orq2 = 2.0.0-pilot revision=795560fc4590630357254f444e2a7b555844e5fa modified=false (Owner GO 23:40, clean-clone build, make install2). ~/bin/orq untouched (1.0.0)",
+  "rollback": "~/.local/share/orq2-rollback/orq2-f9a936b (previous), orq2-299d02d, orq2-24f2438. Identity follows the file name: restore by copying to ~/bin/orq2 (run under its rollback name it acts as orq 1.0.0)",
+  "v2_0_contents": {
+    "integrated": "R2, G0 (rapido), G1, G2 (locks), G3 (recoverable approve/close, Owner-only --revoca-rechazo), G4 (per-folder checks), G6 (dispatcher), G7 (orq2 update gate record)",
+    "parked": "G5 option A (v2/g5-memoria b6a26ab): 2 High in final review, backlog K10; harness-v2 keeps pre-G5 memory",
+    "high_findings_by_review": "R2 0, G0 0, G4 0, G7 1, G1 0, G2 1, G6 0, G3 1, G5 7 (parked)"
   },
-  "lanes": {
-    "A": {"group": "G3", "state": "INTEGRATED f7042db (reviews: r1 1 High fixed, r2 0 High + M-1 fixed; last delta diff-checked by orchestrator; adds Owner-only --revoca-rechazo). Lane A now: v2/test-hermetico (Haiku) makes TestStatusMuestraMaquinaYCapacidad independent of live host agents, then make ci G2+G6+G3. v2.1: --revoca-rechazo has no gate raw-text rule (soloOwner bypassable via script pty, same speed bump as G7); G3 L-3/L-4 open", "attempt": 1, "pane": "w47:p3W (agent g3-recuperable, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g3", "branch": "v2/g3-recuperable", "base": "d88b615", "note": "high risk: two reviews"},
-    "G2": "integrated d88b615; reviews: 1 High fixed, 2 no High (2 Medium fixed, orchestrator diff check). Pane closed, worktree removed, branch deleted",
-    "G6": "integrated 97d4a72; review no High (2 Medium fixed); concurrent despachar goroutine test after G2 (one worker, one contract). Pane closed, worktree removed, branch deleted",
-    "lint_fix": {"state": "in progress", "pane": "w47:p3M (agent lint-st1005, Haiku)", "worktree": "~/worktrees/cthulhu-lint", "branch": "v2/lint-st1005", "why": "make ci on f451d5b failed at lint in 8 s: ST1005 slice.go:298 from G1 99954c8 (S-NN error string); fix = lint:ignore directive, text unchanged; log ~/.local/share/orq2-gate-logs/make-ci-f451d5b.log"},
-    "G7": "integrated 6a26b85; reviews: ddf2508 High fixed, 6163067 no High, N1 fix bb71cf7 by orchestrator diff check. Pane closed, worktree removed, branch deleted. Gate record must be written with orq2 update --registrar for each gated SHA; ci log kept at a durable path",
-    "G0": "integrated 8683242 (orchestrator diff check: only t.Parallel lines + make rapido; 115 tests before/after; 3 runs + -race slice PASS; ~20-35% faster under load). Pane closed, worktree removed, branch deleted. make ci pending: batched with G4/G1 merge",
-    "B": {"group": "G4", "state": "depsEn gated to orq2 (19b30cc, 4 pkgs green -p 1); reviewer re-checking delta 68770f7..19b30cc", "owner_note": "after G4 is installed, RS S-01 will be refused until Owner adds a carpetas.dashboard block to RS .orq/config.json (builder proposed: pnpm run lint / pnpm exec tsc --noEmit / pnpm run test, build optional)", "attempt": 1, "pane": "w47:p3D (agent g4-examen, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g4", "branch": "v2/g4-examen", "base": "309addf", "started": "2026-11-20"}
+  "gate": {
+    "make_ci_795560f": "PASS exit 0, 7m50s, 0 FAIL, e2e-v05 86/0, aislamiento 14/0/0; log ~/.local/share/orq2-gate-logs/make-ci-795560f.log",
+    "gate_record": "git note refs/notes/orq2-gate on 795560f (also 8aa4f8b, f9a936b)",
+    "clone_proof_795560f": "PASS 22:58: version modified=false, doctor only 3 dead RS sessions, check --caja 0, over-cap card lists 3 violations"
   },
-  "G1": "integrated c0add30; reviews 98b34b4 no High (M1, M2 fixed), delta no High (N1, N2, N4 fixed), guide fix by orchestrator diff check. Pane closed, worktree removed, branch deleted",
-  "briefs": "session scratchpad brief-g0.md / brief-g4.md (also re-derivable from this plan's rows)",
-  "queued": {},
-  "owner_held": {"RS carpetas.dashboard config": "proposal held; Owner approves when next RS story (agenda de visitas) starts"},
-  "cleanup_2026-11-20": "removed clean merged worktrees + branches: v2/review2-fixes 26a0b91, v2/build 5d440fb, v2/review-fixes cb65b9e, v2/g0-rapido d5adfdd. Rule (Owner): close each pane as soon as its agent is done and its worktree clean/removed; free -m before every launch",
-  "parked": ["v2/panel", "v2/locks", "v2/memoria (input to G5)", "v2/tui (branch only)"],
-  "attempts": {"G5_review_fix": "2 of 2 used; round 3 authorized by Owner (option A), final", "G2_review_fix": "1 of 2 done", "G0": 1, "G4": "1 + review-fix 1", "G1": "1 + gating round", "G7": "1 + review-fix 1 of 2", "R2_review": 1},
-  "owner_last_update": "2026-11-20 evening: approved all findings, asked for speed",
-  "next_action": "review G1 then G4 sequentially with ONE fresh Opus reviewer (machine loaded). Poll A and B every ~10 min; on delivery: diff check, fresh Opus reviewer pane, merge --no-ff into harness-v2, then make ci (one at a time, >=8 GB free); wait for R2 delivery and make ci result from filter"
+  "known_limits": "orq2 update and --revoca-rechazo are speed bumps, not locks: a script pty + env -u ORQ_ROL passes soloOwner (K4, K10)",
+  "real_state": {
+    "real_repo": "untouched; S-01 paused IMPLEMENTANDO (10/11 red). Its .orq/config.json has no carpetas.dashboard, so orq2 795560f refuses S-01 (scope has dashboard/*) until the Owner decides that config",
+    "test_clones": "~/worktrees/rs-prueba-orq2 and ~/worktrees/rs-prueba-simple at RS 139fc2f, no remote, .venv + dashboard/node_modules copied (no install), fresh .orq/config.json with carpetas.dashboard (Owner 23:00); dashboard lint/tsc/vitest exit 0 in rs-prueba-orq2"
+  },
+  "test_day": {
+    "date": "2026-11-21",
+    "protocol": "docs/harness-v2/v2.1/test-day-protocol.md (Owner answers OQ1-OQ10, dashboard approval); commands marked 'verify before the day'",
+    "stories": "docs/harness-v2/v2.1/test-day-stories.md APPROVED (Owner 23:10)",
+    "brownfield": "docs/harness-v2/v2.1/rs-brownfield-agenda.md",
+    "runs_tonight": "none"
+  },
+  "worktrees": "only ~/worktrees/cthulhu-docs (filter, docs/owner-pages, clean, merged) and the two RS test clones",
+  "panes": "w47:p9 (filter), w47:p3B (orchestrator); all builders and reviewers closed",
+  "branches_not_merged": "v2/g5-memoria (K10), v2/panel (K11), v2/tui (K12), v2/locks (K13), v2/memoria (K14); each has a backlog line",
+  "v2_1_notes": "orq2 update installs the tip while docs commits move past the gated SHA; G7 Lows; G2 L1/L3/L5 and relevo; G6 L2/L6; G4 L2/L3 and e2e per folder; G3 L-3/L-4 and --revoca-rechazo has no gate raw-text rule; K10 G5 resume plan",
+  "attempts": "G3 review-fix 2 of 2 used; G5 option A final round used (parked)",
+  "owner_last_update": "2026-11-20 23:40: GO to install 795560f; asked for cleanup, final checkpoint and the first test-day step (no runs tonight)",
+  "next_action": "test day step 0 (dry run of the protocol commands, read-only) after Owner OK; then P1"
 }
 ```
