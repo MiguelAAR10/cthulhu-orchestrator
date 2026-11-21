@@ -75,7 +75,7 @@ by builders; S-01 is paused as is.
     "309addf_installable": "NO: fresh Opus review found 1 High (H1 Zonas) + 3 Medium, all in R2 scope"
   },
   "lanes": {
-    "A": {"group": "G2", "state": "in progress", "attempt": 1, "pane": "w47:p3K (agent g2-escrituras, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g2", "branch": "v2/g2-escrituras", "base": "f451d5b (includes full G1)"},
+    "A": {"group": "G2", "state": "delivered f9db976; independent review 1 of 2 in progress (rev-g2, pane w47:p3Q)", "attempt": 1, "pane": "w47:p3K (agent g2-escrituras, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g2", "branch": "v2/g2-escrituras", "base": "f451d5b (includes full G1)"},
     "C": {"group": "G6", "state": "in progress", "attempt": 1, "pane": "w47:p3N (agent g6-despacho, Opus 5.5)", "worktree": "~/worktrees/cthulhu-g6", "branch": "v2/g6-despacho", "base": "f451d5b", "note": "Owner 2026-11-20: G6 runs now, independent of G5"},
     "lint_fix": {"state": "in progress", "pane": "w47:p3M (agent lint-st1005, Haiku)", "worktree": "~/worktrees/cthulhu-lint", "branch": "v2/lint-st1005", "why": "make ci on f451d5b failed at lint in 8 s: ST1005 slice.go:298 from G1 99954c8 (S-NN error string); fix = lint:ignore directive, text unchanged; log ~/.local/share/orq2-gate-logs/make-ci-f451d5b.log"},
     "G7": "integrated 6a26b85; reviews: ddf2508 High fixed, 6163067 no High, N1 fix bb71cf7 by orchestrator diff check. Pane closed, worktree removed, branch deleted. Gate record must be written with orq2 update --registrar for each gated SHA; ci log kept at a durable path",
