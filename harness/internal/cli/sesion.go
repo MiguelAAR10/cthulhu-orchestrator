@@ -12,6 +12,7 @@ import (
 	"orq/internal/app"
 	"orq/internal/canal"
 	"orq/internal/config"
+	"orq/internal/identidad"
 	"orq/internal/terminal"
 )
 
@@ -56,11 +57,15 @@ func runSesion(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		rol := args[1]
-		if s, ok := ses[rol]; ok {
-			fmt.Fprintf(stderr, "ya hay %s (%s, panel %s); ciérrala antes con orq sesion cerrar %s\n", rol, s.Agente, s.Pane, rol)
-			return 1
+		abrir := p.AbrirRol // orq2: checked under the role's lock, on what is registered now
+		if !identidad.EsOrq2() {
+			if s, ok := ses[rol]; ok {
+				fmt.Fprintf(stderr, "ya hay %s (%s, panel %s); ciérrala antes con orq sesion cerrar %s\n", rol, s.Agente, s.Pane, rol)
+				return 1
+			}
+			abrir = p.LanzarRol // orq keeps 1.0.0
 		}
-		s, usado, err := p.LanzarRol(context.Background(), ses, rol, *a)
+		s, usado, err := abrir(context.Background(), ses, rol, *a)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq sesion:", err)
 			if errors.Is(err, terminal.ErrDesconocido) {

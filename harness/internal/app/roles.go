@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"time"
 
@@ -55,7 +56,20 @@ func (p Proyecto) argsRol(ctx context.Context, a config.Agente, nombre string) [
 
 // LanzarRol abre un panel con el rol, lo nombra y le da el arranque. pedido trae lo que las banderas
 // fijaron; lo demás sale de la configuración. Repetirlo tras una interrupción no abre otra sesión.
+// In orq2 the generation comes from the map on disk, under the role's lock: two relevos at once
+// never get the same generation.
 func (p Proyecto) LanzarRol(ctx context.Context, ses map[string]canal.Sesion, rol string, pedido config.Agente) (canal.Sesion, config.Agente, error) {
+	if identidad.EsOrq2() {
+		soltar, err := p.candadoRol(ses, rol)
+		if err != nil {
+			return canal.Sesion{}, pedido, err
+		}
+		defer soltar()
+	}
+	return p.lanzarRol(ctx, ses, rol, pedido)
+}
+
+func (p Proyecto) lanzarRol(ctx context.Context, ses map[string]canal.Sesion, rol string, pedido config.Agente) (canal.Sesion, config.Agente, error) {
 	a := p.Cfg.ParaRol(rol, pedido)
 	if err := config.ValidarKind(a.Kind); err != nil {
 		return canal.Sesion{}, a, err
@@ -127,6 +141,11 @@ func (p Proyecto) Subir(ctx context.Context, pedido config.Agente) (atena string
 			return atena, canal.Sesion{}, aviso, err
 		}
 	}
+	if identidad.EsOrq2() {
+		// Checked again under the role's lock: two `up` at once open one Orchestrator.
+		orq, _, err = p.AbrirRol(ctx, ses, "orquestador", pedido)
+		return atena, orq, aviso, err
+	}
 	orq, _, err = p.LanzarRol(ctx, ses, "orquestador", pedido)
 	return atena, orq, aviso, err
 }
@@ -142,9 +161,35 @@ func (p Proyecto) SesionViva(ctx context.Context, s canal.Sesion) bool {
 }
 
 // AbrirRol is `orq sesion abrir planificador|astra`: it opens the role only if it has no session.
+// In orq2 the check, the generation and the registration happen under the role's lock on the map
+// on disk: two opening at once give one pane; the other is refused with ErrYaHay.
 func (p Proyecto) AbrirRol(ctx context.Context, ses map[string]canal.Sesion, rol string, pedido config.Agente) (canal.Sesion, config.Agente, error) {
-	if s, ok := ses[rol]; ok {
-		return s, pedido, fmt.Errorf("%w: %s (%s, panel %s)", ErrYaHay, rol, s.Agente, s.Pane)
+	if identidad.EsOrq2() {
+		soltar, err := p.candadoRol(ses, rol)
+		if err != nil {
+			return canal.Sesion{}, pedido, err
+		}
+		defer soltar()
 	}
-	return p.LanzarRol(ctx, ses, rol, pedido)
+	if s, ok := ses[rol]; ok {
+		return s, pedido, fmt.Errorf("%w: %s (%s, panel %s); ciérrala antes con orq sesion cerrar %s", ErrYaHay, rol, s.Agente, s.Pane, rol)
+	}
+	return p.lanzarRol(ctx, ses, rol, pedido)
+}
+
+// candadoRol takes the role's lock and refreshes ses from disk, so the decision and the
+// generation come from what is registered now.
+func (p Proyecto) candadoRol(ses map[string]canal.Sesion, rol string) (func(), error) {
+	soltar, err := orqdir.Candado(filepath.Join(p.Dir, "rol-"+rol))
+	if err != nil {
+		return nil, err
+	}
+	fresco, err := canal.LoadSesiones(p.SesPath())
+	if err != nil {
+		soltar()
+		return nil, err
+	}
+	clear(ses)
+	maps.Copy(ses, fresco)
+	return soltar, nil
 }

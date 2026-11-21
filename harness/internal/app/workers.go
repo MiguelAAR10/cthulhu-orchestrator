@@ -71,11 +71,20 @@ func (p Proyecto) LanzarWorker(ctx context.Context, w PedidoWorker) (nombre stri
 	if identidad.EsOrq2() {
 		// One launch per slice at a time: the team, the plan and the sessions are read and written by
 		// one launcher, and a second launch of the same worker sees the first one's worker alive.
+		// It also waits for a member's close (cierre-sNN): a launch never joins a team that is being
+		// verified, and after the close it sees the new phase. Lock order, the same everywhere:
+		// lanzar-sNN → cierre-sNN → slice-NN → integracion → leaf locks (plan, sesiones, avisos,
+		// rol-*, diario, canal), which are released without taking another.
 		soltar, err := orqdir.Candado(filepath.Join(p.Dir, "lanzar-s"+e.NN))
 		if err != nil {
 			return "", false, err
 		}
 		defer soltar()
+		soltarCierre, err := orqdir.Candado(filepath.Join(p.Dir, "cierre-s"+e.NN))
+		if err != nil {
+			return "", false, err
+		}
+		defer soltarCierre()
 		if e, err = r.Load(e.NN); err != nil || e == nil {
 			return "", false, errors.Join(err, errors.New("no hay slice abierto"))
 		}

@@ -93,6 +93,7 @@ func (p Proyecto) CerrarWorker(ctx context.Context, nombre string) (string, erro
 // It returns the report, the sessions closed, and why it did not close. In orq2 the members of one
 // slice close one at a time, from the check "is another member still open?" to their session
 // leaving the registry: two closing at once never both wait for the other, so exactly one verifies.
+// A launch in the slice takes the same lock (after lanzar-sNN; see LanzarWorker for the order).
 func (p Proyecto) CerrarMiembro(ctx context.Context, nombre string) (string, []string, error) {
 	if m := sliceDelWorker.FindStringSubmatch(nombre); m != nil && identidad.EsOrq2() {
 		soltar, err := orqdir.Candado(filepath.Join(p.Dir, "cierre-s"+m[1]))

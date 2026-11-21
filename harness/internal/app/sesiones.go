@@ -166,6 +166,13 @@ func (p Proyecto) avisarUnaVez(ctx context.Context, actor, paso, destino, panel,
 			}
 			return e.Paso == paso || e.Paso == "reenviar" && e.Datos["paso"] == paso
 		}
+		mismoOrq2 := mismo
+		mismo = func(e diario.Evento) bool {
+			if _, conPaso := e.Datos["paso"]; e.Tipo == "lanzamiento" && e.Actor == actor && e.Paso == "reenviar" && !conPaso {
+				return true // written by orq 1.0.0: keyed by actor alone, as it was then
+			}
+			return mismoOrq2(e)
+		}
 	}
 	if u, ok := diario.Ultimo(evs, mismo); ok {
 		switch u.Resultado {

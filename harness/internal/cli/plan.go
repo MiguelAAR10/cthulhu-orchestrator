@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"orq/internal/identidad"
@@ -68,7 +70,11 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		defer func() { soltarPlan() }()
 		if identidad.EsOrq2() {
 			// The old plan is read and replaced under its lock: a task taken meanwhile is kept.
-			soltar, err := orqdir.Candado(p.PlanPath(e.NN))
+			err := os.MkdirAll(filepath.Dir(p.PlanPath(e.NN)), 0o755) // the first plan: planes/ does not exist yet
+			var soltar func()
+			if err == nil {
+				soltar, err = orqdir.Candado(p.PlanPath(e.NN))
+			}
 			if err != nil {
 				fmt.Fprintln(stderr, "orq plan:", err)
 				return 1
