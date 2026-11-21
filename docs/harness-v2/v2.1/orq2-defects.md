@@ -30,5 +30,7 @@ Severity: **A** = would stop an autonomous run or let a wrong change in · **B**
 | E20 | 11-21 · S-02 | API stream cut mid-task, no automatic resume | worker and planner "The response stopped arriving"; operator typed "continúa" | 2 nudges | B | Orchestrator detects a stopped session and resumes it once | E02 |
 | E21 | 11-21 · S-02 | `orq2 mem add` without `--imp` saves the line but exits 1 | Atena sees `imp "": usa critica\|alta\|media\|baja` and retries | ~0.5 min each, risk of duplicate memory | B | validate before writing: either refuse and save nothing, or default `media` and exit 0 | |
 | E22 | 11-21 · S-02 | Card draft and stored card diverge after `tarjeta --archivo` | `.orq/card-s02.md` still shows the question open; `orq2 slice tarjeta` shows it answered | 0 min now, risk of a wrong answer later | B | one source: the draft is regenerated from the stored card, or removed after import | |
+| E23 | 11-21 · S-02 | `reintentar --causa examen` reopens without re-sealing the exam | the approved exam fix (type-only) was then flagged as "trampa" at integration | ~5 min + a decision | A | `--causa examen` re-seals the exam on the planner's fix commit, with the approval recorded | E13 |
+| E24 | 11-21 · S-02 | A fix that must touch another task's test file has no zone path | "hay workers fuera de su zona" on an approved retry | same block as E23 | B | retry takes `--zona` for the files named in its reason | |
 
 Not orq2 (operator tooling): the test-day watcher matched agents of another workspace and woke 79 min late (11-21 13:30–14:49).
