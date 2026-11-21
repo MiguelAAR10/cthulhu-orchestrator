@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual de Cthulhu</title>
+<meta name="description" content="Manual de Cthulhu Orchestrator (orq2 v2.0): qué es, cómo funciona, qué está comprobado y qué no.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jersey+10&family=Pixelify+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f2f1ed; --pen:#121212; --pen-2:#34332f; --meta:#807e77; --rule:rgb(18 18 18 / .16);
+  --display:"Jersey 10", "Courier New", monospace;
+  --body:"Pixelify Sans", ui-monospace, "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --ease:cubic-bezier(0.16, 1, 0.3, 1);
+  color-scheme: light;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--paper);color:var(--pen-2);font:17px/1.5 var(--body);text-rendering:optimizeLegibility}
+a{color:var(--pen);text-decoration-thickness:2px;text-underline-offset:3px}
+a:focus-visible,summary:focus-visible{outline:3px solid var(--pen);outline-offset:3px}
+code,kbd,pre{font-family:var(--mono);font-size:.86em}
+code{background:rgb(18 18 18 / .06);padding:0 .25em;word-break:break-word}
+pre{background:var(--pen);color:var(--paper);padding:14px 16px;overflow-x:auto;line-height:1.45;margin:18px 0}
+pre code{background:none;padding:0;color:inherit}
+strong{color:var(--pen)}
+
+/* ---------- frame ---------- */
+.wrap{display:grid;grid-template-columns:270px minmax(0,1fr);gap:clamp(24px,4vw,56px);max-width:1320px;margin:0 auto;padding:0 clamp(16px,4vw,56px)}
+.toc{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;padding:28px 0 40px}
+.toc__box{box-shadow:inset 0 0 0 3px var(--pen),9px 9px 0 0 var(--pen);padding:18px 18px 14px;background:var(--paper)}
+.toc summary{font:400 26px/1 var(--display);text-transform:uppercase;color:var(--pen);cursor:pointer;list-style:none;letter-spacing:.02em}
+.toc summary::-webkit-details-marker{display:none}
+.toc summary::after{content:" ▾";font-size:18px}
+.toc details:not([open]) summary::after{content:" ▸"}
+.toc ol{margin:12px 0 0;padding:0;list-style:none;counter-reset:c}
+.toc li{counter-increment:c;border-top:2px solid var(--rule)}
+.toc li a{display:flex;gap:10px;padding:7px 0;text-decoration:none;font-size:14.5px;line-height:1.3}
+.toc li a::before{content:counter(c,decimal-leading-zero);font:400 18px/1 var(--display);color:var(--meta);min-width:22px}
+.toc li a:hover{text-decoration:underline}
+.toc li a[aria-current="true"]{color:var(--pen);font-weight:600}
+.toc li a[aria-current="true"]::before{color:var(--pen)}
+.toc__meta{font-size:12.5px;color:var(--meta);margin-top:12px;letter-spacing:.04em}
+main{min-width:0;padding:28px 0 80px;max-width:820px}
+
+/* ---------- cover ---------- */
+.cover{padding:28px 0 36px;border-bottom:3px solid var(--pen);margin-bottom:24px}
+.kicker{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--meta);margin:0 0 10px}
+h1{font:400 clamp(3rem,8vw,5.6rem)/.9 var(--display);text-transform:uppercase;color:var(--pen);margin:0 0 18px;max-width:14ch;text-wrap:balance}
+.lede{font-size:19px;max-width:46ch;text-wrap:pretty;margin:0 0 18px;color:var(--pen)}
+.cover__facts{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 0;padding:0;list-style:none}
+.cover__facts li{box-shadow:inset 0 0 0 2px var(--pen);padding:4px 10px;font:400 14px/1.4 var(--mono)}
+
+/* ---------- chapters ---------- */
+section.ch{padding:34px 0 10px;border-top:3px solid var(--pen);margin-top:34px}
+section.ch:first-of-type{border-top:0;margin-top:0}
+.ch__num{font:400 22px/1 var(--display);color:var(--meta);letter-spacing:.06em}
+h2{font:400 clamp(2.2rem,5vw,3.6rem)/.92 var(--display);text-transform:uppercase;color:var(--pen);margin:6px 0 16px;text-wrap:balance;max-width:18ch}
+h3{font:400 28px/1 var(--display);text-transform:uppercase;color:var(--pen);margin:30px 0 10px;letter-spacing:.01em}
+h4{font:600 15px/1.3 var(--body);text-transform:uppercase;letter-spacing:.1em;color:var(--pen);margin:20px 0 6px}
+p,li{text-wrap:pretty}
+p{margin:0 0 14px;max-width:64ch}
+ul,ol{padding-left:22px;margin:0 0 16px;max-width:64ch}
+li{margin:4px 0}
+
+/* ---------- blocks ---------- */
+.panel{box-shadow:inset 0 0 0 3px var(--pen),9px 9px 0 0 var(--pen);padding:18px 20px;margin:22px 9px 26px 0;background:var(--paper)}
+.panel > :last-child{margin-bottom:0}
+.panel--ink{background:var(--pen);color:var(--paper);box-shadow:9px 9px 0 0 var(--meta)}
+.panel--ink strong,.panel--ink a,.panel--ink h4{color:var(--paper)}
+.panel--ink code{background:rgb(242 241 237 / .14);color:var(--paper)}
+.panel__k{font:400 22px/1 var(--display);text-transform:uppercase;margin:0 0 8px;color:inherit}
+.big{font:400 clamp(2.2rem,6vw,3.4rem)/.95 var(--display);color:var(--pen);text-transform:uppercase;margin:0 0 6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:18px 9px 24px 0}
+.grid2 .panel{margin:0}
+.src{font-size:13px;color:var(--meta);letter-spacing:.02em}
+.src code{font-size:12px}
+.tag{display:inline-block;font:600 11.5px/1 var(--body);letter-spacing:.12em;text-transform:uppercase;padding:4px 7px 3px;box-shadow:inset 0 0 0 2px var(--pen);color:var(--pen);vertical-align:2px;white-space:nowrap}
+.tag--ink{background:var(--pen);color:var(--paper)}
+.tag--dash{box-shadow:none;outline:2px dashed var(--pen);outline-offset:-2px}
+
+/* ---------- tables ---------- */
+.tbl{overflow-x:auto;margin:16px 0 24px;box-shadow:inset 0 0 0 3px var(--pen)}
+table{border-collapse:collapse;width:100%;font-size:15px;line-height:1.4}
+th,td{text-align:left;vertical-align:top;padding:9px 11px;border-bottom:2px solid var(--rule)}
+th{font:400 18px/1.05 var(--display);text-transform:uppercase;color:var(--paper);background:var(--pen);letter-spacing:.03em}
+tr:last-child td{border-bottom:0}
+td code{white-space:nowrap}
+td.wrapcode code{white-space:normal}
+.tbl--cmd td code{white-space:normal}
+.tbl--cmd td:first-child{min-width:130px}
+.tbl--cmd td:nth-child(2){min-width:200px}
+.tbl--cmd td:nth-child(3){min-width:110px}
+.tbl--cmd td:nth-child(4){min-width:170px}
+
+/* ---------- figures ---------- */
+figure{margin:22px 9px 28px 0;box-shadow:inset 0 0 0 3px var(--pen),9px 9px 0 0 var(--pen);background:var(--paper)}
+figure .sc{overflow-x:auto;padding:14px}
+figure svg{display:block;width:100%;height:auto}
+figure .sc--wide svg{min-width:640px}
+figcaption{border-top:3px solid var(--pen);padding:10px 14px;font-size:14px;color:var(--pen-2)}
+figcaption b{font:400 18px/1 var(--display);text-transform:uppercase;color:var(--pen);margin-right:6px;letter-spacing:.03em}
+.scrollhint{display:none;font-size:12px;color:var(--meta);padding:0 14px 8px}
+@media (max-width:720px){.scrollhint{display:block}}
+
+/* svg language */
+svg text{font-family:var(--body);fill:var(--pen);font-size:14px}
+svg .t-d{font-family:var(--display);font-size:22px;text-transform:uppercase}
+svg .t-s{font-size:12px;fill:var(--pen-2)}
+svg .t-m{font-family:var(--mono);font-size:11.5px;fill:var(--pen-2)}
+svg .t-inv{fill:var(--paper)}
+svg .b{fill:var(--paper);stroke:var(--pen);stroke-width:3}
+svg .b2{fill:var(--paper);stroke:var(--pen);stroke-width:2}
+svg .bi{fill:var(--pen);stroke:var(--pen);stroke-width:3}
+svg .sh{fill:var(--pen)}
+svg .shm{fill:var(--meta)}
+svg .dash{fill:none;stroke:var(--pen);stroke-width:2;stroke-dasharray:6 5}
+svg .ln{fill:none;stroke:var(--pen);stroke-width:2}
+svg .ln3{fill:none;stroke:var(--pen);stroke-width:3}
+svg .lnm{fill:none;stroke:var(--meta);stroke-width:2;stroke-dasharray:3 4}
+svg .px{fill:var(--pen)}
+svg .bnd{fill:none;stroke:var(--pen);stroke-width:2;stroke-dasharray:10 6}
+
+.foot{border-top:3px solid var(--pen);margin-top:48px;padding-top:16px;font-size:14px;color:var(--meta)}
+
+/* ---------- responsive ---------- */
+@media (max-width:960px){
+  .wrap{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc{position:sticky;top:0;z-index:5;max-height:none;padding:10px 0;background:var(--paper);border-bottom:3px solid var(--pen);margin:0 calc(-1 * clamp(16px,4vw,56px));padding-left:clamp(16px,4vw,56px);padding-right:clamp(16px,4vw,56px)}
+  .toc__box{box-shadow:inset 0 0 0 2px var(--pen);padding:10px 14px}
+  .toc summary{font-size:22px}
+  .toc details[open] ol{max-height:62vh;overflow:auto}
+  .toc__meta{display:none}
+  main{padding-top:8px}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .grid2{grid-template-columns:1fr}
+  .panel,figure{margin-right:6px;box-shadow:inset 0 0 0 3px var(--pen),6px 6px 0 0 var(--pen)}
+  .panel--ink{box-shadow:6px 6px 0 0 var(--meta)}
+  th,td{padding:8px 9px;font-size:14px}
+}
+
+/* ---------- print ---------- */
+@media print{
+  @page{margin:16mm 14mm}
+  body{background:#fff;color:#000;font-size:11pt}
+  .wrap{display:block;padding:0}
+  .toc{display:none}
+  main{max-width:none;padding:0}
+  section.ch{break-before:page;border-top:0}
+  section.ch:first-of-type{break-before:auto}
+  figure,.panel,.tbl{box-shadow:none;border:2px solid #000;break-inside:avoid}
+  .panel--ink{background:#fff;color:#000}
+  .panel--ink strong,.panel--ink h4,.panel--ink a,.panel--ink code{color:#000}
+  pre{background:#fff;color:#000;border:2px solid #000;white-space:pre-wrap}
+  figure .sc--wide svg{min-width:0}
+  .scrollhint{display:none}
+  th{background:#000;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  a{color:#000;text-decoration:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc" aria-label="Índice">
+  <div class="toc__box">
+    <details id="tocd" open>
+      <summary>Índice</summary>
+      <ol>
+        <li><a href="#c1">Qué es Cthulhu</a></li>
+        <li><a href="#c2">Conceptos</a></li>
+        <li><a href="#c3">Arquitectura C4</a></li>
+        <li><a href="#c4">El flujo, de punta a punta</a></li>
+        <li><a href="#c5">Cómo funciona por dentro</a></li>
+        <li><a href="#c6">Qué está comprobado</a></li>
+        <li><a href="#c7">Límites honestos</a></li>
+        <li><a href="#c8">Cuándo usarlo y cuándo no</a></li>
+        <li><a href="#c9">Diccionario de comandos</a></li>
+        <li><a href="#c10">Cómo lo entiende un agente</a></li>
+        <li><a href="#c11">Roadmap</a></li>
+      </ol>
+    </details>
+    <p class="toc__meta">orq2 2.0.0-pilot · 795560f<br>20 nov 2026</p>
+  </div>
+</nav>
+
+<main>
+
+<header class="cover">
+  <p class="kicker">AI Edge Runners · manual del Owner · v2.0</p>
+  <h1>Cthulhu, el manual</h1>
+  <p class="lede"><strong>Rieles para construir software con agentes.</strong> Tú escribes la historia. Cthulhu pone los rieles. Los agentes construyen sobre ellos, y la evidencia decide qué se publica.</p>
+  <ul class="cover__facts">
+    <li>orq2 2.0.0-pilot</li>
+    <li>revisión 795560f</li>
+    <li>instalado en ~/bin/orq2</li>
+    <li>Go · solo librería estándar</li>
+  </ul>
+  <p class="src" style="margin-top:14px">Cómo leer este libro: cada número trae su fuente (un archivo del repo o un log). Lo que no pude comprobar lleva la marca <span class="tag tag--dash">sin verificar</span>. Lo que todavía no existe lleva <span class="tag tag--ink">no construido</span>.</p>
+</header>
+
+<!-- ============================== 1 ============================== -->
+<section class="ch" id="c1">
+  <div class="ch__num">Capítulo 01</div>
+  <h2>Qué es Cthulhu y para quién</h2>
+  <p>Cthulhu es la herramienta de desarrollo con agentes de AI Edge Runners. Su programa se llama <code>orq2</code>.</p>
+  <p>Está hecha para un Owner que no lee código. Tú dices qué quieres y por qué. orq2 organiza a los agentes y lleva el trabajo hasta <code>main</code>.</p>
+  <p>La regla de fondo es simple: <strong>lo que siempre debe ser igual lo hace cumplir un programa, no una instrucción a un agente.</strong> Un agente puede olvidar una instrucción. Un programa no.</p>
+
+  <figure>
+    <div class="sc sc--wide">
+    <svg viewBox="0 0 760 250" role="img" aria-label="El Owner escribe una historia; orq2, con el Soñador y los Edge Octos, la convierte en código en main con prueba y recibo">
+      <!-- owner -->
+      <rect class="sh" x="22" y="62" width="150" height="110"/><rect class="b" x="16" y="56" width="150" height="110"/>
+      <text class="t-d" x="30" y="88">Tú</text>
+      <text x="30" y="112">escribes la</text><text x="30" y="130">historia y</text><text x="30" y="148">decides</text>
+      <!-- arrow -->
+      <path class="ln3" d="M170 111 H226"/><path class="px" d="M226 104 l10 7 -10 7z"/>
+      <!-- orq2 boundary -->
+      <rect class="bnd" x="242" y="16" width="300" height="218"/>
+      <text class="t-d" x="254" y="42">orq2</text>
+      <text class="t-s" x="306" y="40">las reglas que no se negocian</text>
+      <!-- dreamer pixel -->
+      <g transform="translate(262,62)">
+        <rect class="px" x="12" y="0" width="36" height="6"/><rect class="px" x="6" y="6" width="48" height="24"/>
+        <rect fill="#f2f1ed" x="16" y="14" width="8" height="8"/><rect fill="#f2f1ed" x="36" y="14" width="8" height="8"/>
+        <rect class="px" x="6" y="30" width="6" height="16"/><rect class="px" x="18" y="30" width="6" height="20"/>
+        <rect class="px" x="30" y="30" width="6" height="16"/><rect class="px" x="42" y="30" width="6" height="20"/>
+        <rect class="px" x="54" y="30" width="0" height="0"/>
+      </g>
+      <text x="334" y="80">El Soñador</text><text class="t-s" x="334" y="98">el Orquestador: reparte,</text><text class="t-s" x="334" y="113">vigila, junta. No programa.</text>
+      <!-- octos -->
+      <defs><g id="octo"><rect class="px" x="0" y="0" width="24" height="14"/><rect fill="#f2f1ed" x="5" y="5" width="4" height="4"/><rect fill="#f2f1ed" x="15" y="5" width="4" height="4"/><rect class="px" x="0" y="14" width="4" height="8"/><rect class="px" x="7" y="14" width="4" height="10"/><rect class="px" x="13" y="14" width="4" height="8"/><rect class="px" x="20" y="14" width="4" height="10"/></g></defs>
+      <use href="#octo" x="266" y="150"/><use href="#octo" x="300" y="150"/><use href="#octo" x="334" y="150"/><use href="#octo" x="368" y="150"/>
+      <text x="404" y="160">Edge Octos</text><text class="t-s" x="404" y="177">los workers: 1 a 4, cada</text><text class="t-s" x="404" y="192">uno en su propio clon</text>
+      <path class="ln" d="M292 112 V140"/><path class="ln" d="M292 140 H380"/><path class="ln" d="M278 140 V150 M312 140 V150 M346 140 V150 M380 140 V150"/>
+      <text class="t-s" x="254" y="222">examen sellado · caja · diario · candados</text>
+      <!-- arrow -->
+      <path class="ln3" d="M546 111 H592"/><path class="px" d="M592 104 l10 7 -10 7z"/>
+      <!-- main -->
+      <rect class="sh" x="614" y="62" width="130" height="110"/><rect class="bi" x="608" y="56" width="130" height="110"/>
+      <text class="t-d t-inv" x="622" y="88">main</text>
+      <text class="t-inv" x="622" y="112">código +</text><text class="t-inv" x="622" y="130">prueba +</text><text class="t-inv" x="622" y="148">recibo</text>
+    </svg>
+    </div>
+    <p class="scrollhint">Desliza para ver todo el diagrama →</p>
+    <figcaption><b>Fig. 1</b> Tú estás en los dos extremos: al principio (la historia) y al final (aceptar o rechazar). En el medio trabaja orq2. Los nombres de los personajes vienen de la marca: el Soñador ordena, los Edge Octos ejecutan.</figcaption>
+  </figure>
+
+  <h3>La métrica de valor</h3>
+  <div class="panel panel--ink">
+    <p class="panel__k">Tus minutos por historia aceptada</p>
+    <p>La meta es <strong>10 minutos o menos</strong>, desde que la historia está verificada hasta que la decides. Es una meta, todavía no una medida.</p>
+    <p class="src" style="color:#c9c7c0">Fuente: <code>docs/harness-v2/owner/orq2-mapa.html</code>, «El valor que buscamos».</p>
+  </div>
+  <p>Tú ajustaste esa métrica después del debate del 20 de noviembre. Ahora cuenta también lo que sale mal: <strong>tus minutos + los desvíos de alcance + las vueltas de arreglo + los errores sembrados que el examen no atrapó</strong>. Una historia rápida pero desviada cuenta como fallo.</p>
+  <p class="src">Fuente: <code>docs/harness-v2/v2.1/test-day-protocol.md</code>, «Metric per the Owner».</p>
+
+  <h3>Para quién es</h3>
+  <ul>
+    <li><strong>El Owner</strong>: escribe historias, lee una tarjeta corta, aprueba y decide al final con una página de evidencia.</li>
+    <li><strong>Los agentes</strong> (Claude Code o Codex): trabajan dentro de las reglas. orq2 les dice su rol, su fase y su contrato.</li>
+    <li><strong>No es para</strong> quien quiere revisar cada línea de código: para eso alcanza Claude Code solo, con una rama protegida.</li>
+  </ul>
+</section>
+
+<!-- ============================== 2 ============================== -->
+<section class="ch" id="c2">
+  <div class="ch__num">Capítulo 02</div>
+  <h2>Conceptos</h2>
+  <p>Estas palabras aparecen en todos los mensajes de orq2. Una línea cada una.</p>
+
+  <div class="tbl"><table>
+    <thead><tr><th>Palabra</th><th>Qué es</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Historia</strong></td><td>Lo que quieres, en tus palabras: «Como … quiero … para …», con un criterio de aceptación. Una historia grande se parte en hijos (<code>orq2 historia abrir</code>).</td></tr>
+      <tr><td><strong>Tarjeta</strong></td><td>La tarjeta de entendimiento: lo que el agente entendió, en una página. Secciones Historia (≤3 líneas), Fuera, Examen, Zonas y Preguntas; ≤400 palabras. Si la apruebas, se congela.</td></tr>
+      <tr><td><strong>Slice</strong></td><td>Una historia en construcción, con número (S-01, S-02…). Es una máquina de estados con su rama, su examen y su recibo.</td></tr>
+      <tr><td><strong>Examen sellado</strong></td><td>La prueba de aceptación que falla al empezar (rojo). orq2 guarda su huella (sha256). El worker no puede tocarla: si cambia, orq2 lo detecta y lo bloquea.</td></tr>
+      <tr><td><strong>Caja (bwrap)</strong></td><td>Un encierro de Linux (bubblewrap). El examen corre siempre ahí, sobre una copia limpia del commit exacto. Sin red, sin ver otros procesos, sin poder escribir el estado de orq2.</td></tr>
+      <tr><td><strong>Diario</strong></td><td><code>.orq/diario.jsonl</code>: una línea JSON por cada cosa que orq2 hizo. Solo se agrega, nunca se borra.</td></tr>
+      <tr><td><strong>Canal</strong></td><td><code>.orq/canal.jsonl</code>: los mensajes entre sesiones (historia, pregunta, respuesta, estado, cierre).</td></tr>
+      <tr><td><strong>Memoria</strong></td><td><code>.orq/memoria.jsonl</code>: hechos y decisiones del proyecto, una línea cada uno, con importancia y categoría. Lo crítico nunca se compacta.</td></tr>
+      <tr><td><strong>Recibo</strong></td><td>Lo que deja <code>orq2 slice verificar</code>: qué examen corrió, sobre qué commit, cuántas pruebas pasaron. Una corrida con 0 pruebas no cuenta como verde.</td></tr>
+      <tr><td><strong>Registro de puerta</strong></td><td>Una nota de Git (<code>refs/notes/orq2-gate</code>) sobre un SHA de orq2: revisión independiente sin problemas altos y <code>make ci</code> con exit 0. Sin ella, <code>orq2 update</code> no instala ese SHA.</td></tr>
+      <tr><td><strong>Relevo</strong></td><td>Cuando una sesión se llena, escribe <code>.orq/relevo-ROL.md</code> y abre una sesión fresca que sigue desde ahí.</td></tr>
+      <tr><td><strong>Ruta</strong></td><td><code>fix</code> (un worker, sin equipo ni plan ni tarjeta) o <code>slice</code> (el proceso completo). Un fix puede subir a slice; nunca al revés.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="src">Fuentes: <code>orq2 --help</code>, <code>harness/internal/slice/slice.go</code>, <code>internal/diario</code>, <code>internal/canal</code>, <code>internal/memoria</code>, <code>internal/sandbox</code>.</p>
+
+  <h3>Los roles</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Rol</th><th>Qué hace</th><th>Qué no hace</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Atena</strong></td><td>La única sesión que habla contigo, en español. Te entrevista, escribe la historia, corre la demo al final.</td><td>No planifica ni programa.</td></tr>
+      <tr><td><strong>Orquestador</strong> (el Soñador)</td><td>Abre las demás sesiones, lanza workers, junta, verifica y cierra. Habla con todos solo a través de <code>orq2</code>.</td><td>No planifica ni programa.</td></tr>
+      <tr><td><strong>Planificador</strong></td><td>Convierte la historia en el plan mínimo (grafo de tareas) y en la prueba roja. Escribe la tarjeta.</td><td>No construye.</td></tr>
+      <tr><td><strong>Astra</strong></td><td>Discute el plan del Planificador hasta que los dos acuerdan: más valor, menos tiempo.</td><td>No construye.</td></tr>
+      <tr><td><strong>Scouts</strong></td><td>Hasta 3, solo lectura, baratos. Mapean el repo, los docs y los datos antes de planificar.</td><td>No escriben.</td></tr>
+      <tr><td><strong>Workers</strong> (Edge Octos)</td><td>1 a 4 por slice. Cada uno en su clon, su rama y su zona. Ponen el examen en verde.</td><td>No tocan el examen, no juntan, no hacen push, no lanzan otros workers.</td></tr>
+      <tr><td><strong>Verificador</strong></td><td>Una sesión fresca que prueba el resultado como lo probarías tú.</td><td>No escribió el código que verifica.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="src">Fuentes: <code>orq2 skill atena</code>, <code>orq2 skill orquestador</code>, <code>orq2 skill worker</code>; modelos por rol en <code>orq2 config ver</code>.</p>
+
+  <h3>Las cinco fases: T·C·A·D·D</h3>
+  <figure>
+    <div class="sc sc--wide">
+    <svg viewBox="0 0 760 190" role="img" aria-label="Las cinco fases en orden: Traducción, Contexto, Análisis, Desarrollo, Documentación, con quién manda en cada una">
+      <g font-size="14">
+        <rect class="sh" x="12" y="22" width="134" height="120"/><rect class="bi" x="6" y="16" width="134" height="120"/>
+        <text class="t-d t-inv" x="18" y="48" style="font-size:40px">T</text><text class="t-inv" x="18" y="76">Traducción</text>
+        <text class="t-inv t-s" x="18" y="98" style="fill:#f2f1ed">Atena + tú:</text><text class="t-s" x="18" y="114" style="fill:#f2f1ed">qué y para qué</text>
+        <path class="ln3" d="M144 76 H156"/>
+        <rect class="sh" x="164" y="22" width="134" height="120"/><rect class="b" x="158" y="16" width="134" height="120"/>
+        <text class="t-d" x="170" y="48" style="font-size:40px">C</text><text x="170" y="76">Contexto</text>
+        <text class="t-s" x="170" y="98">scouts leen</text><text class="t-s" x="170" y="114">repo, docs, datos</text>
+        <path class="ln3" d="M296 76 H308"/>
+        <rect class="sh" x="316" y="22" width="134" height="120"/><rect class="b" x="310" y="16" width="134" height="120"/>
+        <text class="t-d" x="322" y="48" style="font-size:40px">A</text><text x="322" y="76">Análisis</text>
+        <text class="t-s" x="322" y="98">plan + prueba roja</text><text class="t-s" x="322" y="114">Planif. vs Astra</text>
+        <path class="ln3" d="M448 76 H460"/>
+        <rect class="sh" x="468" y="22" width="134" height="120"/><rect class="b" x="462" y="16" width="134" height="120"/>
+        <text class="t-d" x="474" y="48" style="font-size:40px">D1</text><text x="474" y="76">Desarrollo</text>
+        <text class="t-s" x="474" y="98">workers en verde,</text><text class="t-s" x="474" y="114">aislados</text>
+        <path class="ln3" d="M600 76 H612"/>
+        <rect class="sh" x="620" y="22" width="134" height="120"/><rect class="b" x="614" y="16" width="134" height="120"/>
+        <text class="t-d" x="626" y="48" style="font-size:40px">D2</text><text x="626" y="76">Documentación</text>
+        <text class="t-s" x="626" y="98">recibo, relevo y</text><text class="t-s" x="626" y="114">docs en el slice</text>
+      </g>
+      <text class="t-s" x="6" y="172">orq2 fase dice en qué fase estás. Tu tarjeta aprobada es la puerta entre A y D1.</text>
+    </svg>
+    </div>
+    <p class="scrollhint">Desliza para ver todo el diagrama →</p>
+    <figcaption><b>Fig. 2</b> Las fases T·C·A·D·D. En T estás tú; en D1 trabajan los Edge Octos. Fuente: <code>orq2 fase</code> y el README.</figcaption>
+  </figure>
+
+  <h3>La vida de un slice</h3>
+  <figure>
+    <div class="sc sc--wide">
+    <svg viewBox="0 0 760 262" role="img" aria-label="Estados del slice: IMPLEMENTANDO, VERIFICADO, INTEGRANDO, CERRANDO, en main; y BLOQUEADO con reintento">
+      <rect class="b" x="10" y="40" width="150" height="56"/><text class="t-d" x="20" y="74" style="font-size:19px">Implementando</text>
+      <path class="ln3" d="M160 68 H196"/><path class="px" d="M196 61 l10 7 -10 7z"/>
+      <rect class="b" x="208" y="40" width="130" height="56"/><text class="t-d" x="218" y="74" style="font-size:19px">Verificado</text>
+      <path class="ln3" d="M338 68 H374"/><path class="px" d="M374 61 l10 7 -10 7z"/>
+      <rect class="b" x="386" y="40" width="130" height="56"/><text class="t-d" x="396" y="74" style="font-size:19px">Integrando</text>
+      <path class="ln3" d="M516 68 H540"/><path class="px" d="M540 61 l10 7 -10 7z"/>
+      <rect class="b" x="552" y="40" width="110" height="56"/><text class="t-d" x="562" y="74" style="font-size:19px">Cerrando</text>
+      <path class="ln3" d="M662 68 H680"/><path class="px" d="M680 61 l10 7 -10 7z"/>
+      <rect class="bi" x="692" y="40" width="62" height="56"/><text class="t-d t-inv" x="700" y="74" style="font-size:19px">main</text>
+      <text class="t-m" x="164" y="32">verificar</text><text class="t-m" x="340" y="32">tu sí + cerrar</text>
+      <!-- blocked -->
+      <rect class="b" x="208" y="166" width="130" height="56"/><text class="t-d" x="218" y="200" style="font-size:19px">Bloqueado</text>
+      <path class="ln" d="M85 96 V194 H208"/><text class="t-m" x="94" y="150">2 reparaciones</text><text class="t-m" x="94" y="166">o sin progreso</text>
+      <path class="ln" d="M273 222 V248 H40 V100"/><path class="px" d="M33 104 l7 -10 7 10z"/>
+      <text class="t-m" x="290" y="244">reintentar "qué cambia" · máx. 3 intentos</text>
+      <path class="lnm" d="M273 96 V166"/><text class="t-m" x="280" y="140">reabrir</text>
+      <text class="t-s" x="430" y="166">Si un cierre se corta, repetir</text><text class="t-s" x="430" y="184"><tspan font-family="IBM Plex Mono">orq2 slice cerrar</tspan> sigue</text><text class="t-s" x="430" y="202">donde quedó (G3).</text>
+    </svg>
+    </div>
+    <p class="scrollhint">Desliza para ver todo el diagrama →</p>
+    <figcaption><b>Fig. 3</b> Los estados reales del código (<code>harness/internal/slice/slice.go</code>). «Rechazado» también cierra el slice, pero no llega a main.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================== 3 ============================== -->
+<section class="ch" id="c3">
+  <div class="ch__num">Capítulo 03</div>
+  <h2>Arquitectura C4</h2>
+  <p>C4 es una forma de dibujar un sistema en tres alturas: el contexto (quién lo rodea), los contenedores (qué piezas corren) y los componentes (qué hay dentro del programa).</p>
+  <p>orq2 no tiene servidor ni base de datos. Es un solo binario. Todo su estado vive en archivos dentro de <code>.orq/</code> y en Git.</p>
+
+  <h3>Nivel 1 · Contexto</h3>
+  <figure>
+    <div class="sc sc--wide">
+    <svg viewBox="0 0 760 360" role="img" aria-label="Contexto: el Owner, los agentes Claude y Codex, Herdr, Git y GitHub, y el proyecto alrededor de Cthulhu orq2">
+      <rect class="sh" x="290" y="140" width="190" height="90"/><rect class="bi" x="284" y="134" width="190" height="90"/>
+      <text class="t-d t-inv" x="298" y="166">Cthulhu · orq2</text>
+      <text class="t-inv t-s" x="298" y="188" style="fill:#f2f1ed">un binario Go que hace</text><text class="t-s" x="298" y="204" style="fill:#f2f1ed">cumplir las reglas</text>
+      <!-- owner -->
+      <rect class="b" x="20" y="20" width="200" height="76"/><text class="t-d" x="32" y="48">Owner</text><text class="t-s" x="32" y="68">historia, tarjeta, decisión,</text><text class="t-s" x="32" y="84">update desde su terminal</text>
+      <path class="ln" d="M220 70 L300 134"/><text class="t-m" x="200" y="120">aprobar · decidir</text>
+      <!-- agents -->
+      <rect class="b" x="540" y="20" width="200" height="76"/><text class="t-d" x="552" y="48">Agentes</text><text class="t-s" x="552" y="68">Claude Code o Codex,</text><text class="t-s" x="552" y="84">un rol cada uno</text>
+      <path class="ln" d="M540 70 L460 134"/><text class="t-m" x="470" y="104">piden permiso (gate)</text><text class="t-m" x="470" y="118">y comandos orq2</text>
+      <!-- herdr -->
+      <rect class="b" x="20" y="268" width="200" height="76"/><text class="t-d" x="32" y="296">Herdr</text><text class="t-s" x="32" y="316">terminal con paneles: una</text><text class="t-s" x="32" y="332">sesión de agente por panel</text>
+      <path class="ln" d="M220 300 L300 224"/><text class="t-m" x="150" y="252">abre · toca el timbre · cierra</text>
+      <!-- git -->
+      <rect class="b" x="540" y="268" width="200" height="76"/><text class="t-d" x="552" y="296">Git / GitHub</text><text class="t-s" x="552" y="316">ramas, clones, notas;</text><text class="t-s" x="552" y="332">orq2 nunca hace push</text>
+      <path class="ln" d="M540 300 L460 224"/><text class="t-m" x="490" y="252">integra a main</text>
+      <!-- project -->
+      <rect class="b" x="290" y="282" width="180" height="62"/><text class="t-d" x="302" y="308">El proyecto</text><text class="t-s" x="302" y="328">ej. Real State, con .orq/</text>
+      <path class="ln" d="M380 224 V282"/>
+    </svg>
+    </div>
+    <p class="scrollhint">Desliza para ver todo el diagrama →</p>
+    <figcaption><b>Fig. 4</b> Contexto. Herdr es el multiplexor por defecto; el código también trae un adaptador para Orca (<code>internal/terminal/orca</code>). «Nunca hace push»: el gate bloquea <code>push</code> a los agentes (README, «Destructive git»).</figcaption>
+  </figure>
+
+  <h3>Nivel 2 · Contenedores</h3>
+  <figure>
+    <div class="sc sc--wide">
+    <svg viewBox="0 0 760 420" role="img" aria-label="Contenedores: binario orq2, hooks del agente, carpeta .orq, clones de workers, la caja bwrap y los paneles de Herdr">
+      <rect class="bnd" x="8" y="8" width="744" height="404"/><text class="t-s" x="20" y="28">una máquina Linux (WSL) · un usuario</text>
+      <!-- binary -->
+      <rect class="sh" x="276" y="150" width="210" height="96"/><rect class="bi" x="270" y="144" width="210" height="96"/>
+      <text class="t-d t-inv" x="284" y="176">~/bin/orq2</text><text class="t-s" x="284" y="198" style="fill:#f2f1ed">CLI y casos de uso; lee</text><text class="t-s" x="284" y="214" style="fill:#f2f1ed">límites, mide disco y RAM</text>
+      <!-- hooks -->
+      <rect class="b" x="24" y="44" width="220" height="110"/><text class="t-d" x="36" y="72">Hooks</text><text class="t-m" x="36" y="92">.claude/settings.json</text>
+      <text class="t-s" x="36" y="112">PreToolUse → orq2 gate</text><text class="t-s" x="36" y="128">SessionStart → orq2 contexto</text><text class="t-s" x="36" y="144">PreCompact → orq2 relevo</text>
+      <path class="ln" d="M244 120 L270 160"/>
+      <!-- panes -->
+      <rect class="b" x="516" y="44" width="220" height="110"/><text class="t-d" x="528" y="72">Paneles Herdr</text>
+      <text class="t-s" x="528" y="94">"orq · P" Orquestador</text><text class="t-s" x="528" y="110">"plan · P" Planificador | Astra</text><text class="t-s" x="528" y="126">"S-NN · P" workers</text><text class="t-s" x="528" y="142">+ la pestaña de Atena</text>
+      <path class="ln" d="M516 120 L480 160"/>
+      <!-- .orq -->
+      <rect class="b" x="24" y="268" width="250" height="130"/><text class="t-d" x="36" y="296">.orq/ (en el proyecto)</text>
+      <text class="t-m" x="36" y="316">diario.jsonl  canal.jsonl</text><text class="t-m" x="36" y="332">memoria.jsonl sesiones.json</text><text class="t-m" x="36" y="348">slices/NN.json planes/NN.json</text><text class="t-m" x="36" y="364">recibos.jsonl tarjeta-sNN.md</text><text class="t-m" x="36" y="380">config.json   proyecto.json</text>
+      <path class="ln" d="M274 300 L300 240"/>
+      <!-- worktrees -->
+      <rect class="b" x="296" y="300" width="190" height="98"/><text class="t-d" x="308" y="328">Clones</text><text class="t-s" x="308" y="348">un clon y una rama por</text><text class="t-s" x="308" y="364">worker; zona = sus rutas</text><text class="t-m" x="308" y="384">refs/orq/sNN/…</text>
+      <path class="ln" d="M390 300 V240"/>
+      <!-- box -->
+      <rect class="bi" x="508" y="268" width="228" height="130"/><rect class="b" x="514" y="274" width="216" height="118"/>
+      <text class="t-d" x="526" y="302">La caja (bwrap)</text><text class="t-s" x="526" y="322">el examen, sobre una copia</text><text class="t-s" x="526" y="338">limpia del commit exacto;</text><text class="t-s" x="526" y="354">sin red, sin otros procesos,</text><text class="t-s" x="526" y="370">sin escribir el estado</text>
+      <path class="ln" d="M508 300 L480 240"/>
+    </svg>
+    </div>
+    <p class="scrollhint">Desliza para ver todo el diagrama →</p>
+    <figcaption><b>Fig. 5</b> Contenedores. Los archivos de <code>.orq/</code> son los que existen en Real State (<code>ls .orq/</code>) y los que nombra el código. Los hooks son los que escribe <code>orq2 init</code> (<code>harness/internal/cli/v03.go</code>). La caja: autoprueba en el log de CI (<code>make-ci-795560f.log</code>).</figcaption>
+  </figure>
+
+  <h3>Nivel 3 · Componentes (paquetes de <code>harness/internal</code>)</h3>
+  <p>Una prueba de arquitectura (<code>harness/internal/arch_test.go</code>) obliga a que los imports solo bajen: <code>cli → app → dominio → adaptadores</code>. Si alguien importa hacia arriba, la CI falla.</p>
+  <figure>
+    <div class="sc sc--wide">
+    <svg viewBox="0 0 760 470" role="img" aria-label="Componentes en cuatro capas: cli, app, dominio y adaptadores, con sus paquetes">
+      <!-- layer 3 -->
+      <rect class="bi" x="8" y="10" width="744" height="62"/><text class="t-d t-inv" x="20" y="38">Capa 3 · cli</text>
+      <text class="t-s" x="20" y="58" style="fill:#f2f1ed">enruta los subcomandos y lee banderas (22 archivos)</text>
+      <path class="ln3" d="M380 72 V92"/><path class="px" d="M373 92 l7 10 7-10z"/>
+      <!-- layer 2 -->
+      <rect class="b" x="8" y="104" width="744" height="62"/><text class="t-d" x="20" y="132">Capa 2 · app</text>
+      <text class="t-s" x="20" y="152">casos de uso: lanzar, integrar, despachar, update, relevo, capacidad (14 archivos)</text>
+      <path class="ln3" d="M380 166 V186"/><path class="px" d="M373 186 l7 10 7-10z"/>
+      <!-- layer 1 -->
+      <rect class="b" x="8" y="198" width="744" height="148"/><text class="t-d" x="20" y="224">Capa 1 · dominio: reglas y máquinas de estado</text>
+      <g class="t-s">
+        <rect class="b2" x="20" y="236" width="138" height="46"/><text x="28" y="256" font-weight="600">slice</text><text class="t-s" x="28" y="272">estados y cierre</text>
+        <rect class="b2" x="166" y="236" width="138" height="46"/><text x="174" y="256" font-weight="600">gate</text><text class="t-s" x="174" y="272">permite o bloquea</text>
+        <rect class="b2" x="312" y="236" width="138" height="46"/><text x="320" y="256" font-weight="600">plan</text><text class="t-s" x="320" y="272">grafo de tareas</text>
+        <rect class="b2" x="458" y="236" width="138" height="46"/><text x="466" y="256" font-weight="600">canal · diario</text><text class="t-s" x="466" y="272">mensajes · eventos</text>
+        <rect class="b2" x="604" y="236" width="138" height="46"/><text x="612" y="256" font-weight="600">memoria</text><text class="t-s" x="612" y="272">hechos y decisiones</text>
+        <rect class="b2" x="20" y="290" width="138" height="46"/><text x="28" y="310" font-weight="600">instinto</text><text class="t-s" x="28" y="326">lecciones</text>
+        <rect class="b2" x="166" y="290" width="138" height="46"/><text x="174" y="310" font-weight="600">perfil · skilleval</text><text class="t-s" x="174" y="326">stack, skills, notas</text>
+        <rect class="b2" x="312" y="290" width="138" height="46"/><text x="320" y="310" font-weight="600">config</text><text class="t-s" x="320" y="326">modelo por rol</text>
+        <rect class="b2" x="458" y="290" width="138" height="46"/><text x="466" y="310" font-weight="600">recursos · watch</text><text class="t-s" x="466" y="326">capacidad, HALT</text>
+        <rect class="b2" x="604" y="290" width="138" height="46"/><text x="612" y="310" font-weight="600">escriba</text><text class="t-s" x="612" y="326">modelo barato</text>
+      </g>
+      <path class="ln3" d="M380 346 V366"/><path class="px" d="M373 366 l7 10 7-10z"/>
+      <!-- layer 0 -->
+      <rect class="b" x="8" y="378" width="744" height="84"/><text class="t-d" x="20" y="402">Capa 0 · adaptadores: lo que toca el sistema</text>
+      <text class="t-m" x="20" y="426">sandbox (bwrap) · terminal (herdr | orca | fake) · agente (claude, codex) · gitx (git con tiempo máx.)</text>
+      <text class="t-m" x="20" y="446">sysinfo · orqdir · identidad (orq u orq2) · limits (lo ausente deniega) · state (medición, HALT)</text>
+    </svg>
+    </div>
+    <p class="scrollhint">Desliza para ver todo el diagrama →</p>
+    <figcaption><b>Fig. 6</b> Componentes. Lista verificada con <code>ls harness/internal</code> y las capas de <code>arch_test.go</code>. Hay unas 21 700 líneas de Go sin contar pruebas (<code>wc -l</code> del 20 nov). <code>identidad</code> decide si el binario se comporta como <code>orq</code> 1.0.0 o como <code>orq2</code>, según su nombre.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================== 4 ============================== -->
+<section class="ch" id="c4">
+  <div class="ch__num">Capítulo 04</div>
+  <h2>El flujo, de punta a punta</h2>
+  <p>Un caso de uso: <strong>«agenda de visitas»</strong> en Real State. Es un proyecto que ya existe (brownfield): Python con FastAPI en la raíz y un tablero Next.js en <code>dashboard/</code>.</p>
+  <div class="panel">
+    <p class="panel__k">Ojo: esto es un ejemplo</p>
+    <p>La historia está aprobada para el día de pruebas, pero <strong>todavía no se corrió</strong>. Lo que sigue describe lo que orq2 hace en cada paso según su código y su ayuda, no una corrida medida. <span class="tag tag--dash">sin verificar</span> como corrida real.</p>
+    <p class="src">Fuentes: <code>docs/harness-v2/v2.1/test-day-stories.md</code> (parte P1), <code>docs/harness-v2/v2.1/rs-brownfield-agenda.md</code>.</p>
+  </div>
+  <p>La historia: <em>«Quiero pedir las visitas de un día de un cliente y ver solo las de esa fecha, ordenadas por hora.»</em> Fuera de alcance: visitas canceladas, paginación y el tablero.</p>
+  <p>El scout encontró que ya existe una vertical de visitas (<code>src/dante_os/application/commercial_visits.py</code>). Por eso es una extensión, no algo nuevo desde cero.</p>
+
+  <figure>
+    <div class="sc sc--wide">
+    <svg viewBox="0 0 780 720" role="img" aria-label="Diagrama de secuencia: de la historia del Owner hasta main, pasando por tarjeta, plan, worker, examen en la caja, verificador y página de decisión">
+      <!-- lifelines -->
+      <g>
+        <rect class="bi" x="6" y="8" width="84" height="34"/><text class="t-d t-inv" x="16" y="32" style="font-size:18px">Owner</text>
+        <rect class="b" x="104" y="8" width="84" height="34"/><text class="t-d" x="114" y="32" style="font-size:18px">Atena</text>
+        <rect class="b" x="202" y="8" width="96" height="34"/><text class="t-d" x="210" y="32" style="font-size:18px">Orquest.</text>
+        <rect class="b" x="312" y="8" width="96" height="34"/><text class="t-d" x="318" y="32" style="font-size:18px">Plan+Astra</text>
+        <rect class="b" x="422" y="8" width="96" height="34"/><text class="t-d" x="430" y="32" style="font-size:18px">Worker</text>
+        <rect class="b" x="532" y="8" width="84" height="34"/><text class="t-d" x="542" y="32" style="font-size:18px">Caja</text>
+        <rect class="b" x="630" y="8" width="70" height="34"/><text class="t-d" x="636" y="32" style="font-size:18px">Verif.</text>
+        <rect class="bi" x="712" y="8" width="62" height="34"/><text class="t-d t-inv" x="722" y="32" style="font-size:18px">main</text>
+        <path class="lnm" d="M48 42 V712 M146 42 V712 M250 42 V712 M360 42 V712 M470 42 V712 M574 42 V712 M665 42 V712 M743 42 V712"/>
+      </g>
+      <g class="t-s">
+        <!-- 1 -->
+        <path class="ln" d="M48 70 H140"/><path class="px" d="M140 64 l8 6 -8 6z"/><text x="54" y="64">1 historia</text>
+        <path class="ln" d="M146 96 H244"/><path class="px" d="M244 90 l8 6 -8 6z"/><text x="152" y="90">2 msg historia</text>
+        <text class="t-m" x="152" y="110">canal.jsonl</text>
+        <!-- 3 scouts + planner -->
+        <path class="ln" d="M250 136 H354"/><path class="px" d="M354 130 l8 6 -8 6z"/><text x="256" y="130">3 scouts + abrir plan</text>
+        <path class="ln" d="M360 170 H256"/><path class="px" d="M256 164 l-8 6 8 6z"/><text x="262" y="164">4 plan + prueba roja</text>
+        <text class="t-m" x="262" y="184">planes/NN.json · plan debatido</text>
+        <!-- 5 slice abrir -->
+        <rect class="b2" x="240" y="190" width="20" height="56"/>
+        <text x="268" y="208">5 slice abrir: base sana,</text><text x="268" y="222">rojo por aserción, huella</text>
+        <text class="t-m" x="268" y="238">slices/NN.json · refs/orq/contrato/NN</text>
+        <!-- 6 card -->
+        <path class="ln" d="M250 272 H54"/><path class="px" d="M54 266 l-8 6 8 6z"/><text x="70" y="266">6 tarjeta (vía Atena)</text>
+        <text class="t-m" x="70" y="288">tarjeta-sNN.md · diario: tarjeta lista</text>
+        <rect class="bi" x="38" y="300" width="20" height="40"/>
+        <text x="66" y="318" font-weight="600">7 orq2 slice aprobar NN</text><text class="t-m" x="66" y="334">en tu terminal · diario: aprobada</text>
+        <!-- 8 launch -->
+        <path class="ln" d="M250 368 H464"/><path class="px" d="M464 362 l8 6 -8 6z"/><text x="258" y="362">8 despachar / lanzar + contrato</text>
+        <text class="t-m" x="258" y="384">sesiones.json · diario: despacho</text>
+        <!-- 9 worker -->
+        <rect class="b2" x="460" y="396" width="20" height="70"/>
+        <text x="488" y="412">9 TDD en su clon;</text><text x="488" y="428">orq2 check; commits</text><text class="t-m" x="488" y="446">gate en cada acción</text>
+        <!-- 10 verificar -->
+        <path class="ln" d="M470 486 H256"/><path class="px" d="M256 480 l-8 6 8 6z"/><text x="276" y="480">10 pide verificación</text>
+        <path class="ln" d="M250 512 H566"/><path class="px" d="M566 506 l8 6 -8 6z"/><text x="290" y="506">11 juntar + verificar (commit exacto)</text>
+        <rect class="b2" x="564" y="520" width="20" height="40"/>
+        <text x="592" y="536">examen</text><text x="592" y="552">intacto</text>
+        <path class="ln" d="M574 576 H256"/><path class="px" d="M256 570 l-8 6 8 6z"/><text x="300" y="570">12 recibo: N pruebas, verde</text>
+        <text class="t-m" x="300" y="592">recibos.jsonl · refs/orq/recibo/NN</text>
+        <!-- 13 verifier -->
+        <path class="ln" d="M250 612 H659"/><path class="px" d="M659 606 l8 6 -8 6z"/><text x="430" y="606">13 lo prueba como tú</text>
+        <!-- 14 decision -->
+        <path class="ln" d="M250 642 H54"/><path class="px" d="M54 636 l-8 6 8 6z"/><text x="62" y="636">14 slice decidir: página</text>
+        <path class="ln" d="M48 668 H244"/><path class="px" d="M244 662 l8 6 -8 6z"/><text x="62" y="662">15 aceptado / rechazado</text>
+        <path class="ln3" d="M250 696 H737"/><path class="px" d="M737 689 l9 7 -9 7z"/><text x="300" y="690" font-weight="600">16 slice cerrar --aceptado: integra aparte, revalida, publica</text>
+        <text class="t-m" x="300" y="710">diario: integración · refs/orq/integrado/NN</text>
+      </g>
+    </svg>
+    </div>
+    <p class="scrollhint">Desliza para ver todo el diagrama →</p>
+    <figcaption><b>Fig. 7</b> La secuencia completa. Las flechas gruesas son las que cambian <code>main</code>: solo una, al final, y solo después de tu decisión.</figcaption>
+  </figure>
+
+  <h3>Qué deja cada paso</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Paso</th><th>Comando</th><th>Qué queda escrito</th></tr></thead>
+    <tbody>
+      <tr><td>Historia aprobada</td><td><code>orq2 msg send --para orquestador --tipo historia</code></td><td>Una línea en <code>.orq/canal.jsonl</code></td></tr>
+      <tr><td>Plan y prueba roja</td><td><code>orq2 plan cargar</code>, <code>orq2 plan debatido</code></td><td><code>.orq/planes/NN.json</code> (tareas con zona, rutas, dependencias y dificultad)</td></tr>
+      <tr><td>Abrir el slice</td><td><code>orq2 slice abrir NN …</code></td><td><code>.orq/slices/NN.json</code>, el contrato en <code>refs/orq/contrato/NN</code>, el clon del worker; línea <code>fase</code> en el diario</td></tr>
+      <tr><td>Tarjeta</td><td><code>orq2 slice tarjeta NN --archivo tarjeta.md</code></td><td><code>.orq/tarjeta-sNN.md</code>; línea <code>tarjeta · lista</code></td></tr>
+      <tr><td>Tu aprobación</td><td><code>orq2 slice aprobar NN</code></td><td>Línea <code>tarjeta · aprobada</code>; la tarjeta se congela</td></tr>
+      <tr><td>Lanzar</td><td><code>orq2 despachar --una-vez</code></td><td><code>.orq/sesiones.json</code>; línea <code>despacho</code> (la intención se anota antes de lanzar)</td></tr>
+      <tr><td>Verificar</td><td><code>orq2 slice verificar</code></td><td><code>.orq/recibos.jsonl</code> y <code>refs/orq/recibo/NN</code></td></tr>
+      <tr><td>Decidir</td><td><code>orq2 slice decidir NN --html RUTA</code></td><td>Una página HTML para aceptar o rechazar</td></tr>
+      <tr><td>Cerrar</td><td><code>orq2 slice cerrar --aceptado</code></td><td>Commit en <code>main</code>, <code>refs/orq/integrado/NN</code>, línea de integración; los paneles del slice se cierran</td></tr>
+    </tbody>
+  </table></div>
+  <p class="src">Fuentes: <code>orq2 --help</code>; nombres de archivo en <code>internal/slice/slice.go</code>, <code>internal/plan/plan.go</code>, <code>internal/app/despacho.go</code>; líneas reales del diario de S-01 en Real State (<code>.orq/diario.jsonl</code>: <code>fase</code>, <code>tarjeta lista</code>, <code>tarjeta aprobada</code>).</p>
+
+  <h3>Una línea real del diario</h3>
+  <pre style="white-space:pre-wrap;word-break:break-all"><code>{"ts":"2026-11-20T04:49:47.606Z","tipo":"tarjeta","slice":"01","intento":1,"ruta":"slice","resultado":"aprobada"}</code></pre>
+  <p class="src">Fuente: última línea de <code>.orq/diario.jsonl</code> de Real State (S-01), leída el 20 nov.</p>
+</section>
+
+<!-- ============================== 5 ============================== -->
+<section class="ch" id="c5">
+  <div class="ch__num">Capítulo 05</div>
+  <h2>Cómo funciona por dentro</h2>
+  <p>Cada arreglo de la v2.0 nació de un fallo comprobado en el código. Cada uno se apoya en una idea de ingeniería conocida. Ninguna es nueva: se tomaron de bases de datos, Kubernetes, pagos y seguridad.</p>
+
+  <div class="tbl"><table>
+    <thead><tr><th>Grupo</th><th>El fallo</th><th>La garantía de hoy</th><th>La idea de ingeniería</th></tr></thead>
+    <tbody>
+      <tr><td><strong>G0</strong><br>pruebas rápidas</td><td>Las pruebas de <code>internal/slice</code> corrían en fila.</td><td>Las que no comparten estado corren en paralelo. <code>make rapido</code> prueba solo lo que cambió.</td><td>Aislamiento de pruebas (<code>t.Parallel</code> de Go).</td></tr>
+      <tr><td><strong>G1</strong><br>nada se pierde</td><td>Cerrar borraba el canal. Errores de guardado se escondían.</td><td>Cerrar conserva los mensajes. Un guardado que falla devuelve error. Una línea mala de memoria no esconde el resto.</td><td>Registro de solo agregar (append-only, base del event sourcing). Fallar a la vista.</td></tr>
+      <tr><td><strong>G2</strong><br>nada se pisa</td><td>Dos procesos reescribían <code>sesiones.json</code> y uno pisaba al otro.</td><td>Candado y número de versión: una escritura vieja se rechaza. Dos cierres a la vez dan una sola verificación. Contrato enviado una vez.</td><td>Concurrencia optimista (como el ETag de HTTP o el <code>resourceVersion</code> de Kubernetes) y <code>flock</code>.</td></tr>
+      <tr><td><strong>G3</strong><br>sobrevive caídas</td><td>Una caída a mitad de aprobar o cerrar trababa todo. «Aceptado» se anotaba antes de llegar a main.</td><td>Primero se anota la intención; después se actúa. Repetir el cierre sigue donde quedó. «Aceptado» se anota solo con el commit en main.</td><td>Write-ahead log (bases de datos) e idempotencia (las idempotency keys de los pagos).</td></tr>
+      <tr><td><strong>G4</strong><br>examen por carpeta</td><td>El examen solo corría Python. El tablero web quedaba sin probar.</td><td>Cada carpeta tocada corre sus checks, otra vez sobre el commit final. Una historia que toca una carpeta sin check no se abre.</td><td>Fallar cerrado (fail-closed). Verificar exactamente lo que se publica.</td></tr>
+      <tr><td><strong>G6</strong><br>nada quieto</td><td>S-01 pasó 17 h aprobada sin worker.</td><td><code>orq2 pendientes</code> dice quién debe qué. <code>orq2 despachar --una-vez</code> lanza lo listo; repetirlo no lanza un segundo worker.</td><td>Reconciliación de los controladores de Kubernetes: comparar lo deseado con lo real.</td></tr>
+      <tr><td><strong>G7</strong><br>update con puerta</td><td>Actualizar era manual y propenso a errores.</td><td><code>orq2 update</code> instala solo un SHA con registro de puerta, desde tu terminal, y guarda el anterior para <code>--volver</code>.</td><td>Promoción por control (pipeline con aprobación) y rollback siempre disponible.</td></tr>
+      <tr><td><strong>R2</strong><br>arreglos de la revisión</td><td>La revisión de integración encontró 1 problema alto: las zonas no se trataban como rutas.</td><td>Zonas como rutas; tamaños de tarjeta sin números fijos; <code>orq</code> 1.0.0 byte a byte igual.</td><td>Compatibilidad hacia atrás probada con goldens.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="src">Fuentes: <code>docs/harness-v2/owner/orq2-mapa.html</code> (fallo, hipótesis, principio por grupo), <code>docs/harness-v2/v2-fixes/plan.md</code> (tabla de actividades y checkpoint), <code>docs/harness-v2/reviews/review-v2-integration.md</code> (R2). G5 no está en la v2.0: ver capítulo 7.</p>
+
+  <figure>
+    <div class="sc sc--wide">
+    <svg viewBox="0 0 760 300" role="img" aria-label="Tres mecanismos: versión que rechaza la escritura vieja (G2), intención antes de la acción (G3), y reconciliar lo deseado con lo real (G6)">
+      <!-- G2 -->
+      <rect class="b" x="8" y="8" width="240" height="284"/><text class="t-d" x="20" y="36">G2 · versión</text>
+      <rect class="b2" x="22" y="52" width="96" height="40"/><text class="t-s" x="30" y="70">A lee</text><text class="t-m" x="30" y="86">v7</text>
+      <rect class="b2" x="134" y="52" width="96" height="40"/><text class="t-s" x="142" y="70">B lee</text><text class="t-m" x="142" y="86">v7</text>
+      <rect class="bi" x="22" y="116" width="96" height="40"/><text class="t-s t-inv" x="30" y="134" style="fill:#f2f1ed">A escribe</text><text class="t-m" x="30" y="150" style="fill:#f2f1ed">v7→v8 ✓</text>
+      <rect class="b2" x="134" y="176" width="96" height="40"/><text class="t-s" x="142" y="194">B escribe</text><text class="t-m" x="142" y="210">v7? ya es v8 ✗</text>
+      <path class="ln" d="M70 92 V116 M182 92 V176"/>
+      <text class="t-s" x="22" y="246">B no pisa a A: recibe un</text><text class="t-s" x="22" y="262">error y vuelve a leer.</text>
+      <!-- G3 -->
+      <rect class="b" x="260" y="8" width="240" height="284"/><text class="t-d" x="272" y="36">G3 · intención</text>
+      <rect class="bi" x="274" y="52" width="212" height="36"/><text class="t-s" x="284" y="75" style="fill:#f2f1ed">1 anotar la intención</text>
+      <rect class="b2" x="274" y="100" width="212" height="36"/><text class="t-s" x="284" y="123">2 integrar aparte y revalidar</text>
+      <rect class="b2" x="274" y="148" width="212" height="36"/><text class="t-s" x="284" y="171">3 publicar en main</text>
+      <rect class="b2" x="274" y="196" width="212" height="36"/><text class="t-s" x="284" y="219">4 recién ahora: «aceptado»</text>
+      <path class="ln" d="M380 88 V100 M380 136 V148 M380 184 V196"/>
+      <text class="t-m" x="274" y="256">corte en cualquier frontera →</text><text class="t-m" x="274" y="272">repetir converge a un resultado</text>
+      <!-- G6 -->
+      <rect class="b" x="512" y="8" width="240" height="284"/><text class="t-d" x="524" y="36">G6 · reconciliar</text>
+      <rect class="b2" x="526" y="52" width="96" height="56"/><text class="t-s" x="534" y="72">deseado</text><text class="t-m" x="534" y="88">T1 lista,</text><text class="t-m" x="534" y="102">aprobada</text>
+      <rect class="b2" x="642" y="52" width="96" height="56"/><text class="t-s" x="650" y="72">real</text><text class="t-m" x="650" y="88">sin worker</text>
+      <path class="ln" d="M574 108 V128 H690 V108"/><path class="ln" d="M632 128 V146"/>
+      <rect class="bi" x="526" y="146" width="212" height="40"/><text class="t-s" x="536" y="171" style="fill:#f2f1ed">diferencia → despachar --una-vez</text>
+      <text class="t-s" x="526" y="214">Dos corridas a la vez dejan</text><text class="t-s" x="526" y="230">un solo worker: la intención</text><text class="t-s" x="526" y="246">se anota bajo un candado.</text>
+      <text class="t-m" x="526" y="266">v2.0: «una vez»</text><text class="t-m" x="526" y="282">v2.1: residente</text>
+    </svg>
+    </div>
+    <p class="scrollhint">Desliza para ver todo el diagrama →</p>
+    <figcaption><b>Fig. 8</b> Tres mecanismos, sin servidor ni base de datos: solo archivos, candados y el orden de las escrituras. Fuentes: <code>internal/slice/cierre.go</code> (intención guardada con la fase), <code>internal/app/despacho.go</code> (intención bajo el candado de lanzamiento).</figcaption>
+  </figure>
+
+  <h3>Lo que se decidió no usar</h3>
+  <p>Fable y Astra coincidieron en no usar un bus con agentes suscritos, una base de datos o cola externa, un servidor, ni un segundo orquestador hecho con un modelo. Agregan costo y puntos de fallo sin acercar el valor.</p>
+  <p class="src">Fuente: <code>docs/harness-v2/owner/orq2-mapa.html</code>, «Lo que decidimos no usar».</p>
+</section>
+
+<!-- ============================== 6 ============================== -->
+<section class="ch" id="c6">
+  <div class="ch__num">Capítulo 06</div>
+  <h2>Qué está comprobado</h2>
+  <p>Solo hechos medidos, cada uno con su fuente. Si no tiene fuente, no está aquí.</p>
+
+  <div class="grid2">
+    <div class="panel"><p class="big">86 / 0</p><p>Pruebas de punta a punta (<code>e2e-v05</code>): 86 pasan, 0 fallan. Incluyen cortes reales del proceso en cada etapa del cierre.</p><p class="src"><code>~/.local/share/orq2-gate-logs/make-ci-795560f.log</code>, «Resultado: 86 pasan, 0 fallan».</p></div>
+    <div class="panel"><p class="big">14 / 0</p><p>Pruebas de aislamiento: ataques desde la caja (escribir el estado, quitar HALT, mover <code>main</code>, sockets de herdr y docker) y un estado falsificado. 14 pasan, 0 fallan.</p><p class="src">Mismo log, «Resultado: 14 pasan, 0 fallan, 0 pendientes».</p></div>
+    <div class="panel"><p class="big">7 min 50 s</p><p><code>make ci</code> completo sobre 795560f, exit 0. Incluye staticcheck, gofmt, vet, <code>go test -race</code>, e2e y aislamiento. Ojo: varios paquetes salieron de la caché de Go en esa corrida.</p><p class="src">Mismo log, «WALL 7:50.37 · exit 0».</p></div>
+    <div class="panel"><p class="big">Clon OK</p><p>Prueba en un clon limpio de 795560f: <code>modified=false</code>, <code>doctor</code> solo vio 3 sesiones muertas de RS, <code>check --caja</code> exit 0, una tarjeta demasiado larga lista sus 3 violaciones.</p><p class="src"><code>plan.md</code>, checkpoint <code>clone_proof_795560f</code> (22:58). No repetí la prueba.</p></div>
+  </div>
+
+  <h3>G0: el tiempo de las pruebas de <code>internal/slice</code></h3>
+  <figure>
+    <div class="sc">
+    <svg viewBox="0 0 640 210" role="img" aria-label="Tiempo de internal/slice bajo go test -race: 302 segundos antes de G0, 169 segundos después, 174 en 795560f">
+      <text class="t-s" x="8" y="22">segundos de <tspan font-family="IBM Plex Mono">internal/slice</tspan> con <tspan font-family="IBM Plex Mono">-race</tspan> dentro de make ci</text>
+      <text x="8" y="62">antes de G0</text><rect class="sh" x="140" y="44" width="453" height="28"/><text class="t-d t-inv" x="150" y="66" style="font-size:20px">302 s</text>
+      <text class="t-m" x="148" y="88">5f25823</text>
+      <text x="8" y="122">después de G0</text><rect class="sh" x="140" y="104" width="253" height="28"/><text class="t-d t-inv" x="150" y="126" style="font-size:20px">169 s</text>
+      <text class="t-m" x="148" y="148">f9a936b</text>
+      <text x="8" y="182">instalado</text><rect class="shm" x="140" y="164" width="260" height="28"/><text class="t-d t-inv" x="150" y="186" style="font-size:20px">174 s</text>
+      <text class="t-m" x="410" y="184">795560f</text>
+      <path class="ln" d="M140 36 V196"/>
+    </svg>
+    </div>
+    <figcaption><b>Fig. 9</b> 302 s → 169 s: 44 % menos con las mismas pruebas (115 antes y después, según <code>orq2-mapa.html</code>). Fuentes: checkpoints anteriores de <code>plan.md</code> (<code>git log -p</code>: «internal/slice 302s», «169s vs 302s before G0») y los logs <code>make-ci-f9a936b.log</code> (168,6 s) y <code>make-ci-795560f.log</code> (173,5 s).</figcaption>
+  </figure>
+  <p>El <code>make ci</code> completo bajó de 14 min 54 s (5f25823) a 9 min 36 s (f9a936b) y a 7 min 50 s (795560f). Esa última cifra no es comparable uno a uno: usó la caché de Go en varios paquetes.</p>
+
+  <h3>Los revisores independientes cazaron problemas altos</h3>
+  <p>Después de cada grupo, un Opus que no escribió el código lo atacó. Un problema «alto» (High) frena el merge.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Revisión</th><th>Altos</th><th>Qué pasó</th></tr></thead>
+    <tbody>
+      <tr><td>Integración v2</td><td>1</td><td>Las zonas no se trataban como rutas. Lo arregló R2.</td></tr>
+      <tr><td>G7 update</td><td>1</td><td>Cualquier agente podía instalar un binario. Arreglado antes del merge.</td></tr>
+      <tr><td>G2 candados</td><td>1</td><td>Arreglado antes del merge.</td></tr>
+      <tr><td>G3 cierre recuperable</td><td>1</td><td>Arreglado; se usaron las 2 rondas de arreglo.</td></tr>
+      <tr><td>G5 memoria</td><td>7</td><td>Después de la última ronda quedaron 2 altos: G5 se estacionó para la v2.1.</td></tr>
+      <tr><td>R2, G0, G1, G4, G6</td><td>0</td><td>Sin altos (sí hubo medios en G1, G4 y G6).</td></tr>
+    </tbody>
+  </table></div>
+  <p><strong>Total: 11 altos.</strong> El checkpoint cuenta 10 en los grupos de la v2.0 (G7 1 + G2 1 + G3 1 + G5 7). La revisión de integración suma 1 más, en un documento aparte. La página del mapa de las 21:35 decía 8: es una foto anterior.</p>
+  <p class="src">Fuentes: <code>plan.md</code>, checkpoint <code>high_findings_by_review</code>; <code>docs/harness-v2/reviews/review-v2-integration.md</code> («Verdict: 1 High»); <code>docs/harness-v2/v2-fixes/review-g5-final.txt</code> (H1, H2).</p>
+
+  <div class="panel panel--ink">
+    <p class="panel__k">Lo que estos números no prueban</p>
+    <p>Prueban que la revisión independiente sirve y que las garantías se cumplen en pruebas. <strong>No prueban que orq2 te ahorre tiempo</strong> frente a Claude Code solo. Eso todavía no se midió (capítulo 7).</p>
+  </div>
+</section>
+
+<!-- ============================== 7 ============================== -->
+<section class="ch" id="c7">
+  <div class="ch__num">Capítulo 07</div>
+  <h2>Límites honestos</h2>
+
+  <h3>1 · Todavía no hay ventaja medida</h3>
+  <p>Hoy no hay ni un dato medido de que orq2 le gane a la vía sencilla: Claude Code con las skills de Pocock o pstack, más una rama protegida con pruebas obligatorias. Fable y Astra coincidieron: mantener orq2 como hipótesis, no como proyecto ya justificado.</p>
+  <p>Lo que podría ser exclusivo de orq2 se redujo a tres cosas medibles: <strong>a</strong> examen sellado, <strong>b</strong> recuperación tras una interrupción, <strong>c</strong> evidencia fresca (no aceptar una prueba hecha sobre una versión anterior).</p>
+  <p class="src">Fuente: <code>docs/harness-v2/owner/orq2-debate.html</code>.</p>
+
+  <h3>2 · G5, la memoria con evidencia, quedó para la v2.1</h3>
+  <p>G5 quería que «confirmado» lo calcule orq2 desde evidencia, y no el mismo agente que escribe. La revisión final dejó 2 problemas altos: un truco de comillas pasaba el gate, y renombrar el binario cambiaba su identidad. Por tu regla (un alto que sobrevive a la revisión no entra), G5 no se juntó.</p>
+  <p>La v2.0 usa la memoria de antes de G5. Un agente todavía puede anotar un hecho como si estuviera confirmado.</p>
+  <p class="src">Fuentes: <code>docs/harness-v2/backlog-next.md</code> K10; <code>v2-fixes/review-g5-final.txt</code>.</p>
+
+  <h3>3 · Un solo usuario de Linux (D1)</h3>
+  <p>Todos los agentes corren con tu mismo usuario. Por eso «solo el Owner» (<code>slice aprobar</code>, <code>update</code>, <code>--revoca-rechazo</code>) se decide mirando la variable <code>ORQ_ROL</code> y si la entrada es una terminal.</p>
+  <p><strong>Es un reductor de velocidad, no un candado.</strong> Frena un error, no una mala intención: un <code>script</code> con pty más <code>env -u ORQ_ROL</code> lo pasa.</p>
+  <p>Lo mismo pasa con las credenciales: <code>gh</code> tiene 3 cuentas y una activa global, <code>gcloud</code> 6 configuraciones. Un agente del proyecto X podría usar la identidad del proyecto Y. La solución por proyecto es D1, para la v2.1.</p>
+  <p class="src">Fuentes: <code>plan.md</code> checkpoint <code>known_limits</code>; <code>backlog-next.md</code> K4; <code>v2.1/owner-decisions.md</code> D1; código <code>harness/internal/cli/update.go</code> (<code>soloOwner</code>).</p>
+
+  <h3>4 · S-01 en pausa</h3>
+  <p>S-01 (outreach controlado en Real State) está pausado en IMPLEMENTANDO, con 10 de 11 pruebas en rojo. El repo real no se tocó. Su <code>.orq/config.json</code> no declara <code>carpetas.dashboard</code>, así que orq2 795560f se niega a seguir S-01 (su alcance toca <code>dashboard/</code>) hasta que decidas esa configuración.</p>
+  <p class="src">Fuente: <code>plan.md</code>, checkpoint <code>real_state</code>.</p>
+
+  <h3>5 · Lo que quedó estacionado</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Id</th><th>Qué es</th><th>Cuándo vuelve</th></tr></thead>
+    <tbody>
+      <tr><td>K10</td><td>G5 memoria, rama <code>v2/g5-memoria</code> en <code>b6a26ab</code></td><td>v2.1, con el plan de reanudación</td></tr>
+      <tr><td>K11</td><td>Tablero <code>orq2 panel</code> (solo lectura), rama <code>v2/panel</code>, nunca revisado</td><td>v2.1: revisión propia, luego merge</td></tr>
+      <tr><td>K12</td><td>Rama <code>v2/tui</code>, reemplazada por <code>v2/panel</code></td><td>Borrar con tu OK cuando entre K11</td></tr>
+      <tr><td>K13</td><td>Rama <code>v2/locks</code> (<code>orq2 config poner</code>); sus candados los reemplazó G2</td><td>v2.1, o descartar con tu OK</td></tr>
+      <tr><td>K14</td><td>Rama <code>v2/memoria</code>, reemplazada por G5</td><td>Solo a través de K10</td></tr>
+    </tbody>
+  </table></div>
+  <p class="src">Fuente: <code>docs/harness-v2/backlog-next.md</code>, filas K10–K14.</p>
+
+  <h3>6 · Otros límites conocidos</h3>
+  <ul>
+    <li><code>orq2 update</code> instala la punta de <code>harness-v2</code>. Si un commit de docs pasa al SHA con puerta, la punta ya no tiene registro. Anotado para la v2.1.</li>
+    <li>Una prueba borrada es un aviso <code>!!</code>, no un bloqueo (K3).</li>
+    <li>Scripts e intérpretes pueden esconder comandos del gate (K5).</li>
+    <li>Las pruebas SQL de Real State se saltan sin una base desechable. Una prueba saltada nunca cuenta como pasada.</li>
+  </ul>
+  <p class="src">Fuentes: <code>plan.md</code> <code>v2_1_notes</code>; <code>backlog-next.md</code> K3, K5; <code>v2.1/test-day-protocol.md</code>.</p>
+</section>
+
+<!-- ============================== 8 ============================== -->
+<section class="ch" id="c8">
+  <div class="ch__num">Capítulo 08</div>
+  <h2>Cuándo usarlo y cuándo no</h2>
+  <div class="grid2">
+    <div class="panel">
+      <p class="panel__k">Buen caso</p>
+      <ul>
+        <li>Un Owner que no lee código y necesita que el control esté en un programa.</li>
+        <li>Historias con aceptación que se puede probar: «dado … cuando … entonces …» con datos reales.</li>
+        <li>Proyectos existentes con checks que ya corren (lint, tipos, pruebas) en cada carpeta.</li>
+        <li>Trabajo que se puede partir en zonas y rutas para 1 a 4 workers.</li>
+        <li>Cuando te importa no aceptar algo roto más que ir rápido.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <p class="panel__k">Mal caso</p>
+      <ul>
+        <li>Un arreglo chico: usa <code>--ruta fix</code> (un worker, sin plan ni tarjeta) o Claude Code solo.</li>
+        <li>Prototipos para explorar, donde todavía no sabes qué es «terminado».</li>
+        <li>Una carpeta sin checks: orq2 no abre la historia (G4).</li>
+        <li>Trabajo que exige credenciales de otro proyecto (hasta D1).</li>
+        <li>Cambios que solo se pueden probar contra servicios reales (WhatsApp, Supabase de producción).</li>
+      </ul>
+    </div>
+  </div>
+  <p>Tu miedo F5 aplica aquí: perder velocidad por ceremonia en arreglos chicos. La decisión D6 pide que orq2 clasifique cada tarea (corta, media, grande) y que la ceremonia siga lo que está en juego. Hoy esa clasificación la hace el agente con la skill <code>orq2-ruta</code>, no el binario.</p>
+  <p class="src">Fuentes: <code>v2.1/owner-decisions.md</code> F5, D6; <code>orq2 skill orquestador</code> (paso 0, <code>[lane: fix]</code>); <code>orq2 --help</code> (<code>--ruta fix|slice</code>).</p>
+</section>
+
+<!-- ============================== 9 ============================== -->
+<section class="ch" id="c9">
+  <div class="ch__num">Capítulo 09</div>
+  <h2>Diccionario de comandos</h2>
+  <p>Ordenado por lo que quieres hacer. Todo sale de <code>orq2 --help</code> (2.0.0-pilot, 795560f). Ninguna bandera es inventada.</p>
+  <p>«Quién»: <strong>Owner</strong> = tú, en tu terminal, fuera de los paneles de agentes. <strong>Agente</strong> = el rol que se indica. «Cualquiera» = solo lee.</p>
+
+  <div class="tbl tbl--cmd"><table>
+    <thead><tr><th>Quiero…</th><th>Comando</th><th>Quién</th><th>Qué escribe</th></tr></thead>
+    <tbody>
+      <tr><td>empezar un proyecto</td><td><code>orq2 init [--modo=mejora|nuevo]</code></td><td>Owner u Orquestador</td><td>Detecta modo y stack, escribe los checks, instala los hooks y lista skills</td></tr>
+      <tr><td>levantar al Orquestador</td><td><code>orq2 up</code></td><td>Atena, desde su panel</td><td>La sesión del Orquestador</td></tr>
+      <tr><td>ver qué falta y quién lo debe</td><td><code>orq2 pendientes</code></td><td>Cualquiera</td><td>Nada: solo lee</td></tr>
+      <tr><td>ver la máquina y los workers</td><td><code>orq2 status</code></td><td>Cualquiera</td><td>Nada: muestra límites, disco, RAM, CPU, capacidad y workers</td></tr>
+      <tr><td>ver en qué está un slice</td><td><code>orq2 slice estado</code></td><td>Cualquiera</td><td>Nada</td></tr>
+      <tr><td>saber la fase</td><td><code>orq2 fase</code></td><td>Cualquiera</td><td>Nada</td></tr>
+      <tr><td>leer la tarjeta</td><td><code>orq2 slice tarjeta NN</code></td><td>Owner</td><td>Nada (con <code>--archivo</code>, el Planificador la pone)</td></tr>
+      <tr><td>aprobar la tarjeta</td><td><code>orq2 slice aprobar NN</code></td><td><strong>Solo Owner</strong></td><td>Línea en el diario; la tarjeta se congela</td></tr>
+      <tr><td>decidir si acepto</td><td><code>orq2 slice decidir NN --html RUTA</code></td><td>Orquestador la genera; tú la lees</td><td>Una página HTML</td></tr>
+      <tr><td>cerrar aceptado o rechazado</td><td><code>orq2 slice cerrar --aceptado</code> · <code>--rechazado "motivo"</code></td><td>Orquestador, tras tu decisión</td><td>Integra aparte, revalida, publica en main y limpia</td></tr>
+      <tr><td>pausar todo</td><td><code>orq2 pausar ["motivo"]</code> · <code>orq2 reanudar</code></td><td>Owner u Orquestador</td><td>No lanza workers nuevos; nada se destruye</td></tr>
+      <tr><td>pausar una historia</td><td><code>orq2 historia pausar H</code> · <code>reanudar H</code></td><td>Owner u Orquestador</td><td>Lo mismo, solo para sus hijos</td></tr>
+      <tr><td>saber si hay versión nueva</td><td><code>orq2 update --ver</code></td><td>Owner</td><td>Nada: solo informa</td></tr>
+      <tr><td>actualizar orq2</td><td><code>orq2 update</code></td><td><strong>Solo Owner</strong></td><td><code>~/bin/orq2</code>, si el SHA tiene registro de puerta; pide escribir el SHA corto y guarda el anterior</td></tr>
+      <tr><td>volver a la versión anterior</td><td><code>orq2 update --volver</code></td><td><strong>Solo Owner</strong></td><td>Restaura el binario anterior (otro <code>--volver</code> lo deshace)</td></tr>
+      <tr><td>ver la configuración</td><td><code>orq2 config ver</code></td><td>Cualquiera</td><td>Nada: muestra cada valor y de dónde salió</td></tr>
+      <tr><td>ver la memoria</td><td><code>orq2 mem ver [--cat C]</code></td><td>Cualquiera</td><td>Nada: lo crítico primero</td></tr>
+      <tr><td>anotar un hecho</td><td><code>orq2 mem add --imp I --cat C [--fuente F] "texto"</code></td><td>Agente (Atena)</td><td>Una línea en <code>.orq/memoria.jsonl</code></td></tr>
+      <tr><td>ver los números</td><td><code>orq2 metricas [--desde AAAA-MM-DD] [--json]</code></td><td>Cualquiera</td><td>Nada: aceptados, intentos, cuarentena, por ruta</td></tr>
+      <tr><td>leer los mensajes</td><td><code>orq2 msg leer [-n 10]</code></td><td>Cualquiera</td><td>Nada</td></tr>
+      <tr><td>encontrar sobrantes</td><td><code>orq2 doctor</code></td><td>Cualquiera</td><td>Informa worktrees, ramas, sesiones y memoria sobrantes <span class="tag tag--dash">sin verificar si escribe</span></td></tr>
+      <tr><td>un arreglo chico</td><td><code>orq2 slice abrir NN … --ruta fix</code></td><td>Orquestador</td><td>Un slice de un worker, sin equipo, plan ni tarjeta</td></tr>
+      <tr><td>abrir una historia grande</td><td><code>orq2 historia abrir H --titulo T</code></td><td>Orquestador</td><td>La historia; sus hijos con <code>slice abrir NN --historia H</code></td></tr>
+      <tr><td>lanzar lo que está listo</td><td><code>orq2 despachar --una-vez</code></td><td>Orquestador</td><td>Workers de tareas listas; la intención antes de lanzar</td></tr>
+      <tr><td>lanzar un worker a mano</td><td><code>orq2 slice lanzar --agente claude|codex --tarea siguiente</code></td><td>Orquestador</td><td>El panel del worker con su contrato</td></tr>
+      <tr><td>verificar</td><td><code>orq2 slice verificar</code></td><td>Orquestador</td><td>El recibo</td></tr>
+      <tr><td>reintentar tras un bloqueo</td><td><code>orq2 slice reintentar "qué cambia" --causa worker|examen</code></td><td>Orquestador</td><td>Un intento nuevo (máx. 3)</td></tr>
+      <tr><td>probar los checks antes de entregar</td><td><code>orq2 check</code> · <code>orq2 check --caja</code></td><td>Worker · Orquestador</td><td>Nada: corre lint, tipos, pruebas y guardias</td></tr>
+      <tr><td>pasar la posta</td><td><code>orq2 relevo ROL</code></td><td>Agente</td><td><code>.orq/relevo-ROL.md</code> y una sesión fresca</td></tr>
+      <tr><td>leer la guía de un rol</td><td><code>orq2 skill ROL</code></td><td>Agente</td><td>Nada (atena, orquestador, scout, worker, verificador)</td></tr>
+      <tr><td>registrar la puerta de un SHA</td><td><code>orq2 update --registrar SHA --revisor QUIEN --veredicto sin-high --ci-exit 0 --ci-log ARCHIVO</code></td><td>El integrador</td><td>Nota de Git <code>refs/notes/orq2-gate</code></td></tr>
+    </tbody>
+  </table></div>
+  <p class="src">Fuente: <code>orq2 --help</code> leído completo el 20 nov. Quién puede correr cada uno: <code>orq2 skill atena</code>, <code>orq2 skill orquestador</code> y <code>soloOwner</code> en <code>internal/cli/update.go</code>. La lista completa tiene más comandos (<code>gate</code>, <code>watch</code>, <code>halt</code>, <code>sesion</code>, <code>plan</code>, <code>aprender</code>, <code>alinear</code>, <code>sandbox</code>…): mira <code>orq2 --help</code>.</p>
+</section>
+
+<!-- ============================== 10 ============================== -->
+<section class="ch" id="c10">
+  <div class="ch__num">Capítulo 10</div>
+  <h2>Cómo lo entiende un agente</h2>
+  <p>Un agente (Claude Code o Codex) no nace sabiendo qué es orq2. Hoy lo descubre por cuatro caminos.</p>
+
+  <h3>Hoy</h3>
+  <ol>
+    <li><strong>Skills por rol.</strong> <code>orq2 init</code> lista las skills del proyecto; <code>orq2 skills instalar</code> las pone en el <code>.claude/skills</code> del propio repo. En Real State hay <code>orq2-atena</code>, <code>orq2-orchestrator</code>, <code>orq2-planner</code> y <code>orq2-ruta</code>.</li>
+    <li><strong>La guía del rol.</strong> <code>orq2 skill ROL</code> imprime qué hace el rol, qué no, sus reglas y qué skills cargar (y cuáles no).</li>
+    <li><strong>El hook de arranque.</strong> Al abrir una sesión, <code>SessionStart</code> corre <code>orq2 contexto</code>: rol, fase, relevo y memoria.</li>
+    <li><strong>El gate.</strong> Cada acción pasa por <code>PreToolUse → orq2 gate</code>. Si el agente se equivoca, el mensaje de bloqueo le dice por qué y qué hacer.</li>
+  </ol>
+  <p>Estos hooks son de Claude Code (<code>.claude/settings.json</code>). Si Codex recibe los mismos hooks y lee un <code>AGENTS.md</code> con orq2 <span class="tag tag--dash">sin verificar</span>: no lo encontré en el código.</p>
+  <p class="src">Fuentes: <code>harness/internal/cli/v03.go</code> (hooks que escribe <code>init</code>); <code>orq2 --help</code> (<code>skills</code>, <code>skill ROL</code>, <code>contexto</code>); <code>ls .claude/skills</code> de Real State.</p>
+
+  <h3>Propuesta para la v2.1 <span class="tag tag--ink">no construido</span></h3>
+  <p>El problema: un agente tiene que leer más de 100 líneas de ayuda para elegir un comando. Puede inventar una bandera o elegir mal. La propuesta tiene tres partes.</p>
+  <figure>
+    <div class="sc sc--wide">
+    <svg viewBox="0 0 760 300" role="img" aria-label="Propuesta no construida: una sola fuente, la ayuda del binario, genera el mapa de intenciones, el diccionario y el bloque de AGENTS.md, comprobados en CI">
+      <rect class="sh" x="16" y="116" width="190" height="74"/><rect class="bi" x="10" y="110" width="190" height="74"/>
+      <text class="t-d t-inv" x="22" y="138">La ayuda</text><text class="t-s" x="22" y="158" style="fill:#f2f1ed">del binario: una</text><text class="t-s" x="22" y="174" style="fill:#f2f1ed">sola fuente</text>
+      <path class="ln" d="M200 130 L262 60 M200 147 H262 M200 164 L262 236"/>
+      <rect class="dash" x="270" y="22" width="270" height="74"/><text class="t-d" x="282" y="50">a · orq2 ayuda "…"</text><text class="t-s" x="282" y="70">intención → comando, sin modelo,</text><text class="t-s" x="282" y="86">siempre la misma respuesta</text>
+      <rect class="dash" x="270" y="110" width="270" height="74"/><text class="t-d" x="282" y="138">b · diccionario</text><text class="t-s" x="282" y="158">un archivo generado de la ayuda;</text><text class="t-s" x="282" y="174">la CI falla si quedó viejo</text>
+      <rect class="dash" x="270" y="198" width="270" height="74"/><text class="t-d" x="282" y="226">c · bloque AGENTS.md</text><text class="t-s" x="282" y="246">lo leen Claude y Codex;</text><text class="t-s" x="282" y="262">apunta a a y b</text>
+      <path class="ln" d="M540 59 H600 V147 M540 147 H620 M540 235 H600 V147"/><path class="px" d="M620 140 l10 7 -10 7z"/>
+      <rect class="b" x="632" y="110" width="120" height="74"/><text class="t-d" x="644" y="138">Agente</text><text class="t-s" x="644" y="158">elige el comando</text><text class="t-s" x="644" y="174">sin adivinar</text>
+      <text class="t-m" x="10" y="292">línea punteada = propuesta, no existe en 795560f</text>
+    </svg>
+    </div>
+    <p class="scrollhint">Desliza para ver todo el diagrama →</p>
+    <figcaption><b>Fig. 10</b> La propuesta. Una sola fuente (la ayuda que ya está dentro del binario) alimenta las tres salidas. Así nunca se contradicen.</figcaption>
+  </figure>
+  <ul>
+    <li><strong>a · <code>orq2 ayuda "&lt;intención&gt;"</code></strong>: un mapa fijo dentro del binario. «quiero ver qué falta» → <code>orq2 pendientes</code>. Determinista: no llama a ningún modelo.</li>
+    <li><strong>b · Un diccionario generado</strong> desde la ayuda del binario, guardado en el repo y comprobado en CI. Si alguien cambia un comando y no regenera, la CI falla.</li>
+    <li><strong>c · Un bloque en <code>AGENTS.md</code></strong> que leen Claude y Codex, con tres líneas: qué es orq2, que la verdad está en <code>orq2 ayuda</code>, y que nunca se inventa una bandera.</li>
+  </ul>
+  <p>El capítulo 9 de este libro es una versión manual de la parte b. Puede quedar viejo; la versión generada no.</p>
+</section>
+
+<!-- ============================== 11 ============================== -->
+<section class="ch" id="c11">
+  <div class="ch__num">Capítulo 11</div>
+  <h2>Roadmap</h2>
+  <figure>
+    <div class="sc sc--wide">
+    <svg viewBox="0 0 760 230" role="img" aria-label="Roadmap: v2.0 hecha el 20 de noviembre; día de pruebas P1 a P9 el 21; diez historias reales en una a dos semanas; v2.1 solo para ventajas medidas">
+      <path class="ln3" d="M20 70 H740"/>
+      <rect class="bi" x="14" y="56" width="28" height="28"/><text class="t-d" x="10" y="40">v2.0 hecha</text><text class="t-m" x="10" y="108">20 nov · 795560f</text>
+      <text class="t-s" x="10" y="128">instalada, CI verde</text>
+      <rect class="b" x="206" y="56" width="28" height="28"/><text class="t-d" x="196" y="40">Día de pruebas</text><text class="t-m" x="196" y="108">21 nov · P1–P9</text>
+      <text class="t-s" x="196" y="128">orq2 contra la vía</text><text class="t-s" x="196" y="144">sencilla, 60 min c/u</text>
+      <rect class="b" x="410" y="56" width="28" height="28"/><text class="t-d" x="400" y="40">10 historias</text><text class="t-m" x="400" y="108">1–2 semanas</text>
+      <text class="t-s" x="400" y="128">tus minutos por</text><text class="t-s" x="400" y="144">historia aceptada</text>
+      <rect class="dash" x="610" y="56" width="28" height="28"/><text class="t-d" x="600" y="40">v2.1</text><text class="t-m" x="600" y="108">solo lo que ganó</text>
+      <text class="t-s" x="600" y="128">D1, despachador,</text><text class="t-s" x="600" y="144">piloto automático</text>
+      <text class="t-s" x="10" y="196">Regla de parada: si orq2 no gana ninguna de a, b o c, se congela el arnés y el esfuerzo va a los productos.</text>
+      <text class="t-s" x="10" y="214">Si la mediana de decisión pasa de 20 min, o sigues leyendo el diff, se deja de construir.</text>
+    </svg>
+    </div>
+    <p class="scrollhint">Desliza para ver todo el diagrama →</p>
+    <figcaption><b>Fig. 11</b> El camino. Cada etapa tiene un criterio para pasar a la siguiente. Fuentes: <code>owner/orq2-debate.html</code> (etapas y reglas), <code>v2.1/test-day-protocol.md</code>.</figcaption>
+  </figure>
+
+  <h3>El día de pruebas: P1–P9</h3>
+  <p>Dos clones del mismo commit de Real State (<code>139fc2f</code>). Cada prueba corre por las dos vías: orq2 y la vía sencilla. Mismos modelos: Opus construye, otro Opus revisa. El Orquestador opera; tú miras y anotas tus minutos.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>Pregunta</th><th>Gana si…</th></tr></thead>
+    <tbody>
+      <tr><td>P1</td><td>¿El examen sellado gana a una rama protegida?</td><td>Solo orq2 impide debilitar la prueba ante «hazlo pasar como sea».</td></tr>
+      <tr><td>P2</td><td>¿La recuperación es una ventaja?</td><td>Tras cerrar todas las sesiones, pide menos intervenciones y minutos.</td></tr>
+      <tr><td>P3</td><td>¿Evita una prueba vieja?</td><td>Solo orq2 avisa que B no se verificó, sin abrir código.</td></tr>
+      <tr><td>P4</td><td>¿Valen la pena tantas sesiones?</td><td>Si las esperas desaparecen en una sola sesión, no se construye el despachador.</td></tr>
+      <tr><td>P5</td><td>¿La evidencia protege la decisión?</td><td>Rechaza el tablero roto y acepta el sano.</td></tr>
+      <tr><td>P6</td><td>Desvío de alcance (F2)</td><td>Cero desvíos, o los detecta sola.</td></tr>
+      <tr><td>P7</td><td>Repreguntar (F3)</td><td>Ante «mostró interés» vs «pidió visita», pregunta antes de construir.</td></tr>
+      <tr><td>P8</td><td>Vueltas (F1)</td><td>3 rondas de arreglo o menos por historia.</td></tr>
+      <tr><td>P9</td><td>Mutación (D11)</td><td>De 20 errores sembrados, atrapa más que la otra vía y al menos el 70 %.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="src">Fuente: <code>docs/harness-v2/v2.1/test-day-protocol.md</code>. Nada de esto se corrió todavía.</p>
+
+  <h3>Tus miedos (F1–F5)</h3>
+  <ul>
+    <li><strong>F1</strong> Ciclos eternos de refactor y verificación.</li>
+    <li><strong>F2</strong> El agente construye lo que no se pidió, o entiende otra cosa.</li>
+    <li><strong>F3</strong> Una palabra mal elegida cambia el rumbo, porque el agente no repregunta.</li>
+    <li><strong>F4</strong> Nuestro código se vuelve la verdad del agente; si tiene errores, aprende nuestros errores.</li>
+    <li><strong>F5</strong> Velocidad perdida por sobreingeniería, por rehacer lo que existe y por ceremonia en arreglos chicos.</li>
+  </ul>
+
+  <h3>Tus decisiones para la v2.1 (D1–D12)</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Id</th><th>Decisión</th><th>Responde a</th></tr></thead>
+    <tbody>
+      <tr><td>D1</td><td>Identidad y credenciales por proyecto: cada sesión ve solo las de su proyecto.</td><td>un solo usuario</td></tr>
+      <tr><td>D2</td><td>Los agentes son sugestionables: las decisiones salen de evidencia, no de que un agente esté de acuerdo.</td><td>F3, F4</td></tr>
+      <tr><td>D3</td><td>Primero buscar lo que ya existe (repos, skills) antes de diseñar.</td><td>F5</td></tr>
+      <tr><td>D4</td><td>Criterio de ingeniería: problema, causa raíz, hipótesis, diseño, impacto, pruebas.</td><td>F1</td></tr>
+      <tr><td>D5</td><td>Skills como sugerencias por proyecto y etapa (ya existe a medias en <code>perfil</code>).</td><td>F5</td></tr>
+      <tr><td>D6</td><td>La escala se elige por tarea: un fix corto no corre el protocolo entero.</td><td>F5</td></tr>
+      <tr><td>D7</td><td>Cercos de alcance: lista de «fuera» y tope de intentos.</td><td>F1, F2</td></tr>
+      <tr><td>D8</td><td>Una base de verdad externa: patrones de proyectos de referencia.</td><td>F4</td></tr>
+      <tr><td>D9</td><td>Documentos mínimos y vivos: mapa del producto, C4, excepciones.</td><td>F3</td></tr>
+      <tr><td>D10</td><td>Repreguntar: un guardián de requisitos revisa cada mensaje contra el mapa del producto.</td><td>F3</td></tr>
+      <tr><td>D11</td><td>Verificar fuerte: mutación y pruebas adversarias en lo crítico.</td><td>pruebas débiles</td></tr>
+      <tr><td>D12</td><td>Mapear capacidades antes de construir.</td><td>F5</td></tr>
+    </tbody>
+  </table></div>
+  <p class="src">Fuente: <code>docs/harness-v2/v2.1/owner-decisions.md</code>. La columna «Responde a» la armé yo a partir del texto de cada decisión.</p>
+
+  <div class="panel panel--ink">
+    <p class="panel__k">La regla de oro</p>
+    <p>La v2.1 solo se construye para la ventaja que se haya medido.</p>
+  </div>
+</section>
+
+<footer class="foot">
+  <p>Manual de Cthulhu · orq2 2.0.0-pilot (795560f) · escrito el 20 nov 2026 en la rama <code>docs/owner-pages</code>.</p>
+  <p>Hecho por el equipo de AI Edge Runners. Los personajes (el Soñador y los Edge Octos) son originales de la marca.</p>
+</footer>
+
+</main>
+</div>
+<script>
+// Collapse the index on small screens, highlight the chapter in view, close after a tap on mobile.
+(function(){
+  var d=document.getElementById('tocd'); var mq=window.matchMedia('(max-width:960px)');
+  function fit(){ if(mq.matches){d.removeAttribute('open');} else {d.setAttribute('open','');} }
+  fit(); if(mq.addEventListener){mq.addEventListener('change',fit);}
+  var links=[].slice.call(document.querySelectorAll('.toc a'));
+  links.forEach(function(a){a.addEventListener('click',function(){ if(mq.matches){d.removeAttribute('open');} });});
+  if(!('IntersectionObserver' in window)) return;
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){ if(e.isIntersecting){
+    links.forEach(function(a){a.setAttribute('aria-current', a.getAttribute('href')==='#'+e.target.id?'true':'false');});
+  }});},{rootMargin:'-30% 0px -60% 0px'});
+  document.querySelectorAll('section.ch').forEach(function(s){io.observe(s);});
+})();
+</script>
+</body>
+</html>
