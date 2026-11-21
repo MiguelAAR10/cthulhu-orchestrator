@@ -328,6 +328,27 @@ func (r Repo) integrar(e *Estado) (string, error) {
 			return o2, fmt.Errorf("integrado, pero la base dejó de estar sana (--sano falla). Nada se borró")
 		}
 	}
+	if r.Cobertura {
+		// The configured checks again, on the exact merge commit: green on the worker commit is not enough.
+		rutas, err := r.rutasDelSlice(e, rec.Head)
+		if err != nil {
+			return out, err
+		}
+		carpetas, sin, err := r.cobertura(rutas, e.SHARojo, sha)
+		if err != nil {
+			return out, err
+		}
+		if sin != nil {
+			return out, fmt.Errorf("integrado en %s, pero %v. Tu rama %s no se tocó; nada se borró: declara o exime esa carpeta en .orq/config.json y vuelve a cerrar (`orq slice cerrar --aceptado`)", sha[:8], errSinChecks(e.ID(), sin), e.Base)
+		}
+		checks, err := r.checksEn(e, sha, carpetas, true)
+		if err != nil {
+			return out, err
+		}
+		if falla := FalloDeChecks(checks); falla != "" {
+			return out, fmt.Errorf("integrado en %s, pero en el merge %s. Tu rama %s no se tocó; nada se borró", sha[:8], falla, e.Base)
+		}
+	}
 	if _, err := r.git("update-ref", refIntegrado(e.NN), sha); err != nil {
 		return out, err
 	}

@@ -202,6 +202,11 @@ type Repo struct {
 	Checks    []config.Check // del proyecto, en orden; vacío = no se corre ninguno
 	// Definiciones son archivos que el proyecto suma a los que definen lo que corre un check.
 	Definiciones []string
+	// Carpetas son las subcarpetas con checks propios (corren dentro de ellas) o exentas.
+	Carpetas []config.Carpeta
+	// Cobertura (orq2): una carpeta tocada sin checks ni exención no abre ni verifica, y los checks
+	// se vuelven a correr sobre el commit de merge al integrar.
+	Cobertura bool
 }
 
 func (r Repo) dirSlices() string           { return filepath.Join(r.OrqDir, "slices") }

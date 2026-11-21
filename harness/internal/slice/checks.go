@@ -86,10 +86,12 @@ func primeras(s string, n int) string {
 	return strings.Join(l, "\n")
 }
 
-// checksEn corre los checks del proyecto sobre una copia limpia de sha, en la caja, y las guardias
-// de orq sobre el diff del rojo a sha.
-func (r Repo) checksEn(e *Estado, sha string) ([]ResultadoCheck, error) {
-	if len(r.Checks) == 0 {
+// checksEn corre los checks del proyecto sobre una copia limpia de sha, en la caja: los de la raíz y
+// los de cada carpeta de cs, dentro de ella. Sobre el commit del worker (merge=false) también guarda
+// las capturas de e2e y corre las guardias de orq sobre el diff del rojo a sha; sobre el commit de
+// merge solo vuelve a correr los comandos.
+func (r Repo) checksEn(e *Estado, sha string, cs []config.Carpeta, merge bool) ([]ResultadoCheck, error) {
+	if len(r.Checks) == 0 && len(cs) == 0 {
 		return nil, nil
 	}
 	dir, limpiar, err := r.copiaDe(sha)
@@ -102,6 +104,11 @@ func (r Repo) checksEn(e *Estado, sha string) ([]ResultadoCheck, error) {
 		return out, code, err
 	})
 	if err != nil {
+		return rs, err
+	}
+	deCarpetas, err := r.checksDeCarpetas(e, dir, cs)
+	rs = append(rs, deCarpetas...)
+	if err != nil || merge {
 		return rs, err
 	}
 	for i := range rs {

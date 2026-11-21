@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"orq/internal/gitx"
+	"orq/internal/identidad"
 	"orq/internal/sandbox"
 )
 
@@ -100,6 +101,44 @@ func entornoExamen() map[string]string {
 // dependencias del proyecto que se ven de solo lectura dentro de una copia: node_modules se monta
 // en la copia; .venv se monta en su ruta real (un venv lleva rutas absolutas) con un enlace en la copia.
 func (r Repo) depsEn(copia string) (ro []string, vinculos []sandbox.Vinculo) {
+	if !identidad.EsOrq2() {
+		return r.depsOrq(copia)
+	}
+	subs := []string{""}
+	for _, ca := range r.Carpetas {
+		if len(ca.Lista) > 0 {
+			subs = append(subs, ca.Ruta)
+		}
+	}
+	// Cada carpeta con checks usa sus propias dependencias, ya instaladas en el checkout del dueño.
+	for _, sub := range subs {
+		origen, destino := filepath.Join(r.Root, sub), filepath.Join(copia, sub)
+		if fi, err := os.Lstat(destino); err != nil || !fi.IsDir() {
+			continue // la carpeta no está en este commit (o es un enlace del worker): nada que vincular
+		}
+		if fi, err := os.Stat(filepath.Join(origen, "node_modules")); err == nil && fi.IsDir() {
+			if libreOMontaje(filepath.Join(destino, "node_modules")) {
+				vinculos = append(vinculos, sandbox.Vinculo{Origen: filepath.Join(origen, "node_modules"), Destino: filepath.Join(destino, "node_modules")})
+			}
+		}
+		venv := filepath.Join(origen, ".venv")
+		if fi, err := os.Stat(venv); err == nil && fi.IsDir() {
+			enlace := filepath.Join(destino, ".venv")
+			// The link of an earlier run in this same copy counts: without its mount it would dangle.
+			if l, err := os.Readlink(enlace); err == nil && l == venv {
+				ro = append(ro, venv)
+			} else if _, err := os.Lstat(enlace); errors.Is(err, os.ErrNotExist) && os.Symlink(venv, enlace) == nil {
+				ro = append(ro, venv)
+			}
+		}
+	}
+	return ro, vinculos
+}
+
+// depsOrq es depsEn tal como era en orq 1.0.0, que la identidad orq conserva byte a byte: solo la
+// raíz, y solo si la copia aún no tiene node_modules ni .venv (así, en una copia donde ya corrió un
+// comando, los siguientes no los ven; orq2 lo corrige).
+func (r Repo) depsOrq(copia string) (ro []string, vinculos []sandbox.Vinculo) {
 	if fi, err := os.Stat(filepath.Join(r.Root, "node_modules")); err == nil && fi.IsDir() {
 		if _, err := os.Lstat(filepath.Join(copia, "node_modules")); errors.Is(err, os.ErrNotExist) {
 			vinculos = append(vinculos, sandbox.Vinculo{Origen: filepath.Join(r.Root, "node_modules"), Destino: filepath.Join(copia, "node_modules")})
@@ -114,6 +153,20 @@ func (r Repo) depsEn(copia string) (ro []string, vinculos []sandbox.Vinculo) {
 		}
 	}
 	return ro, vinculos
+}
+
+// libreOMontaje dice si p no existe o es una carpeta vacía: el punto de montaje que dejó una corrida
+// anterior en la misma copia (git no versiona carpetas vacías, así que no es del worker).
+func libreOMontaje(p string) bool {
+	fi, err := os.Lstat(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+	if err != nil || !fi.IsDir() {
+		return false
+	}
+	ents, err := os.ReadDir(p)
+	return err == nil && len(ents) == 0
 }
 
 // copiaDe extrae el commit sha del repo principal en una carpeta temporal nueva. El tar se desempaqueta
@@ -158,6 +211,11 @@ func (r Repo) copiaDe(sha string) (string, func(), error) {
 // La caja no ve $HOME: la toolchain de cada herramienta que nombra cmd (examen, --sano o check)
 // se monta de solo lectura, y en un proyecto con checks.e2e, la carpeta de navegadores de Playwright.
 func (r Repo) correrEn(dir, cmd string, limite time.Duration) (string, int, bool, error) {
+	return r.correrEnCarpeta(dir, "", cmd, limite)
+}
+
+// correrEnCarpeta es correrEn con el directorio de trabajo en dir/sub (sub vacío = la raíz de la copia).
+func (r Repo) correrEnCarpeta(dir, sub, cmd string, limite time.Duration) (string, int, bool, error) {
 	ro, vinc := r.depsEn(dir)
 	ro = append(ro, sandbox.RODe(sandbox.Herramientas(cmd))...)
 	env := entornoExamen()
@@ -167,7 +225,7 @@ func (r Repo) correrEn(dir, cmd string, limite time.Duration) (string, int, bool
 			env["PLAYWRIGHT_BROWSERS_PATH"] = nav.Ruta
 		}
 	}
-	return r.enCaja(sandbox.Spec{RW: []string{dir}, RO: ro, Vinculos: vinc, Cwd: dir, Env: env}, limite, nil, "sh", "-c", cmd)
+	return r.enCaja(sandbox.Spec{RW: []string{dir}, RO: ro, Vinculos: vinc, Cwd: filepath.Join(dir, sub), Env: env}, limite, nil, "sh", "-c", cmd)
 }
 
 // MaxReporte acota lo que orq lee de un archivo que escribió el examen.
