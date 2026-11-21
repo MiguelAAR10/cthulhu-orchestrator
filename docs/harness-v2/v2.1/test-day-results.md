@@ -28,3 +28,20 @@ Protocol: `test-day-slice-unico.md`. Evidence: `~/cthulhu-evidence/2026-11-21/`.
 visits vertical with published inventory bridge") is green: ruff PASS (167 files formatted), mypy PASS (113 files), pytest
 exit 0 (SQL tests skipped). It already holds the visits logic the story touches (`src/dante_os/application/commercial_visits.py`).
 **Proposal (needs Owner GO):** move both clones to `f8029fe` (detached checkout, `.orq/` kept), re-run Step 1 checks, then start.
+
+### Base moved to f8029fe (filter GO, reversible, 11:00)
+Both clones: `git branch -f main f8029fe`, on `main`, `.orq/` kept. Re-run (logs `step1/{orq2,simple}-checks-f8029fe.log`):
+ruff, ruff format, mypy, pytest, dashboard lint/tsc/vitest all exit 0 in both; `check --caja` exit 0. Skipped: 80 SQL tests
+(`test_engagement_cutover_sql.py` 71, `test_inventory_persistence_sql.py` 9), all `DANTE_TEST_DB_URL` not set: SKIP, never pass.
+
+### Route setup (11:05-11:09)
+- orq2 clone: `orq2 init --modo=mejora` (config unchanged; wrote `.claude/settings.json` hooks PreToolUse/SessionStart/PreCompact,
+  role skills orq2-atena/orchestrator/planner/ruta, `.orq/proyecto.json`, untracked `docs/mapa.md`). 18 third-party skills reported
+  missing; not installed (no downloads). Models set to the protocol: workers baja/media/alta and verificador = opus (planner, Atena opus;
+  orchestrator sonnet coordinates only). New config sha256 `b2b41332cb0d2915…`.
+- Found and cleared a stale global HALT (`2026-11-20T20:38 x`, disk had 467 GB free): likely a test leaking into the real
+  `~/.local/state/orq2` (v2.1 bug). Copy in `step1/HALT-found-2026-11-20T2038.txt`.
+- Each new Claude pane in the orq2 clone stops on Claude's "trust this folder (hooks)" dialog; the operator confirms it (setup,
+  not Owner minutes). v2.1 note: `orq2` role launches should handle or warn about it.
+- Story sent: plain route 11:06:23 (builder pane w47:p48); orq2 route 11:08:33 to Atena (w47:p49; first send at 11:07:59 lost
+  to the trust dialog); orq2 Orchestrator w47:p4A. Operator log: `~/cthulhu-evidence/2026-11-21/operator-log.txt`.
