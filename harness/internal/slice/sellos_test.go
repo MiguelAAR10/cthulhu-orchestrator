@@ -27,6 +27,7 @@ func eventos(t *testing.T, r Repo, tipo string) []diario.Evento {
 }
 
 func TestSellosDelCiclo(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
@@ -52,6 +53,7 @@ func TestSellosDelCiclo(t *testing.T) {
 }
 
 func TestRechazoSellaMotivo(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	abrir(t, r)
 	if _, _, _, err := r.Cerrar("", false, "no es lo pedido", t0); err != nil {
@@ -64,6 +66,7 @@ func TestRechazoSellaMotivo(t *testing.T) {
 }
 
 func TestCierreRetomadoNoSellaDosVeces(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
@@ -86,6 +89,7 @@ func TestCierreRetomadoNoSellaDosVeces(t *testing.T) {
 }
 
 func TestReintentoAnotaCausa(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "wip.txt", "intento\n")
@@ -106,6 +110,7 @@ func TestReintentoAnotaCausa(t *testing.T) {
 }
 
 func TestSumarExamenAnota(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "tests/extra.sh", "true\n")
@@ -153,6 +158,7 @@ func diarioFijo(t *testing.T, orqDir string) time.Time {
 }
 
 func TestMetricasDecisionDesdeDiario(t *testing.T) {
+	t.Parallel()
 	r := Repo{OrqDir: t.TempDir()}
 	now := diarioFijo(t, r.OrqDir)
 	m := r.Metricas(time.Time{}, now)
@@ -169,6 +175,7 @@ func TestMetricasDecisionDesdeDiario(t *testing.T) {
 }
 
 func TestEsperandoOrdenaPorAntiguedad(t *testing.T) {
+	t.Parallel()
 	r, _, _ := dosSlices(t)
 	if _, _, err := r.Verificar("01", t0.Add(time.Hour)); err != nil {
 		t.Fatal(err)
@@ -195,6 +202,7 @@ func metricasDe(t *testing.T, evs []diario.Evento, now time.Time) Metricas {
 
 // Review fix 1: re-verifying a VERIFICADO slice does not restart the Owner's clock.
 func TestMetricasReverificarNoReiniciaElReloj(t *testing.T) {
+	t.Parallel()
 	m := metricasDe(t, []diario.Evento{
 		{TS: t0, Tipo: "verificacion", Slice: "01", Resultado: "paso"},
 		{TS: t0.Add(30 * time.Minute), Tipo: "verificacion", Slice: "01", Resultado: "paso"},
@@ -214,6 +222,7 @@ func TestMetricasReverificarNoReiniciaElReloj(t *testing.T) {
 
 // Review fix 2: VERIFICADO→BLOQUEADO leaves the Owner's hands, like `orq status` says.
 func TestMetricasBloqueoDetieneElReloj(t *testing.T) {
+	t.Parallel()
 	m := metricasDe(t, []diario.Evento{
 		{TS: t0, Tipo: "verificacion", Slice: "01", Resultado: "paso"},
 		{TS: t0.Add(time.Minute), Tipo: "fase", Slice: "01", De: Verificado, A: Bloqueado},
@@ -232,6 +241,7 @@ func TestMetricasBloqueoDetieneElReloj(t *testing.T) {
 
 // Review fix 3: the page diffs red→rec.Head and warns when the clone moved on.
 func TestPaginaArchivosSonDelCommitVerificado(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
@@ -253,6 +263,7 @@ func TestPaginaArchivosSonDelCommitVerificado(t *testing.T) {
 
 // Review fix 5: the stamp is taken after the run, so a slow run does not count against the Owner's wait.
 func TestVerificacionSelloDespuesDeLaCorrida(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e, _, err := r.Abrir("01", "total", "tests/s01.sh", "sleep 1.2; sh tests/s01.sh", Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Sano: "test -f total.txt"}, t0)
 	if err != nil {
@@ -271,6 +282,7 @@ func TestVerificacionSelloDespuesDeLaCorrida(t *testing.T) {
 // Review 2: Fuera is computed for rec.Head itself, so a file the verified commit added outside the scope
 // is flagged even when a later clone commit deleted it.
 func TestPaginaFueraEsDelCommitVerificado(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}, Sano: "test -f total.txt"}, t0)
 	if err != nil {

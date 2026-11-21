@@ -55,6 +55,7 @@ func abrir(t *testing.T, r Repo) *Estado {
 }
 
 func TestCicloCompletoAceptado(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	if e.Fase != Implementando || e.Attempt() != "S-01/a1" || e.Base != "main" {
@@ -92,6 +93,7 @@ func TestCicloCompletoAceptado(t *testing.T) {
 }
 
 func TestBaseSanaYRojoSonDistintos(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Sano: "false"}, t0); err == nil || !strings.Contains(err.Error(), "sana") {
 		t.Fatalf("got %v", err)
@@ -103,6 +105,7 @@ func TestBaseSanaYRojoSonDistintos(t *testing.T) {
 }
 
 func TestDescubreAntesDeCrear(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	Git(r.Root, "branch", "slice/01")
 	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete"}, t0); err == nil || !strings.Contains(err.Error(), "ya existe") {
@@ -111,6 +114,7 @@ func TestDescubreAntesDeCrear(t *testing.T) {
 }
 
 func TestUnSoloEscritor(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	abrir(t, r)
 	if _, err := r.Tomar("", "worker-1", false); err != nil {
@@ -126,6 +130,7 @@ func TestUnSoloEscritor(t *testing.T) {
 }
 
 func TestFixtureTocadoEsTrampaYBloquea(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "tests/datos.txt", "0\n")
@@ -139,6 +144,7 @@ func TestFixtureTocadoEsTrampaYBloquea(t *testing.T) {
 }
 
 func TestSinProgresoBloqueaYReintentarInvalidaRecibosViejos(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "wip.txt", "intento\n") // a failed attempt: the worker did commit
@@ -169,6 +175,7 @@ func TestSinProgresoBloqueaYReintentarInvalidaRecibosViejos(t *testing.T) {
 // Interrupción: el dueño tiene cambios sin commit cuando se cierra. Nada se pierde,
 // y al repetir el cierre continúa sin integrar dos veces.
 func TestCierreInterrumpidoSeRetoma(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
@@ -203,6 +210,7 @@ func TestCierreInterrumpidoSeRetoma(t *testing.T) {
 }
 
 func TestWorktreeSucioVaACuarentena(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	os.WriteFile(filepath.Join(e.Worktree, "nota.txt"), []byte("sin commit\n"), 0o644)
@@ -219,6 +227,7 @@ func TestWorktreeSucioVaACuarentena(t *testing.T) {
 }
 
 func TestIntegraElSHADelRecibo(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
@@ -236,6 +245,7 @@ func TestIntegraElSHADelRecibo(t *testing.T) {
 }
 
 func TestRechazarQuitaWorktreeIntegracionYNoTrasPublicar(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	Git(r.Root, "worktree", "add", "--detach", e.Worktree+"-int2", "main")
@@ -258,6 +268,7 @@ func TestRechazarQuitaWorktreeIntegracionYNoTrasPublicar(t *testing.T) {
 }
 
 func TestQuitarNoHacePruneGlobal(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	ajeno := filepath.Join(filepath.Dir(r.Root), "ajeno")
 	Git(r.Root, "worktree", "add", "--detach", ajeno, "main")
@@ -289,6 +300,7 @@ func abrirConReporte(r Repo, o Opciones) (*Estado, string, error) {
 // A green exit with 0 tests run is not green. The fixture goes through Abrir: the runner itself reports
 // «1..0» once total.txt is right, so state and contract agree.
 func TestVerdeSinPruebasEjecutadasFalla(t *testing.T) {
+	t.Parallel()
 	r := repoConReporte(t, `if cmp -s total.txt tests/datos.txt; then printf '1..0\n' > out.tap; else printf 'not ok 1 total\n' > out.tap; exit 1; fi
 `)
 	e, _, err := abrirConReporte(r, Opciones{})
@@ -303,6 +315,7 @@ func TestVerdeSinPruebasEjecutadasFalla(t *testing.T) {
 }
 
 func TestOmitidosNoPermitidosFallan(t *testing.T) {
+	t.Parallel()
 	r := repoConReporte(t, `if cmp -s total.txt tests/datos.txt; then printf 'ok 1 total\nok 2 iva # SKIP luego\n' > out.tap; else printf 'not ok 1 total\n' > out.tap; exit 1; fi
 `)
 	e, _, err := abrirConReporte(r, Opciones{})
@@ -316,6 +329,7 @@ func TestOmitidosNoPermitidosFallan(t *testing.T) {
 }
 
 func TestRojoSinAsercionNoAbre(t *testing.T) {
+	t.Parallel()
 	r := repoConReporte(t, "exit 2\n") // "error de compilación": falla sin reporte
 	if _, _, err := abrirConReporte(r, Opciones{}); err == nil || !strings.Contains(err.Error(), "aserción") {
 		t.Fatalf("got %v", err)
@@ -323,6 +337,7 @@ func TestRojoSinAsercionNoAbre(t *testing.T) {
 }
 
 func TestReciboTraeContadores(t *testing.T) {
+	t.Parallel()
 	r := repoConReporte(t, tapReal)
 	e, _, err := abrirConReporte(r, Opciones{})
 	if err != nil {
@@ -336,6 +351,7 @@ func TestReciboTraeContadores(t *testing.T) {
 }
 
 func TestRestaurarDentroDeLaCorridaNoEnganaEnAislado(t *testing.T) {
+	t.Parallel()
 	// el examen lee un archivo ignorado por git que el worker puede plantar
 	r := repoConReporte(t, `cat local.txt 2>/dev/null | grep -q 170 || cmp -s total.txt tests/datos.txt
 `)
@@ -354,6 +370,7 @@ func TestRestaurarDentroDeLaCorridaNoEnganaEnAislado(t *testing.T) {
 }
 
 func TestTimeoutCortaElExamen(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Timeout: 1}, t0)
 	if err != nil {
@@ -370,6 +387,7 @@ func TestTimeoutCortaElExamen(t *testing.T) {
 }
 
 func TestSinProgresoPorEspaciosYTopeDeIntentos(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "wip.txt", "intento\n")
@@ -394,6 +412,7 @@ func TestSinProgresoPorEspaciosYTopeDeIntentos(t *testing.T) {
 }
 
 func TestDosReparacionesAntesDeBloquear(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	for i, v := range []string{"1\n", "2\n"} {
@@ -431,6 +450,7 @@ func TestCierreNoQuitaWorktreeConProcesoVivo(t *testing.T) {
 }
 
 func TestMetricasDelCiclo(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	if m := r.Metricas(time.Time{}, t0); m.Aceptados != 0 || m.HorasMedias != 0 {
 		t.Fatalf("%+v", m)
@@ -468,6 +488,7 @@ func dosSlices(t *testing.T) (Repo, *Estado, *Estado) {
 }
 
 func TestDosSlicesIndependientesYTope(t *testing.T) {
+	t.Parallel()
 	r, _, _ := dosSlices(t)
 	if _, _, err := r.Abrir("03", "x", "tests/s01.sh", examen, Opciones{SinConteo: "juguete"}, t0); err == nil || !strings.Contains(err.Error(), "tope") {
 		t.Fatalf("got %v", err)
@@ -499,6 +520,7 @@ func TestDosSlicesIndependientesYTope(t *testing.T) {
 }
 
 func TestDosCierresSimultaneosNoIntegranDosVeces(t *testing.T) {
+	t.Parallel()
 	r, _, _ := dosSlices(t)
 	r.Verificar("01", t0)
 	r.Verificar("02", t0)
@@ -521,6 +543,7 @@ func TestDosCierresSimultaneosNoIntegranDosVeces(t *testing.T) {
 // A v0.4 slice.json is moved to .orq/slices/ and then refused like any state orq 1.0.0 left: its
 // number stays taken.
 func TestMigraSliceJsonV04(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	raw := `{"nn":"07","intento":1,"fase":"IMPLEMENTANDO","test":"tests/s01.sh","cmd":"x","rama":"slice/07","worktree":"/nada"}`
 	os.WriteFile(filepath.Join(r.OrqDir, "slice.json"), []byte(raw), 0o644)
@@ -531,6 +554,7 @@ func TestMigraSliceJsonV04(t *testing.T) {
 }
 
 func TestCerrarRepetidoNoDuplicaRegistroYBundleIgnoradoNoAbre(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
@@ -556,6 +580,7 @@ func TestCerrarRepetidoNoDuplicaRegistroYBundleIgnoradoNoAbre(t *testing.T) {
 // El examen pasa cuando front y back están: total.txt = 170 y api.txt = ok.
 // Un worker juntado se poda (worktree, rama y equipo); uno sin juntar no. La zona podada vuelve a nacer.
 func TestPodarWorkerJuntado(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	if _, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
 		t.Fatal(err)
@@ -588,6 +613,7 @@ func TestPodarWorkerJuntado(t *testing.T) {
 }
 
 func TestEquipoFrontBackTestEnUnSlice(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	commitEn(t, r.Root, "tests/s01.sh", "cmp -s web/total.txt tests/datos.txt && grep -qx ok api/api.txt\n")
 	_, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
@@ -653,6 +679,7 @@ func TestEquipoFrontBackTestEnUnSlice(t *testing.T) {
 
 // La zona sigue con su worker: la tarea siguiente del plan reusa su worktree y suma rutas.
 func TestZonaSigueConSuWorker(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	if _, _, err := r.Abrir("01", "carrito", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
 		t.Fatal(err)
@@ -687,6 +714,7 @@ func TestZonaSigueConSuWorker(t *testing.T) {
 }
 
 func TestAmpliarAlcance(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	if _, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}}, t0); err != nil {
 		t.Fatal(err)
@@ -702,6 +730,7 @@ func TestAmpliarAlcance(t *testing.T) {
 
 // Sin alcance el slice toca todo: ampliar no puede encogerlo a las rutas sumadas.
 func TestAmpliarSinAlcanceNoEncoge(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	if _, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
 		t.Fatal(err)
@@ -713,6 +742,7 @@ func TestAmpliarSinAlcanceNoEncoge(t *testing.T) {
 }
 
 func TestAlinearDetectaDesvio(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Alcance: []string{"total.txt"}}, t0)
 	if err != nil {
@@ -735,6 +765,7 @@ func TestAlinearDetectaDesvio(t *testing.T) {
 // uid, so any link into the main checkout is writable by the worker, and P5 forbids per-worker copies.
 // See docs/harness-v2/step1-report.md, decision 5.
 func TestPrepararDeps(t *testing.T) {
+	t.Parallel()
 	t.Skip("blocked until B6 (worker inside the box): see docs/harness-v2/step1-report.md, decision 5")
 	r := repoDeJuguete(t)
 	commitEn(t, r.Root, ".gitignore", "node_modules/\n.venv\n")
@@ -775,6 +806,7 @@ func TestPrepararDeps(t *testing.T) {
 }
 
 func TestPrepararDepsNoEnsucia(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	os.MkdirAll(filepath.Join(r.Root, ".venv"), 0o755) // .venv sin ignorar
 	e, _, err := r.Abrir("01", "deps", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
@@ -788,6 +820,7 @@ func TestPrepararDepsNoEnsucia(t *testing.T) {
 
 // Una reparación pedida tras verificar reabre el mismo intento con su trabajo; el recibo deja de valer.
 func TestReabrirVerificado(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
@@ -815,6 +848,7 @@ func TestReabrirVerificado(t *testing.T) {
 
 // Una ruta aprobada después del lanzamiento entra a la zona del worker y juntar ya no la rechaza.
 func TestAmpliarZona(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	if _, _, err := r.Abrir("01", "z", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
 		t.Fatal(err)
@@ -844,6 +878,7 @@ func TestAmpliarZona(t *testing.T) {
 // Rehash only from BLOQUEADO. The fixture is a hash orq took wrong at open: state and contract both
 // carry it, verify blocks on it, and rehuella takes it again from the red commit.
 func TestRehuella(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
@@ -870,6 +905,7 @@ func TestRehuella(t *testing.T) {
 
 // Si el slice cambió el examen, rehuella no lo bendice.
 func TestRehuellaNoBendiceTrampa(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
@@ -886,6 +922,7 @@ func TestRehuellaNoBendiceTrampa(t *testing.T) {
 // ---------- verificación honesta y rutas ----------
 
 func TestVeredictoUnico(t *testing.T) {
+	t.Parallel()
 	casos := []struct {
 		nombre string
 		salio  bool
@@ -913,6 +950,7 @@ func TestVeredictoUnico(t *testing.T) {
 
 // integrar usa el mismo veredicto que Verificar: una prueba omitida en el merge no pasa.
 func TestIntegrarRechazaOmitidosComoVerificar(t *testing.T) {
+	t.Parallel()
 	r := repoConReporte(t, `if cmp -s total.txt tests/datos.txt; then printf 'ok 1 total\n' > out.tap; if test -f extra.txt; then printf 'ok 2 extra # SKIP luego\n' >> out.tap; fi; else printf 'not ok 1 total\n' > out.tap; exit 1; fi
 `)
 	e, _, err := abrirConReporte(r, Opciones{})
@@ -934,6 +972,7 @@ func TestIntegrarRechazaOmitidosComoVerificar(t *testing.T) {
 }
 
 func TestAbrirExigeConteoOMotivo(t *testing.T) {
+	t.Parallel()
 	r := repoConReporte(t, tapReal)
 	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{}, t0); err == nil || !strings.Contains(err.Error(), "--sin-conteo") {
 		t.Fatalf("abrió sin conteo ni motivo: %v", err)
@@ -950,6 +989,7 @@ func TestAbrirExigeConteoOMotivo(t *testing.T) {
 }
 
 func TestSinConteoQuedaEnElEstadoYEnCadaRecibo(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "el runner es un cmp"}, t0)
 	if err != nil || e.SinConteo != "el runner es un cmp" {
@@ -978,6 +1018,7 @@ func TestSinConteoQuedaEnElEstadoYEnCadaRecibo(t *testing.T) {
 // Lo que hay en el worktree y git ignora no puede hacer pasar el examen: se corre sobre una copia de HEAD.
 // There is no opt-out: --en-sitio was removed and opening with it is refused, opening nothing.
 func TestVerificarSiempreAisladoYEnSitioRechazado(t *testing.T) {
+	t.Parallel()
 	prep := func(t *testing.T, o Opciones) (Repo, *Estado, error) {
 		r := repoConReporte(t, `cmp -s total.txt tests/datos.txt || test -f ruido.txt
 `)
@@ -1043,6 +1084,7 @@ func TestAisladoRecibeLasDependenciasIgnoradas(t *testing.T) {
 }
 
 func TestArchivosDelRunner(t *testing.T) {
+	t.Parallel()
 	casos := map[string][]string{
 		"npm test":                         {"package.json"},
 		"CI=1 pnpm run test:e2e":           {"package.json"},
@@ -1079,6 +1121,7 @@ func repoConRunner(t *testing.T) (Repo, *Estado) {
 }
 
 func TestRunnerVigiladoSeGuardaAlAbrir(t *testing.T) {
+	t.Parallel()
 	_, e := repoConRunner(t)
 	if len(e.Vigilados) != 1 || e.Vigilados[0].Ruta != "run.sh" || len(e.Vigilados[0].Blob) < 40 {
 		t.Fatalf("vigilados: %+v", e.Vigilados)
@@ -1091,6 +1134,7 @@ func TestRunnerVigiladoSeGuardaAlAbrir(t *testing.T) {
 }
 
 func TestRunnerCambiadoNoVerificaNiCuentaComoFallo(t *testing.T) {
+	t.Parallel()
 	r, e := repoConRunner(t)
 	commitEn(t, e.Worktree, "run.sh", "exit 0\n") // el comando ahora no corre el examen
 	_, out, err := r.Verificar("", t0)
@@ -1122,6 +1166,7 @@ func TestRunnerCambiadoNoVerificaNiCuentaComoFallo(t *testing.T) {
 }
 
 func TestRunnerBorradoTambienSeDetecta(t *testing.T) {
+	t.Parallel()
 	r, e := repoConRunner(t)
 	Git(e.Worktree, "rm", "-q", "run.sh")
 	Git(e.Worktree, "commit", "-qm", "borra el runner")
@@ -1131,6 +1176,7 @@ func TestRunnerBorradoTambienSeDetecta(t *testing.T) {
 }
 
 func TestRunnerIntactoVerificaSinFlag(t *testing.T) {
+	t.Parallel()
 	r, e := repoConRunner(t)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
 	if e, _, err := r.Verificar("", t0); err != nil || e.Fase != Verificado {
@@ -1139,6 +1185,7 @@ func TestRunnerIntactoVerificaSinFlag(t *testing.T) {
 }
 
 func TestRutaFixNoTieneEquipoYSubeAUnSlice(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	if _, _, err := r.Abrir("01", "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Ruta: "otra"}, t0); err == nil {
 		t.Fatal("ruta inválida")
@@ -1169,6 +1216,7 @@ func TestRutaFixNoTieneEquipoYSubeAUnSlice(t *testing.T) {
 }
 
 func TestRutaPorDefectoEsSliceYQuedaEnElRegistro(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	if e.Ruta != "" || e.RutaEfectiva() != RutaSlice {
@@ -1185,6 +1233,7 @@ func TestRutaPorDefectoEsSliceYQuedaEnElRegistro(t *testing.T) {
 }
 
 func TestMetricasPorRuta(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	cerrar := func(nn, ruta string, ascender bool, horas int) {
 		e, _, err := r.Abrir(nn, "t", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Ruta: ruta}, t0)
@@ -1221,6 +1270,7 @@ func TestMetricasPorRuta(t *testing.T) {
 
 // Un registro de orq 1.0.0 no trae ruta: cuenta como slice.
 func TestMetricasRegistrosViejosSonSlice(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	appendJSON(r.logPath(), map[string]any{"nn": "01", "intento": 1, "titulo": "viejo", "resultado": "aceptado",
 		"abierto": t0, "cerrado": t0.Add(2 * time.Hour)})
@@ -1233,6 +1283,7 @@ func TestMetricasRegistrosViejosSonSlice(t *testing.T) {
 // Worker code that rewrites the exam's bundle while the exam runs, so that the exam passes, is a
 // trap even though the committed bundle never changed (mutation report, step 1b).
 func TestExamenModificadoMientrasCorreBloquea(t *testing.T) {
+	t.Parallel()
 	r := repoConReporte(t, "sh ./app.sh && cmp -s total.txt tests/datos.txt\n")
 	e, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err != nil {
@@ -1250,6 +1301,7 @@ func TestExamenModificadoMientrasCorreBloquea(t *testing.T) {
 // A report the worker committed does not count when the exam ends before writing its own: the old
 // report is deleted in the box before the exam runs (mutation report, step 1b).
 func TestReporteCommiteadoPorElWorkerNoCuenta(t *testing.T) {
+	t.Parallel()
 	r := repoConReporte(t, "[ -f app.sh ] && . ./app.sh\n"+tapReal)
 	e, _, err := abrirConReporte(r, Opciones{})
 	if err != nil {
@@ -1264,6 +1316,7 @@ func TestReporteCommiteadoPorElWorkerNoCuenta(t *testing.T) {
 
 // Review fix: a route relabeled by hand shows up on the decision page's notices.
 func TestPaginaAvisaRutaReescrita(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
