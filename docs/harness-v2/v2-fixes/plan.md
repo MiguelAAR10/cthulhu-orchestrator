@@ -55,7 +55,7 @@ Final v2.0 state, 2026-11-20 23:45. Earlier checkpoint history is in Git (`git l
 
 ```json
 {
-  "phase": "D (development) closed for v2.0; next: test day 2026-11-21, then D2 documentation (Haiku, writing-for-agents)",
+  "phase": "PAUSED 2026-11-21 by the Owner. v2.0 closed; test day and S-02 done; no v2.1 work started",
   "integration_branch": "harness-v2",
   "integration_owner": "orchestrator pane w47:p3B; filter session w47:p9 relays the Owner and commits Owner docs only on docs/owner-pages",
   "rules": "never commit on harness-v2 while make ci runs (moves HEAD, e2e refuses the candidate); one make ci at a time; builders run targeted tests -p 1",
@@ -74,22 +74,28 @@ Final v2.0 state, 2026-11-20 23:45. Earlier checkpoint history is in Git (`git l
   "known_limits": "orq2 update and --revoca-rechazo are speed bumps, not locks: a script pty + env -u ORQ_ROL passes soloOwner (K4, K10)",
   "real_state": {
     "real_repo": "untouched; S-01 paused IMPLEMENTANDO (10/11 red). Its .orq/config.json has no carpetas.dashboard, so orq2 795560f refuses S-01 (scope has dashboard/*) until the Owner decides that config",
-    "test_clones": "~/worktrees/rs-prueba-orq2 and ~/worktrees/rs-prueba-simple at RS 139fc2f, no remote, .venv + dashboard/node_modules copied (no install), fresh .orq/config.json with carpetas.dashboard (Owner 23:00); dashboard lint/tsc/vitest exit 0 in rs-prueba-orq2"
+    "test_clones": "~/worktrees/rs-prueba-orq2 is the agenda product line: main f7d1416 = S-01 (overlap, faa29db) + S-02 weekly calendar (closed accepted 16:14:33, a3 verified at 3dbfb8e). .orq/config.json: test-day worker model overrides removed (baja haiku, media sonnet, alta opus), dashboard checks via node (no pnpm). ~/worktrees/rs-prueba-simple kept as test-day evidence (1bc2d8a). Real RS repo untouched"
   },
   "test_day": {
     "date": "2026-11-21",
-    "protocol": "docs/harness-v2/v2.1/test-day-protocol.md (Owner answers OQ1-OQ10, dashboard approval); commands marked 'verify before the day'",
-    "stories": "docs/harness-v2/v2.1/test-day-stories.md APPROVED (Owner 23:10)",
-    "brownfield": "docs/harness-v2/v2.1/rs-brownfield-agenda.md",
-    "runs_tonight": "none"
+    "result": "blind score: orq2 2 clear wins (M1 re-question, M5 stale evidence), plain 1 (M4), 3 ties (M2 corrected, M3, M6) -> continue with real stories",
+    "docs": "docs/harness-v2/v2.1/test-day-results.md, test-day-score.md",
+    "evidence": "~/cthulhu-evidence/2026-11-21/ (blind pack and sealed map alongside)"
   },
-  "remote": "harness-v2 da1b11c pushed to origin by the filter at Owner request (2026-11-20); main untouched. Next push only when the filter asks, after merging the manual/README from docs/owner-pages",
-  "worktrees": "only ~/worktrees/cthulhu-docs (filter, docs/owner-pages, clean, merged) and the two RS test clones",
-  "panes": "w47:p9 (filter), w47:p3B (orchestrator); all builders and reviewers closed",
+  "remote": "harness-v2 pushed to origin by the orchestrator at the filter's request (2026-11-21); main untouched",
+  "worktrees": "~/worktrees/cthulhu-docs (filter), the RS test clones rs-prueba-orq2 (+1 leftover orq2 worktree after S-02 close), rs-prueba-simple",
+  "panes": "w47:p9 (filter), w47:p3B (orchestrator); all project sessions closed; resource sampler stopped",
   "branches_not_merged": "v2/g5-memoria (K10), v2/panel (K11), v2/tui (K12), v2/locks (K13), v2/memoria (K14); each has a backlog line",
   "v2_1_notes": "orq2 update installs the tip while docs commits move past the gated SHA; G7 Lows; G2 L1/L3/L5 and relevo; G6 L2/L6; G4 L2/L3 and e2e per folder; G3 L-3/L-4 and --revoca-rechazo has no gate raw-text rule; K10 G5 resume plan",
   "attempts": "G3 review-fix 2 of 2 used; G5 option A final round used (parked)",
-  "owner_last_update": "2026-11-20 23:40: GO to install 795560f; asked for cleanup, final checkpoint and the first test-day step (no runs tonight)",
-  "next_action": "test day step 0 (dry run of the protocol commands, read-only) after Owner OK; then P1"
+  "owner_last_update": "2026-11-21: PROJECT PAUSED; Owner docs owner-vision-gaps.md (D14-D22, deficiency map) and lean-plan.md (docs/owner-pages f5a9ac6, merged)",
+  "next_action": "Owner picks the D14-D22 scope using docs/harness-v2/v2.1/lean-plan.md; no v2.1 work before that",
+  "s02": {
+    "stages": "~/cthulhu-evidence/2026-11-21/agenda/etapas.csv",
+    "stalls": "agenda/estancamientos.log",
+    "ram": "agenda/recursos.csv (190 samples 13:15-16:15; avail min 8.8 GB, max 13.4 GB)",
+    "backlog": "T4 docs; Medium 1 atomic hours save; 4 Low and 2 Nits from the S-02 reviews"
+  },
+  "defects": "docs/harness-v2/v2.1/orq2-defects.md (E01-E27, Owner ledger)"
 }
 ```
