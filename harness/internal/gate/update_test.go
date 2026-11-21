@@ -28,6 +28,13 @@ func TestGateNiegaOrq2UpdateAAgentes(t *testing.T) {
 			"script -qec 'orq2 update' /dev/null",
 			"bash -c \"orq2 update --volver\"",
 			"/home/x/.local/share/orq2-rollback/orq2-24f2438 update",
+			// Hidden from the raw text: quotes, variables, a name built at run time.
+			`~/bin/orq2 "upd"ate`,
+			`~/bin/orq2 'up'date --volver`,
+			"O=orq; ${O}2 update",
+			"a=up;b=date; orq2 $a$b",
+			"ORQ_NOMBRE=orq2 ~/bin/orq update",
+			"x=$(printf orq2); $x update --ver",
 		}
 		for _, c := range cmds {
 			t.Setenv("ORQ_ROL", "")
