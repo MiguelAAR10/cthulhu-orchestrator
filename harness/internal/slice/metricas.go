@@ -137,8 +137,14 @@ func metricasDecision(m *Metricas, evs []diario.Evento, desde, now time.Time) {
 				verificado[e.Slice] = e.TS
 			}
 		case e.Tipo == "decision":
-			if v, ok := verificado[e.Slice]; ok && !e.TS.Before(desde) {
-				minutos = append(minutos, e.TS.Sub(v).Minutes())
+			cuando := e.TS
+			if s, ok := e.Datos["decidido"].(string); ok { // orq2: written later than the Owner decided
+				if ts, err := time.Parse(time.RFC3339Nano, s); err == nil {
+					cuando = ts
+				}
+			}
+			if v, ok := verificado[e.Slice]; ok && !cuando.Before(desde) {
+				minutos = append(minutos, cuando.Sub(v).Minutes())
 			}
 			delete(verificado, e.Slice)
 		case e.Tipo == "fase" && (e.De == Verificado && e.A != Integrando || e.A == "CERRADO"):

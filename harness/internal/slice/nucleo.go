@@ -17,6 +17,7 @@ import (
 	"orq/internal/config"
 	"orq/internal/diario"
 	"orq/internal/gitx"
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 )
 
@@ -326,9 +327,13 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if e.Fase != Implementando && e.Fase != Verificado {
 		return e, "", fmt.Errorf("%s está en %s; no se verifica ahora", e.ID(), e.Fase)
 	}
+	if err := e.CierrePendiente(); err != nil {
+		return e, "", err
+	}
 	if err = r.confiable(e); err != nil {
 		return e, "", err
 	}
+	tras("verificar-cargado")
 	in, err := r.puntaDelSlice(e)
 	if err != nil {
 		return e, "", err
@@ -345,7 +350,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 		return e, "", err
 	}
 	if len(tocoExamen) > 0 {
-		return e, strings.Join(tocoExamen, "\n"), r.bloquear(e, "el paquete del examen fue modificado desde el rojo: trampa")
+		return e, strings.Join(tocoExamen, "\n"), r.bloquearAhora(e, "el paquete del examen fue modificado desde el rojo: trampa")
 	}
 	if len(otras) > 0 {
 		return e, strings.Join(otras, "\n"), fmt.Errorf("%s cambió rutas protegidas (%s): no se verifica y no cuenta como reparación. Que el worker lo deshaga; si el cambio es legítimo, apruébalo: `orq slice alcance RUTA --aprobado \"...\"`", e.ID(), strings.Join(cabeza(otras, 5), ", "))
@@ -355,7 +360,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 		return e, "", err
 	}
 	if h != e.Huella {
-		return e, "", r.bloquear(e, "la huella del examen cambió desde el rojo: trampa")
+		return e, "", r.bloquearAhora(e, "la huella del examen cambió desde el rojo: trampa")
 	}
 	var notas []string
 	cambiados, err := r.runnerCambiado(e, head)
@@ -389,7 +394,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	}
 	// Una escritura sobre el examen durante la corrida también cuenta como trampa.
 	if !intacto {
-		return e, out, r.bloquear(e, "el examen se modificó mientras corría: trampa")
+		return e, out, r.bloquearAhora(e, "el examen se modificó mientras corría: trampa")
 	}
 	checks, err := r.checksEn(e, head, carpetas, false)
 	if err != nil {
@@ -455,6 +460,18 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if err := r.confiable(ahora); err != nil {
 		return e, out, err
 	}
+	if identidad.EsOrq2() {
+		// A close the Owner decided while the exam ran wins over its receipt.
+		if err := ahora.CierrePendiente(); err != nil {
+			return ahora, out, err
+		}
+		// The exam ran on the contract loaded at the start: a receipt is issued only if it still holds.
+		// The result is written on the state as it is now, so nothing changed meanwhile is lost.
+		if dif := difContrato(e, ahora); len(dif) > 0 {
+			return ahora, out, fmt.Errorf("%s cambió mientras se verificaba (contrato: %s); recibo descartado, vuelve a verificar", e.Attempt(), strings.Join(dif, ", "))
+		}
+		e = ahora
+	}
 	e.Escritor = ahora.Escritor
 	if err := appendJSON(r.recibosPath(), rec); err != nil {
 		return e, out, err
@@ -504,6 +521,67 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	return e, out, errors.Join(r.save(e), fmt.Errorf("%s (reparación %d de %d)", motivo, e.Fallos, MaxFallos-1))
 }
 
+// RevocaRechazo is the Owner's explicit override of a rejection still being closed (orq2): Por
+// says why. The CLI only builds it from the Owner's terminal.
+type RevocaRechazo struct{ Por string }
+
+// soltarCierre clears e's close decision before a reopen or a new attempt (only orq2 records one).
+// An accepted close that stopped is no longer under way and is dropped. A rejection the Owner
+// decided is never dropped silently: it is finished with cerrar --rechazado, or revoked by the
+// Owner's explicit override, which the diario records. The caller saves e.
+func (r Repo) soltarCierre(e *Estado, revoca []RevocaRechazo) error {
+	switch {
+	case e.Cierre == nil:
+		return nil
+	case e.Cierre.Resultado != "rechazado":
+		e.Cierre = nil
+		return nil
+	case len(revoca) == 0 || strings.TrimSpace(revoca[0].Por) == "":
+		return fmt.Errorf("%s: el Owner ya decidió rechazarlo (%q); termina el rechazo: `%s slice --slice %s cerrar --rechazado %q`. Solo el Owner lo revoca, desde su terminal, con --revoca-rechazo",
+			e.ID(), e.Cierre.Motivo, identidad.Nombre(), e.NN, e.Cierre.Motivo)
+	}
+	decidido := e.Cierre.TS.UTC().Format(time.RFC3339Nano)
+	ev := diario.Evento{Tipo: "revocacion", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(), Resultado: "rechazado", Detalle: revoca[0].Por,
+		Datos: map[string]any{"motivo": e.Cierre.Motivo, "decidido": decidido}}
+	if err := r.anotarUnaVez(ev, func(x diario.Evento) bool {
+		d, _ := x.Datos["decidido"].(string)
+		return x.Tipo == "revocacion" && x.Slice == e.NN && x.Intento == e.Intento && d == decidido
+	}); err != nil {
+		return err
+	}
+	e.Cierre = nil
+	return nil
+}
+
+// difContrato lists the contract fields that changed between two copies of a slice's state; the
+// card does not count (approving it does not change what a receipt proves).
+func difContrato(antes, ahora *Estado) []string {
+	return slices.DeleteFunc(diferencias(contratoDe(antes), contratoDe(ahora)), func(c string) bool { return c == "tarjeta" })
+}
+
+// bloquearAhora blocks the slice from a verification that has not taken the lock yet. orq2 takes it
+// and blocks the state as it is now, so a change made meanwhile (scope, team) is kept; orq keeps
+// 1.0.0 and saves the copy it loaded.
+func (r Repo) bloquearAhora(e *Estado, motivo string) error {
+	if !identidad.EsOrq2() {
+		return r.bloquear(e, motivo)
+	}
+	soltar, err := r.bloqueo(e.NN)
+	if err != nil {
+		return err
+	}
+	defer soltar()
+	ahora, err := r.Load(e.NN)
+	if err != nil || ahora == nil || ahora.Intento != e.Intento || ahora.Fase != e.Fase {
+		return errors.Join(err, fmt.Errorf("%s cambió mientras se verificaba (relevo, reintento o cierre); no se bloquea: vuelve a verificar (%s)", e.Attempt(), motivo))
+	}
+	if err := r.confiable(ahora); err != nil {
+		return err
+	}
+	*e = *ahora
+	return r.bloquear(e, motivo)
+}
+
 // infraestructura dice qué salió con 127 (comando no encontrado): el examen o un check; "" si nada.
 func infraestructura(code int, checks []ResultadoCheck) string {
 	var xs []string
@@ -526,7 +604,7 @@ const (
 
 // Reintentar abre un intento nuevo en la misma copia. Recibos viejos ya no valen. El diario anota
 // la causa: un examen corregido no cuenta como fallo del worker.
-func (r Repo) Reintentar(nn, cambio, causa string, decisionOwner bool) (*Estado, error) {
+func (r Repo) Reintentar(nn, cambio, causa string, decisionOwner bool, revoca ...RevocaRechazo) (*Estado, error) {
 	soltar, err := r.bloqueo(nn)
 	if err != nil {
 		return nil, err
@@ -547,6 +625,9 @@ func (r Repo) Reintentar(nn, cambio, causa string, decisionOwner bool) (*Estado,
 	}
 	if e.Intento >= MaxIntentos && !decisionOwner {
 		return e, fmt.Errorf("%s ya lleva %d intentos: el siguiente lo decide el Owner (el Atena pregunta y luego --decision-owner), o se parte la historia", e.ID(), e.Intento)
+	}
+	if err := r.soltarCierre(e, revoca); err != nil {
+		return e, err
 	}
 	if err := r.sellarRecibo(e.NN, nil); err != nil {
 		return e, err
@@ -708,7 +789,7 @@ func (r Repo) SumarExamen(nn string, nuevos []string, cmd, aprobado string) (*Es
 
 // Reabrir vuelve a construir un slice verificado para una reparación pedida por Atena u Owner:
 // mismo intento, misma copia, mismo equipo y sus commits. El recibo deja de valer.
-func (r Repo) Reabrir(nn, motivo string) (*Estado, error) {
+func (r Repo) Reabrir(nn, motivo string, revoca ...RevocaRechazo) (*Estado, error) {
 	soltar, err := r.bloqueo(nn)
 	if err != nil {
 		return nil, err
@@ -723,6 +804,9 @@ func (r Repo) Reabrir(nn, motivo string) (*Estado, error) {
 	}
 	if strings.TrimSpace(motivo) == "" {
 		return e, errors.New("di qué se repara; reabrir sin motivo no vale")
+	}
+	if err := r.soltarCierre(e, revoca); err != nil {
+		return e, err
 	}
 	if err := errors.Join(r.sellarRecibo(e.NN, nil), r.borrarRef(refIntegrado(e.NN))); err != nil {
 		return e, err

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"orq/internal/diario"
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 )
 
@@ -60,6 +61,7 @@ type CerrarOpc struct {
 // Cerrar con aceptado integra, revalida, publica la rama base y limpia.
 // Cada paso queda guardado: si se interrumpe, volver a correrlo continúa donde quedó.
 func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc ...CerrarOpc) (*Registro, []string, string, error) {
+	orq2 := identidad.EsOrq2()
 	soltar, err := r.bloqueo(nn)
 	if err != nil {
 		return nil, nil, "", err
@@ -75,6 +77,19 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 	}
 	if err != nil || e == nil {
 		return nil, nil, "", errors.Join(err, errors.New("no hay slice abierto"))
+	}
+	if orq2 {
+		// The log row is written only once the close is decided and done (for an accepted close,
+		// published). A state that outlives its row is a close that died after it: finish it.
+		if fila, ok := r.filaDe(e); ok {
+			return r.terminarCierre(e, &fila, nil, "")
+		}
+		if e.Cierre != nil && e.Cierre.Resultado == "aceptado" && e.Fase != Integrando && e.Fase != Cerrando {
+			e.Cierre = nil // stale: that accepted close is no longer under way (the slice was reopened)
+		}
+		if e.Cierre != nil && (e.Cierre.Resultado == "aceptado") != aceptado {
+			return nil, nil, "", fmt.Errorf("%s ya se está cerrando como %s (%s): repite ese cierre, continúa donde quedó", e.ID(), e.Cierre.Resultado, e.Cierre.TS.Local().Format("2006-01-02 15:04"))
+		}
 	}
 	reg := &Registro{NN: e.NN, Intento: e.Intento, Titulo: e.Titulo, Abierto: e.Abierto, Cerrado: now.UTC().Truncate(time.Second), Motivo: motivo,
 		Ruta: e.RutaEfectiva(), Ascendido: e.Ascendido, RutaMotivo: e.RutaMotivo, Historia: e.Historia}
@@ -104,10 +119,26 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 				return nil, nil, "", fmt.Errorf("%s cambió lo que corre un check (%s): mira el diff en `orq slice decidir`; si el Owner lo acepta, `orq slice cerrar --aceptado --acepto-checks`",
 					e.Attempt(), strings.Join(rec.DefinicionesChecks, ", "))
 			}
-			if err := r.anotarDecision(e, "aceptado", "", now); err != nil {
-				return nil, nil, "", err
+			if !orq2 {
+				if err := r.anotarDecision(e, "aceptado", "", now); err != nil {
+					return nil, nil, "", err
+				}
 			}
 			e.Fase = Integrando
+			if orq2 {
+				// The intent is saved with the phase, in one write, before anything is integrated.
+				e.Cierre = &IntencionCierre{Resultado: "aceptado", TS: now}
+			}
+			if err := r.save(e); err != nil {
+				return nil, nil, "", err
+			}
+			if orq2 {
+				fallaEn("intencion")
+			}
+		}
+		if orq2 && e.Cierre == nil {
+			// A close begun by an earlier build: from here on it has an intent like any other.
+			e.Cierre = &IntencionCierre{Resultado: "aceptado", TS: now}
 			if err := r.save(e); err != nil {
 				return nil, nil, "", err
 			}
@@ -140,9 +171,24 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 			}
 		}
 		if e.Fase == Integrando {
-			out, err = r.integrar(e)
-			if errL := r.anotarIntegracion(e, err, now); err != nil || errL != nil {
-				return nil, nil, out, errors.Join(err, errL)
+			reuso := false
+			if orq2 {
+				// A close that died after integrating finds its revalidated merge in git: it is not merged
+				// (nor logged) a second time while the base has not moved.
+				if reuso, err = r.integradoVigente(e); err != nil {
+					return nil, nil, "", err
+				}
+				if reuso {
+					if err := r.anotarIntegracionUnaVez(e, now); err != nil {
+						return nil, nil, "", err
+					}
+				}
+			}
+			if !reuso {
+				out, err = r.integrar(e)
+				if errL := r.anotarIntegracion(e, err, now); err != nil || errL != nil {
+					return nil, nil, out, errors.Join(err, errL)
+				}
 			}
 			fallaEn("integrado")
 			e.Fase = Cerrando
@@ -161,6 +207,13 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 			return nil, nil, out, err
 		}
 		fallaEn("publicado")
+		if orq2 {
+			// The commit is on the base now: only now is "aceptado" logged, with the Owner's time.
+			if err := r.anotarDecisionUnaVez(e, now); err != nil {
+				return nil, nil, out, err
+			}
+			fallaEn("decidido")
+		}
 		if err := r.libre(e); err != nil {
 			return nil, nil, out, err
 		}
@@ -173,7 +226,21 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 		if err := r.libre(e); err != nil {
 			return nil, nil, "", err
 		}
-		if err := r.anotarDecision(e, "rechazado", motivo, now); err != nil {
+		if orq2 {
+			if e.Cierre == nil {
+				e.Cierre = &IntencionCierre{Resultado: "rechazado", Motivo: motivo, TS: now}
+				if err := r.save(e); err != nil {
+					return nil, nil, "", err
+				}
+				fallaEn("intencion")
+			}
+			// The Owner's first reason is the one kept: a re-run finishes that rejection.
+			motivo, reg.Motivo = e.Cierre.Motivo, e.Cierre.Motivo
+			if err := r.anotarDecisionUnaVez(e, now); err != nil {
+				return nil, nil, "", err
+			}
+			fallaEn("decidido")
+		} else if err := r.anotarDecision(e, "rechazado", motivo, now); err != nil {
 			return nil, nil, "", err
 		}
 	}
@@ -204,6 +271,17 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 			}
 		}
 	}
+	if orq2 {
+		// The refs go last but one: until the log row exists, a re-run still trusts the state.
+		if err := errors.Join(errs...); err != nil {
+			return nil, cuarentena, out, err
+		}
+		if err := appendJSON(r.logPath(), reg); err != nil {
+			return nil, cuarentena, out, err
+		}
+		fallaEn("registrado")
+		return r.terminarCierre(e, reg, cuarentena, out)
+	}
 	errs = append(errs, r.borrarRefs(e))
 	if err := errors.Join(errs...); err != nil {
 		return nil, cuarentena, out, err
@@ -223,6 +301,95 @@ func (r Repo) Cerrar(nn string, aceptado bool, motivo string, now time.Time, opc
 func (r Repo) anotarDecision(e *Estado, resultado, motivo string, now time.Time) error {
 	return diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{TS: now, Tipo: "decision", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
 		Resultado: resultado, Detalle: motivo})
+}
+
+// filaDe returns the log row of e's attempt, if the close already wrote it.
+func (r Repo) filaDe(e *Estado) (Registro, bool) {
+	for _, reg := range leerJSONL[Registro](r.logPath()) {
+		if reg.NN == e.NN && reg.Intento == e.Intento {
+			return reg, true
+		}
+	}
+	return Registro{}, false
+}
+
+// terminarCierre is the end of an orq2 close, after its log row: drop the refs, log CERRADO once,
+// remove the state. Each step is safe to repeat; the state goes last, so a re-run finds it.
+func (r Repo) terminarCierre(e *Estado, reg *Registro, cuarentena []string, out string) (*Registro, []string, string, error) {
+	if err := r.borrarRefs(e); err != nil {
+		return nil, cuarentena, out, err
+	}
+	fallaEn("sin-refs")
+	ev := diario.Evento{Tipo: "fase", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(), De: e.Fase, A: "CERRADO", Resultado: reg.Result, Detalle: reg.Motivo}
+	if err := r.anotarUnaVez(ev, func(x diario.Evento) bool {
+		return x.Tipo == "fase" && x.Slice == e.NN && x.Intento == e.Intento && x.A == "CERRADO"
+	}); err != nil {
+		return nil, cuarentena, out, err
+	}
+	fallaEn("anotado")
+	return reg, cuarentena, out, os.Remove(r.estadoPath(e.NN))
+}
+
+// anotarUnaVez appends ev to the diario unless an event that igual recognises is already there.
+func (r Repo) anotarUnaVez(ev diario.Evento, igual func(diario.Evento) bool) error {
+	evs, err := diario.Leer(diario.Ruta(r.OrqDir))
+	if err != nil {
+		return err
+	}
+	if slices.ContainsFunc(evs, igual) {
+		return nil
+	}
+	return diario.Anotar(diario.Ruta(r.OrqDir), ev)
+}
+
+// anotarDecisionUnaVez logs the Owner's close decision once.
+func (r Repo) anotarDecisionUnaVez(e *Estado, now time.Time) error {
+	d := IntencionCierre{Resultado: "aceptado", TS: now}
+	if e.Cierre != nil {
+		d = *e.Cierre
+	}
+	// Stamped when written (for an accepted close, once main has the commit); the Owner's time is a field.
+	ev := diario.Evento{TS: now, Tipo: "decision", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(), Resultado: d.Resultado, Detalle: d.Motivo,
+		Datos: map[string]any{"decidido": d.TS.UTC().Format(time.RFC3339Nano)}}
+	return r.anotarUnaVez(ev, func(x diario.Evento) bool {
+		return x.Tipo == "decision" && x.Slice == e.NN && x.Intento == e.Intento && x.Resultado == d.Resultado
+	})
+}
+
+// anotarIntegracionUnaVez logs the integration of e.Integrado unless it is already logged.
+func (r Repo) anotarIntegracionUnaVez(e *Estado, now time.Time) error {
+	ev := diario.Evento{TS: now, Tipo: "integracion", Paso: "base", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(),
+		Resultado: "ok", Datos: map[string]any{"sha": e.Integrado, "base": e.Base}}
+	return r.anotarUnaVez(ev, func(x diario.Evento) bool {
+		sha, _ := x.Datos["sha"].(string)
+		return x.Tipo == "integracion" && x.Slice == e.NN && x.Intento == e.Intento && x.Resultado == "ok" && sha == e.Integrado
+	})
+}
+
+// integradoVigente reuses the merge orq already revalidated for e (refs/orq/integrado/NN) when it
+// is still the merge of the current base tip and the verified commit; then e.Integrado is set.
+func (r Repo) integradoVigente(e *Estado) (bool, error) {
+	sha, code, err := r.gitCodigo("rev-parse", "-q", "--verify", refIntegrado(e.NN))
+	if err != nil || code != 0 {
+		return false, err
+	}
+	rec, err := r.reciboConfiable(e)
+	if err != nil {
+		return false, err
+	}
+	base, err := r.git("rev-parse", "--verify", "refs/heads/"+e.Base+"^{commit}")
+	if err != nil {
+		return false, err
+	}
+	padres, err := r.git("rev-list", "--parents", "-n", "1", sha)
+	if err != nil {
+		return false, err
+	}
+	if p := strings.Fields(padres); len(p) != 3 || p[1] != base || p[2] != rec.Head {
+		return false, nil
+	}
+	e.Integrado = sha
+	return true, nil
 }
 
 // anotarIntegracion is the ledger row of one integration into the base: SHA and result.

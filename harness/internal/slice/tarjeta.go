@@ -131,6 +131,12 @@ func (r Repo) PonerTarjeta(nn string, t Tarjeta, now time.Time) (*Estado, error)
 	if err != nil || e == nil {
 		return nil, errors.Join(err, errors.New("no hay slice abierto"))
 	}
+	if identidad.EsOrq2() {
+		// A write that died after the seal converges: the sealed card (or approval) is taken first.
+		if err := errors.Join(r.retomarLista(e), r.retomarAprobacion(e)); err != nil {
+			return e, err
+		}
+	}
 	if err := r.confiable(e); err != nil {
 		return e, err
 	}
@@ -152,6 +158,12 @@ func (r Repo) AprobarTarjeta(nn string, now time.Time) (e *Estado, ya bool, err 
 	if e, err = r.Load(nn); err != nil || e == nil {
 		return nil, false, errors.Join(err, errors.New("no hay slice abierto"))
 	}
+	orq2 := identidad.EsOrq2()
+	if orq2 {
+		if err := r.retomarAprobacion(e); err != nil {
+			return e, false, err
+		}
+	}
 	if err := r.confiable(e); err != nil {
 		return e, false, err
 	}
@@ -159,24 +171,107 @@ func (r Repo) AprobarTarjeta(nn string, now time.Time) (e *Estado, ya bool, err 
 		return e, false, fmt.Errorf("%s no tiene tarjeta: el Planificador la escribe con orq slice tarjeta %s --archivo tarjeta.md", e.ID(), e.NN)
 	}
 	if e.Tarjeta.EstaAprobada() {
+		if orq2 {
+			// An approval that died before its diario event gets it now, once, at the sealed time.
+			ap := e.Tarjeta.Aprobada.UTC().Truncate(time.Millisecond)
+			return e, true, r.anotarUnaVez(eventoTarjeta(e, "aprobada", ap), func(x diario.Evento) bool {
+				return x.Tipo == "tarjeta" && x.Slice == e.NN && x.Intento == e.Intento && x.Resultado == "aprobada" && x.TS.Equal(ap)
+			})
+		}
 		return e, true, nil
 	}
 	e.Tarjeta.Aprobada = now.UTC().Truncate(time.Millisecond)
 	return e, false, r.guardarTarjeta(e, "aprobada", e.Tarjeta.Aprobada)
 }
 
+// retomarAprobacion finishes an approval that died after the seal in git and before the state was
+// saved (orq2). The seal is the Owner's recorded decision: when the contract differs from the state
+// only by that approval of this very card, the state takes it, with the sealed time.
+func (r Repo) retomarAprobacion(e *Estado) error {
+	if e.Tarjeta == nil || e.Tarjeta.EstaAprobada() {
+		return nil
+	}
+	c, ok, err := r.aprobacionSellada(e)
+	if err != nil || !ok {
+		return err
+	}
+	e.Tarjeta.Aprobada = c.Tarjeta.Aprobada
+	return r.save(e)
+}
+
+// retomarLista finishes a card write that died after the seal in git and before the state (orq2):
+// the state takes the sealed card, still waiting for the Owner, and the re-run then writes its own.
+// An approval in git is never taken this way; that is retomarAprobacion's.
+func (r Repo) retomarLista(e *Estado) error {
+	c, ok, err := r.listaSellada(e)
+	if err != nil || !ok {
+		return err
+	}
+	e.Tarjeta = c.Tarjeta
+	return r.save(e)
+}
+
+// listaSellada says whether git holds a card, not approved, that the state lacks, and nothing else differs.
+func (r Repo) listaSellada(e *Estado) (Contrato, bool, error) {
+	var c Contrato
+	if existe, err := r.leerBlob(refContrato(e.NN), &c); err != nil || !existe {
+		return c, false, err
+	}
+	if c.Tarjeta == nil || c.Tarjeta.EstaAprobada() || e.Tarjeta.EstaAprobada() {
+		return c, false, nil
+	}
+	conLista := contratoDe(e)
+	conLista.Tarjeta = c.Tarjeta
+	return c, len(diferencias(c, conLista)) == 0 && len(diferencias(c, contratoDe(e))) > 0, nil
+}
+
+// aprobacionSellada says whether git holds an approval of e's card that the state lacks, and
+// nothing else differs.
+func (r Repo) aprobacionSellada(e *Estado) (Contrato, bool, error) {
+	var c Contrato
+	if existe, err := r.leerBlob(refContrato(e.NN), &c); err != nil || !existe {
+		return c, false, err
+	}
+	if e.Tarjeta == nil || e.Tarjeta.EstaAprobada() || !c.Tarjeta.EstaAprobada() {
+		return c, false, nil
+	}
+	tj := *e.Tarjeta
+	tj.Aprobada = c.Tarjeta.Aprobada
+	conAprobacion := contratoDe(e)
+	conAprobacion.Tarjeta = &tj
+	return c, len(diferencias(c, conAprobacion)) == 0, nil
+}
+
+func eventoTarjeta(e *Estado, resultado string, ts time.Time) diario.Evento {
+	return diario.Evento{TS: ts, Tipo: "tarjeta", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(), Resultado: resultado}
+}
+
 func (r Repo) guardarTarjeta(e *Estado, resultado string, ts time.Time) error {
+	// orq2 interruption points of an approval: after the seal, and after the state.
+	falla := func(etapa string) {
+		if resultado == "aprobada" && identidad.EsOrq2() {
+			fallaEn(etapa)
+		}
+	}
 	if err := r.sellar(e); err != nil {
 		return err
 	}
+	if resultado == "lista" && identidad.EsOrq2() {
+		fallaEn("lista-sellada")
+	}
+	falla("sellado")
 	if err := r.save(e); err != nil {
 		return err
 	}
-	return diario.Anotar(diario.Ruta(r.OrqDir), diario.Evento{TS: ts, Tipo: "tarjeta", Slice: e.NN, Intento: e.Intento, Ruta: e.RutaEfectiva(), Resultado: resultado})
+	falla("aprobado")
+	return diario.Anotar(diario.Ruta(r.OrqDir), eventoTarjeta(e, resultado, ts))
 }
 
 // PuedeLanzar dice si un worker puede empezar: un fix no pide tarjeta; un slice, una aprobada.
 func (e *Estado) PuedeLanzar() error {
+	if err := e.CierrePendiente(); err != nil {
+		return err
+	}
 	switch {
 	case e.RutaEfectiva() == RutaFix || e.Tarjeta.EstaAprobada():
 		return nil

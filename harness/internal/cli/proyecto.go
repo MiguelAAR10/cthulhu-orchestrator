@@ -635,12 +635,17 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s: huella tomada del rojo (%s), el examen es idéntico. Vuelve a verificar\n", e.Attempt(), slice.Corto(e.SHARojo))
 		return 0
 	case "reabrir":
+		args, revoca, errRev := revocaRechazo(args)
+		if errRev != nil {
+			fmt.Fprintln(stderr, "orq slice:", errRev)
+			return 1
+		}
 		if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {
 			fmt.Fprintln(stderr, "uso: orq slice reabrir \"qué se repara y quién lo pidió\"")
 			return 1
 		}
 		motivo := strings.Join(args[1:], " ")
-		e, err := r.Reabrir(nn, motivo)
+		e, err := r.Reabrir(nn, motivo, revoca(motivo)...)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
@@ -650,6 +655,11 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s reabierto en el mismo worktree, con su trabajo. El recibo ya no vale: lanza la reparación y vuelve a verificar\n", e.Attempt())
 		return 0
 	case "reintentar":
+		args, revoca, errRev := revocaRechazo(args)
+		if errRev != nil {
+			fmt.Fprintln(stderr, "orq slice:", errRev)
+			return 1
+		}
 		owner, causa := false, ""
 		var resto []string
 		for i := 1; i < len(args); i++ {
@@ -668,7 +678,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		args = append(args[:1], resto...)
-		e, err := r.Reintentar(nn, strings.Join(resto, " "), causa, owner)
+		e, err := r.Reintentar(nn, strings.Join(resto, " "), causa, owner, revoca(strings.Join(resto, " "))...)
 		if err != nil {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
@@ -690,28 +700,56 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		}
 		reg, cuarentena, out, err := r.Cerrar(nn, *ok, *motivo, time.Now(), slice.CerrarOpc{AceptoChecks: *aceptoChecks})
 		show(out)
-		if errors.Is(err, slice.ErrYaCerrado) {
+		yaCerrado := errors.Is(err, slice.ErrYaCerrado)
+		if yaCerrado && !identidad.EsOrq2() {
 			fmt.Fprintf(stdout, "S-%s ya estaba cerrado como %s; no se repite nada\n", reg.NN, reg.Result)
 			return 0
 		}
-		if err != nil {
+		if err != nil && !yaCerrado {
 			fmt.Fprintln(stderr, "orq slice:", err)
 			return 1
 		}
 		if len(cuarentena) > 0 {
 			fmt.Fprintf(stdout, "en cuarentena (no se borró, revísalo): %s\n", strings.Join(cuarentena, ", "))
 		}
+		// What is written comes from the close record, not from the flags: a re-run after a crash
+		// carries the Owner's first decision (orq2). Under orq both say the same.
+		aceptado, rechazo := reg.Result == "aceptado", reg.Motivo
 		mem := memoria.Item{Imp: "media", Cat: "aprendizaje", Fuente: "orquestador", Slice: "S-" + reg.NN,
 			Texto: app.Recortar(fmt.Sprintf("S-%s %s: %s", reg.NN, reg.Result, reg.Titulo), memoria.MaxTexto)}
-		if !*ok {
+		if !aceptado {
 			mem.Imp, mem.Cat, mem.Fuente = "critica", "requisito", "owner"
-			mem.Texto = app.Recortar(fmt.Sprintf("Rechazo de S-%s: %s", reg.NN, *motivo), memoria.MaxTexto)
-			p.AprenderSolo("El Owner rechazó: "+*motivo, "rechazo", "S-"+reg.NN)
+			mem.Texto = app.Recortar(fmt.Sprintf("Rechazo de S-%s: %s", reg.NN, rechazo), memoria.MaxTexto)
+		}
+		// orq2: the close's memory line is written once, after the slice is closed (for an accepted
+		// close, after main has the commit). A re-run of an already closed slice writes it only if a
+		// crash lost it, and does nothing else.
+		anotada := false
+		if identidad.EsOrq2() {
+			items, _ := memoria.Load(p.MemPath())
+			anotada = slices.ContainsFunc(items, func(it memoria.Item) bool { return it.Slice == mem.Slice && it.Cat == mem.Cat && it.Texto == mem.Texto })
+		}
+		if !aceptado && !anotada {
+			p.AprenderSolo("El Owner rechazó: "+rechazo, "rechazo", "S-"+reg.NN)
 		}
 		// The slice is already closed: every cleanup step still runs, and each failure is reported.
 		var pendiente []string
-		if _, _, err := memoria.Add(p.MemPath(), mem, time.Now()); err != nil && identidad.EsOrq2() {
+		if anotada {
+			// nothing to write
+		} else if _, _, err := memoria.Add(p.MemPath(), mem, time.Now()); err != nil && identidad.EsOrq2() {
 			pendiente = append(pendiente, fmt.Sprintf("la memoria no guardó el cierre (%v): orq mem add --imp %s --cat %s --fuente %s --slice S-%s %q", err, mem.Imp, mem.Cat, mem.Fuente, reg.NN, mem.Texto))
+		}
+		if yaCerrado {
+			if len(pendiente) > 0 {
+				fmt.Fprintf(stderr, "orq slice: S-%s ya estaba cerrado como %s, pero esto falló:\n  - %s\n", reg.NN, reg.Result, strings.Join(pendiente, "\n  - "))
+				return 1
+			}
+			if anotada {
+				fmt.Fprintf(stdout, "S-%s ya estaba cerrado como %s; no se repite nada\n", reg.NN, reg.Result)
+			} else {
+				fmt.Fprintf(stdout, "S-%s ya estaba cerrado como %s; faltaba su línea de memoria y ya está\n", reg.NN, reg.Result)
+			}
+			return 0
 		}
 		// orq2 archives the story's channel, never deletes it: its message ids stay valid as
 		// evidence, and every cleanup failure is reported. orq keeps 1.0.0: the channel is
@@ -762,7 +800,7 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		} else {
 			fmt.Fprintf(stdout, "S-%s cerrado como %s. Canal limpio; memoria actualizada.\n", reg.NN, reg.Result)
 		}
-		if !*ok {
+		if !aceptado {
 			fmt.Fprintf(stdout, "La rama %s se conserva para revisar.\n", "slice/"+reg.NN)
 		}
 		if len(pendiente) > 0 {
@@ -925,6 +963,9 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stdout, "  bloqueado: %s\n", e.Motivo)
 			}
 			if identidad.EsOrq2() {
+				if err := e.CierrePendiente(); err != nil {
+					fmt.Fprintf(stdout, "  cierre a medio hacer: %v\n", err)
+				}
 				faltaLanzar(p, e.NN, stdout, false)
 			}
 			if e.Recibo != nil {
@@ -966,4 +1007,19 @@ func partir(s string) []string {
 		}
 	}
 	return out
+}
+
+// revocaRechazo takes --revoca-rechazo out of args (orq2 only; under orq it stays part of the text,
+// as in 1.0.0). Revoking a rejection the Owner decided is the Owner's: only from the Owner's
+// terminal. The returned func builds the override with the command's reason.
+func revocaRechazo(args []string) ([]string, func(string) []slice.RevocaRechazo, error) {
+	nada := func(string) []slice.RevocaRechazo { return nil }
+	if !identidad.EsOrq2() || !slices.Contains(args, "--revoca-rechazo") {
+		return args, nada, nil
+	}
+	if err := soloOwner(os.Stdin); err != nil {
+		return args, nada, fmt.Errorf("revocar un rechazo %w", err)
+	}
+	resto := slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--revoca-rechazo" })
+	return resto, func(por string) []slice.RevocaRechazo { return []slice.RevocaRechazo{{Por: por}} }, nil
 }

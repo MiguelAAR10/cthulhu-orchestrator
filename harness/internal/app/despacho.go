@@ -168,6 +168,13 @@ func (p Proyecto) Pendientes() ([]Pendiente, error) {
 	for _, e := range ab {
 		base := Pendiente{Slice: e.NN, Titulo: e.Titulo}
 		add := func(x Pendiente) { out = append(out, x) }
+		if err := e.CierrePendiente(); err != nil && e.Fase != slice.Integrando && e.Fase != slice.Cerrando {
+			// A close the Owner decided stopped half way: that is what is owed, not more work.
+			x := base
+			x.Tipo, x.Debe, x.Desde, x.Texto = PendCierre, "orquestador", e.Cierre.TS, e.Cierre.Resultado
+			add(x)
+			continue
+		}
 		switch e.Fase {
 		case slice.Verificado:
 			x := base

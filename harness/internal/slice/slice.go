@@ -19,6 +19,7 @@ import (
 
 	"orq/internal/config"
 	"orq/internal/gitx"
+	"orq/internal/identidad"
 	"orq/internal/sysinfo"
 )
 
@@ -42,10 +43,19 @@ const (
 // Solo se activa con ORQ_FALLA_EN=<etapa> en pruebas.
 func fallaEn(etapa string) {
 	if os.Getenv("ORQ_FALLA_EN") == etapa {
-		fmt.Fprintf(os.Stderr, "[orq] interrupción simulada en %q\n", etapa)
-		os.Exit(9)
+		morir(etapa)
 	}
 }
+
+// morir ends the process at a simulated interruption. Tests replace it to stop the call in place.
+var morir = func(etapa string) {
+	fmt.Fprintf(os.Stderr, "[orq] interrupción simulada en %q\n", etapa)
+	os.Exit(9)
+}
+
+// tras lets a test act at a named point of a long command (another process writing meanwhile).
+// It does nothing outside tests.
+var tras = func(punto string) {}
 
 // ErrBaseAvanzo: la rama base cambió durante el cierre; hay que integrar de nuevo.
 var ErrBaseAvanzo = errors.New("la base avanzó")
@@ -104,6 +114,40 @@ type Estado struct {
 	Demo          []string `json:"demo,omitempty"`      // hasta 3 pasos para ver el resultado funcionando
 	Tarjeta       *Tarjeta `json:"tarjeta,omitempty"`   // ficha de entendimiento que aprueba el Owner
 	Historia      string   `json:"historia,omitempty"`  // story this slice is a child of
+	// Cierre is the Owner's close decision, recorded before anything is done (orq2 only), so a re-run
+	// after a crash resumes that same decision.
+	Cierre *IntencionCierre `json:"cierre,omitempty"`
+}
+
+// CierrePendiente stops work on a slice whose close the Owner already decided (orq2 records it):
+// nothing is verified or launched until that close is finished, or the slice is reopened or retried.
+func (e *Estado) CierrePendiente() error {
+	if e.Cierre == nil {
+		return nil
+	}
+	if e.Cierre.Resultado == "aceptado" && e.Fase != Integrando && e.Fase != Cerrando {
+		return nil // stale: the accepted close is no longer under way
+	}
+	orq, cuando := identidad.Nombre(), e.Cierre.TS.Local().Format("2006-01-02 15:04")
+	if e.Cierre.Resultado != "rechazado" {
+		return fmt.Errorf("%s se está cerrando como aceptado (decidido %s): no se verifica ni se lanza nada; termina el cierre: `%s slice --slice %s cerrar --aceptado`", e.ID(), cuando, orq, e.NN)
+	}
+	msg := fmt.Sprintf("%s se está cerrando como rechazado (decidido %s): no se verifica ni se lanza nada; termina el rechazo: `%s slice --slice %s cerrar --rechazado %q`", e.ID(), cuando, orq, e.NN, e.Cierre.Motivo)
+	// The only other way out is the Owner's override, and only where that command exists.
+	switch e.Fase {
+	case Verificado:
+		msg += fmt.Sprintf(". Si el Owner cambió de opinión, solo él lo revoca, desde su terminal: `%s slice --slice %s reabrir \"qué se repara\" --revoca-rechazo`", orq, e.NN)
+	case Bloqueado:
+		msg += fmt.Sprintf(". Si el Owner cambió de opinión, solo él lo revoca, desde su terminal: `%s slice --slice %s reintentar \"qué cambia\" --causa worker|examen --revoca-rechazo`", orq, e.NN)
+	}
+	return errors.New(msg)
+}
+
+// IntencionCierre is a close the Owner asked for: accepted or rejected, why, and when.
+type IntencionCierre struct {
+	Resultado string    `json:"resultado"` // aceptado | rechazado
+	Motivo    string    `json:"motivo,omitempty"`
+	TS        time.Time `json:"ts"`
 }
 
 func (e *Estado) ID() string      { return fmt.Sprintf("S-%s", e.NN) }

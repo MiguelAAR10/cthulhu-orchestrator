@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -179,5 +180,73 @@ func TestCerrarSinListaDeAbiertosNoArchivaSinEtiqueta(t *testing.T) {
 	}
 	if vivo, _ := os.ReadFile(path); !strings.Contains(string(vivo), "sin etiqueta") {
 		t.Fatalf("an untagged message left the live channel although open stories were unknown: %s %s\n%s", out, errs, vivo)
+	}
+}
+
+// G3: a close whose memory line was lost (the process died, or the memory could not be written)
+// gets it on the re-run of an already closed slice, once; nothing else is repeated.
+func TestCerrarRepetidoCompletaLaLineaDeMemoriaUnaVez(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	sliceVerde(t)
+	root := os.Getenv("ORQ_ROOT")
+	t.Setenv("ORQ_SIN_DOC", "1")
+	mem := filepath.Join(root, ".orq", "memoria.jsonl")
+	if err := os.MkdirAll(mem, 0o755); err != nil { // the memory cannot be written
+		t.Fatal(err)
+	}
+	if out, errs, code := run(t, "slice", "--slice", "01", "cerrar", "--aceptado"); code != 1 || !strings.Contains(errs, "memoria") {
+		t.Fatalf("the first close must report the lost memory line: %d %s %s", code, out, errs)
+	}
+	os.RemoveAll(mem)
+	contar := func() int {
+		raw, _ := os.ReadFile(mem)
+		return strings.Count(string(raw), "S-01 aceptado")
+	}
+	for i := 0; i < 2; i++ {
+		out, errs, code := run(t, "slice", "--slice", "01", "cerrar", "--aceptado")
+		if code != 0 || !strings.Contains(out, "ya estaba cerrado como aceptado") {
+			t.Fatalf("re-run %d: %d %s %s", i, code, out, errs)
+		}
+		if n := contar(); n != 1 {
+			t.Fatalf("re-run %d: one memory line expected, got %d", i, n)
+		}
+	}
+}
+
+// orq keeps 1.0.0: a re-run of a closed slice repeats nothing, the memory line included.
+func TestCerrarRepetidoNoTocaLaMemoriaComo100(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq")
+	sliceVerde(t)
+	root := os.Getenv("ORQ_ROOT")
+	t.Setenv("ORQ_SIN_DOC", "1")
+	if _, errs, code := run(t, "slice", "--slice", "01", "cerrar", "--aceptado"); code != 0 {
+		t.Fatalf("cerrar: %d %s", code, errs)
+	}
+	mem := filepath.Join(root, ".orq", "memoria.jsonl")
+	os.Remove(mem)
+	out, _, code := run(t, "slice", "--slice", "01", "cerrar", "--aceptado")
+	if code != 0 || out != "S-01 ya estaba cerrado como aceptado; no se repite nada\n" {
+		t.Fatalf("%d %q", code, out)
+	}
+	if _, err := os.Stat(mem); !os.IsNotExist(err) {
+		t.Fatalf("orq wrote memory on a re-run: %v", err)
+	}
+}
+
+// G3 review 2: revoking a pending rejection is the Owner's, from a terminal.
+func TestRevocaRechazoEsDelOwner(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	sliceVerde(t)
+	viejo := esTerminal
+	esTerminal = func(io.Reader) bool { return false }
+	t.Cleanup(func() { esTerminal = viejo })
+	_, errs, code := run(t, "slice", "reabrir", "--revoca-rechazo", "otra vuelta")
+	if code != 1 || !strings.Contains(errs, "es del Owner") {
+		t.Fatalf("a non-terminal must not revoke: %d %s", code, errs)
+	}
+	t.Setenv("ORQ_ROL", "orquestador")
+	esTerminal = func(io.Reader) bool { return true }
+	if _, errs, code := run(t, "slice", "reintentar", "x", "--causa", "worker", "--revoca-rechazo"); code != 1 || !strings.Contains(errs, "es del Owner") {
+		t.Fatalf("an agent pane must not revoke: %d %s", code, errs)
 	}
 }

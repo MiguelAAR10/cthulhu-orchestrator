@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"orq/internal/gitx"
+	"orq/internal/identidad"
 )
 
 // Contrato son los campos del estado que deciden la aceptación.
@@ -116,6 +117,14 @@ func (r Repo) confiable(e *Estado) error {
 		return fmt.Errorf("%w: %s has no contract in git (%s), so nothing is accepted with its state; close it as rejected", ErrSinContrato, e.ID(), refContrato(e.NN))
 	}
 	if dif := diferencias(c, contratoDe(e)); len(dif) > 0 {
+		if identidad.EsOrq2() {
+			if _, ok, _ := r.aprobacionSellada(e); ok {
+				return fmt.Errorf("%w: the approval of %s's card was sealed in git but the command died before saving the state; finish it with `%s slice aprobar %s`", ErrEstadoForjado, e.ID(), identidad.Nombre(), e.NN)
+			}
+			if _, ok, _ := r.listaSellada(e); ok {
+				return fmt.Errorf("%w: a new card for %s was sealed in git but the command died before saving the state; write it again with `%s slice tarjeta %s --archivo tarjeta.md`", ErrEstadoForjado, e.ID(), identidad.Nombre(), e.NN)
+			}
+		}
 		return fmt.Errorf("%w: %s dice otra cosa que el contrato que orq guardó en git (%s) en: %s. Alguien reescribió .orq/slices/%s.json; no se acepta nada con ese estado. El contrato vigente: cmd=%q, examen=%s",
 			ErrEstadoForjado, e.ID(), refContrato(e.NN), strings.Join(dif, ", "), e.NN, c.Cmd, strings.Join(c.Bundle, ","))
 	}
