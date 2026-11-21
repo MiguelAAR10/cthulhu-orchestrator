@@ -35,6 +35,7 @@ Ve el recibo al terminar.
 `
 
 func TestLeerTarjetaCincoPartes(t *testing.T) {
+	t.Parallel()
 	tj, err := LeerTarjeta(tarjetaBuena)
 	if err != nil {
 		t.Fatal(err)
@@ -52,6 +53,7 @@ func TestLeerTarjetaCincoPartes(t *testing.T) {
 }
 
 func TestLeerTarjetaRechaza(t *testing.T) {
+	t.Parallel()
 	cambiar := func(viejo, nuevo string) string { return strings.Replace(tarjetaBuena, viejo, nuevo, 1) }
 	casos := []struct{ nombre, texto, falta string }{
 		{"sin zonas", cambiar("## Zonas\n- src/pagos/\n- web/carrito\n", ""), "Zonas"},
@@ -71,6 +73,7 @@ func TestLeerTarjetaRechaza(t *testing.T) {
 	}
 	for _, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {
+			t.Parallel()
 			_, err := LeerTarjeta(c.texto)
 			if err == nil || !strings.Contains(err.Error(), c.falta) {
 				t.Fatalf("quiero un error que nombre %q, salió %v", c.falta, err)
@@ -96,6 +99,7 @@ func ponerTarjeta(t *testing.T, r Repo, nn string, now time.Time) *Estado {
 }
 
 func TestTarjetaAprobadaSellaYCongela(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	abrir(t, r)
 	if e := ponerTarjeta(t, r, "01", t0); !e.Tarjeta.Lista.Equal(t0) || e.Tarjeta.EstaAprobada() {
@@ -129,6 +133,7 @@ func TestTarjetaAprobadaSellaYCongela(t *testing.T) {
 }
 
 func TestTarjetaForjadaNoEsConfiable(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	abrir(t, r)
 	e := ponerTarjeta(t, r, "01", t0)
@@ -142,6 +147,7 @@ func TestTarjetaForjadaNoEsConfiable(t *testing.T) {
 }
 
 func TestSinTarjetaAprobadaNoSeLanza(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	if _, _, err := r.AprobarTarjeta("01", t0); err == nil || !strings.Contains(err.Error(), "orq slice tarjeta 01") {
@@ -188,6 +194,7 @@ func diarioTarjetas(t *testing.T, orqDir string) {
 }
 
 func TestMetricasTarjetaDesdeDiario(t *testing.T) {
+	t.Parallel()
 	r := Repo{OrqDir: t.TempDir()}
 	diarioTarjetas(t, r.OrqDir)
 	m := r.Metricas(time.Time{}, time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC))
@@ -226,6 +233,7 @@ func TestLeerTarjetaTodasLasViolaciones(t *testing.T) {
 
 // The caps sentence carries each constant's value.
 func TestTopesTarjetaDiceLasConstantes(t *testing.T) {
+	t.Parallel()
 	for _, n := range []int{maxLineasHistoria, maxLineasSeccion, maxCaracteres, maxPalabras} {
 		if !strings.Contains(TopesTarjeta(), fmt.Sprintf("≤%d ", n)) {
 			t.Errorf("caps sentence lacks %d: %s", n, TopesTarjeta())

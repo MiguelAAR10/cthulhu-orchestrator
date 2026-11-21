@@ -36,6 +36,7 @@ const msgOrq1 = "S-01 was opened by orq 1.0.0; close it with orq 1.0.0 before us
 // Acceptance 6: v2 does not inherit 1.0.0 slices. Verify, merge and close (accepted or rejected)
 // refuse a schema-0 slice with one message, and leave its state and refs alone.
 func TestSliceOrq1SeNiega(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")

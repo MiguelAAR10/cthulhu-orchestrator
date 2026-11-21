@@ -13,6 +13,7 @@ import (
 const tiposTS = `if grep -q "x: number = 'a'" src.ts; then echo "src.ts(1,5): error TS2322: Type 'string' is not assignable to type 'number'."; exit 2; fi`
 
 func TestCheckFallidoBloqueaElCierre(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: tiposTS}, {Nombre: "tests", Omitir: "sin script test"}}
 	e := abrir(t, r)
@@ -31,6 +32,7 @@ func TestCheckFallidoBloqueaElCierre(t *testing.T) {
 }
 
 func TestCheckGuardiaExtraBloquea(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"},
 		{Nombre: "sin-suppress", Cmd: "! grep -rn eslint-disable src"}}
@@ -45,6 +47,7 @@ func TestCheckGuardiaExtraBloquea(t *testing.T) {
 }
 
 func TestReciboLlevaCadaCheck(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	r.Checks = []config.Check{{Nombre: "lint", Cmd: "echo limpio"}, {Nombre: "types", Cmd: "true"},
 		{Nombre: "tests", Omitir: "sin script test"}, {Nombre: "arch", Cmd: "test -f total.txt"}}
@@ -79,6 +82,7 @@ func TestReciboLlevaCadaCheck(t *testing.T) {
 
 // A lint fix that only changes whitespace is progress: the failure signature includes the checks' output.
 func TestCheckArregloDeFormatoNoEsSinProgreso(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	r.Checks = []config.Check{{Nombre: "lint", Cmd: "! grep -l ' $' notas.txt otra.txt"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"}}
 	e := abrir(t, r)
@@ -96,6 +100,7 @@ func TestCheckArregloDeFormatoNoEsSinProgreso(t *testing.T) {
 }
 
 func TestVerificarSinChecksComoAntes(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")
@@ -107,6 +112,7 @@ func TestVerificarSinChecksComoAntes(t *testing.T) {
 
 // A tool the box cannot see is an infrastructure failure: it still blocks, and says so.
 func TestCheckSinHerramientaEsInfraestructura(t *testing.T) {
+	t.Parallel()
 	got := FalloDeChecks([]ResultadoCheck{{Nombre: "types", Cmd: "tsc", Exit: 127, Resultado: CheckFallo, Salida: "sh: 1: tsc: not found"}})
 	if !strings.Contains(got, "check types falla (exit 127)") || !strings.Contains(got, "infraestructura") || !strings.Contains(got, "sandbox.ro") {
 		t.Fatalf("got %q", got)
@@ -116,6 +122,7 @@ func TestCheckSinHerramientaEsInfraestructura(t *testing.T) {
 // An exit-127 result (check or exam) is the box, not the worker: it fails verificar, but it does not
 // use up a repair and never reaches BLOQUEADO «sin progreso», however often it repeats.
 func TestInfraestructuraNoGastaReparacion(t *testing.T) {
+	t.Parallel()
 	for _, caso := range []struct {
 		nombre string
 		checks []config.Check
@@ -125,6 +132,7 @@ func TestInfraestructuraNoGastaReparacion(t *testing.T) {
 		{"examen", nil, "cmp -s total.txt tests/datos.txt || exit 1; orq_no_such_tool"},
 	} {
 		t.Run(caso.nombre, func(t *testing.T) {
+			t.Parallel()
 			r := repoDeJuguete(t)
 			r.Checks = caso.checks
 			e, _, err := r.Abrir("01", "total", "tests/s01.sh", caso.cmd, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}, Sano: "test -f total.txt"}, t0)
@@ -150,6 +158,7 @@ func TestInfraestructuraNoGastaReparacion(t *testing.T) {
 
 // A red whose exam exits 127 (tool missing) is not a red: abrir refuses it, even with --sin-conteo.
 func TestAbrirRechazaRojoDeHerramientaFaltante(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	_, _, err := r.Abrir("01", "total", "tests/s01.sh", "orq_no_such_tool tests/s01.sh", Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0)
 	if err == nil || !strings.Contains(err.Error(), "127") || !strings.Contains(err.Error(), "falta una herramienta") {
@@ -159,6 +168,7 @@ func TestAbrirRechazaRojoDeHerramientaFaltante(t *testing.T) {
 
 // With no commit from the worker, verificar refuses instead of verifying nothing.
 func TestVerificarSinTrabajoSeRechaza(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	if _, _, err := r.Abrir("01", "total", "tests/s01.sh", examen, Opciones{SinConteo: "juguete", Bundle: []string{"tests/datos.txt"}}, t0); err != nil {
 		t.Fatal(err)

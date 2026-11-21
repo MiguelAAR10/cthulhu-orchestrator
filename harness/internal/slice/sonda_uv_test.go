@@ -43,6 +43,7 @@ func repoUv(t *testing.T) string {
 }
 
 func TestSondarUvArgvYVenv(t *testing.T) {
+	t.Parallel()
 	root := repoUv(t)
 	caja := &cajaGrabadora{salida: "echo 'pytest 8.3.0'"}
 	r := Repo{Root: root, Caja: caja}
@@ -64,6 +65,7 @@ func TestSondarUvArgvYVenv(t *testing.T) {
 }
 
 func TestSondarUvFalla(t *testing.T) {
+	t.Parallel()
 	caja := &cajaGrabadora{salida: "echo 'error: Failed to spawn: mypy' ; echo more; exit 2"}
 	r := Repo{Root: repoUv(t), Caja: caja}
 	sonda, linea, ok, err := r.SondarUv("uv run --offline --no-sync mypy src && echo x")
@@ -73,6 +75,7 @@ func TestSondarUvFalla(t *testing.T) {
 }
 
 func TestSondaUvDe(t *testing.T) {
+	t.Parallel()
 	for cmd, want := range map[string]string{
 		"PYTHONPATH=src uv run --offline --no-sync ruff check src tests && PYTHONPATH=src uv run --offline --no-sync ruff format --check src": "PYTHONPATH=src uv run --offline --no-sync ruff --version",
 		"uv run --offline --no-sync python -m pytest":  "uv run --offline --no-sync python --version",
@@ -88,6 +91,7 @@ func TestSondaUvDe(t *testing.T) {
 
 // F5: the value of a uv flag is not the tool.
 func TestSondaUvSaltaValorDeFlag(t *testing.T) {
+	t.Parallel()
 	for cmd, want := range map[string]string{
 		"uv run --with foo pytest -q":                   "uv run --with foo pytest --version",
 		"uv run --directory sub --no-sync pytest":       "uv run --directory sub --no-sync pytest --version",
@@ -107,6 +111,7 @@ func TestSondaUvSaltaValorDeFlag(t *testing.T) {
 
 // F6: a host tool named again in a plain segment keeps its host lookup.
 func TestHerramientasUvSoloTramosUv(t *testing.T) {
+	t.Parallel()
 	if got := HerramientasUv("uv run --no-sync pytest && pytest"); len(got) != 0 {
 		t.Errorf("pytest also runs from the host: %q", got)
 	}
