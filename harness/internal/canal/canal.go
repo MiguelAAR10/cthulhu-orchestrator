@@ -213,13 +213,15 @@ func Archivar(path, etiqueta string, archivar func(Msg) bool) (string, error) {
 	return arch, orqdir.WriteAtomic(path, append(append(line, '\n'), quedan.Bytes()...))
 }
 
-// MarcarEntregado agrega el evento de entrega confirmada.
+// MarcarEntregado agrega el evento de entrega confirmada, bajo el mismo candado que Append y
+// Archivar: una marca escrita mientras se archiva cae en el canal vivo, no en el que se reemplaza.
 func MarcarEntregado(path, id string, now time.Time) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := abrirBloqueado(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 	line, _ := json.Marshal(evento{ID: id, Evento: "entregado", TS: now.UTC().Truncate(time.Second)})
 	_, err = f.Write(append(line, '\n'))
 	return err
@@ -303,6 +305,22 @@ func LoadSesiones(path string) (map[string]Sesion, error) {
 func SaveSesiones(path string, s map[string]Sesion) error {
 	raw, _ := json.MarshalIndent(s, "", "  ")
 	return orqdir.WriteAtomic(path, raw)
+}
+
+// ActualizarSesiones changes the session map under its lock, on what is on disk now: a second
+// writer waits for the first and applies its change on top, it never saves an old map back.
+func ActualizarSesiones(path string, cambio func(map[string]Sesion)) error {
+	soltar, err := orqdir.Candado(path)
+	if err != nil {
+		return err
+	}
+	defer soltar()
+	s, err := LoadSesiones(path)
+	if err != nil {
+		return err
+	}
+	cambio(s)
+	return SaveSesiones(path, s)
 }
 
 // RolDePane identifica quién escribe a partir del panel de herdr.

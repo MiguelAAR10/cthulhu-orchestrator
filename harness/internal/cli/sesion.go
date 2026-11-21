@@ -76,15 +76,10 @@ func runSesion(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		// A worker's close merges and verifies first; a failure keeps its pane open.
-		informe, err := p.CerrarWorker(context.Background(), args[1])
+		informe, cerradas, err := p.CerrarMiembro(context.Background(), args[1])
 		if informe != "" {
 			fmt.Fprintln(stdout, informe)
 		}
-		if err != nil {
-			fmt.Fprintln(stderr, "orq sesion:", err)
-			return 1
-		}
-		cerradas, err := p.CerrarSesiones(context.Background(), ses, func(k string) bool { return k == args[1] })
 		if err != nil {
 			fmt.Fprintln(stderr, "orq sesion:", err)
 			return 1

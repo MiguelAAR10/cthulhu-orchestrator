@@ -170,7 +170,7 @@ func TestRelanzarWorkerMuertoOrqComo100(t *testing.T) {
 }
 
 func avisar(p Proyecto, actor, paso string) (bool, error) {
-	return p.avisarUnaVez(context.Background(), actor, paso, actor, "texto de "+paso, "01", 1)
+	return p.avisarUnaVez(context.Background(), actor, paso, actor, "p1", "texto de "+paso, "01", 1)
 }
 
 // H8(a): two deliveries of the same contract at once send it once.

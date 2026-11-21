@@ -2,7 +2,9 @@ package canal
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -42,5 +44,25 @@ func TestMarcarEntregadoEsperaElCandadoDelCanal(t *testing.T) {
 	ms, err := Load(p)
 	if err != nil || len(ms) != 1 || ms[0].Estado != "entregado" {
 		t.Fatalf("the delivery mark was lost in the swap: %+v %v", ms, err)
+	}
+}
+
+// Twenty writers at once, each adding its own session: none is lost.
+func TestActualizarSesionesConcurrentesNoPierdeNinguna(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "sesiones.json")
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := ActualizarSesiones(p, func(m map[string]Sesion) { m[fmt.Sprintf("worker-%d-s01", i)] = Sesion{Gen: 1} }); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	s, err := LoadSesiones(p)
+	if err != nil || len(s) != 20 {
+		t.Fatalf("%d sessions, want 20 (%v)", len(s), err)
 	}
 }

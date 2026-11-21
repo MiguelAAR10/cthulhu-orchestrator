@@ -79,10 +79,10 @@ func (p Proyecto) LanzarRol(ctx context.Context, ses map[string]canal.Sesion, ro
 	}
 	nueva := canal.Sesion{Agente: nombre, Pane: panel.ID, Tab: panel.Pestana, Desde: p.ahora().UTC().Truncate(time.Second), Gen: gen}
 	ses[rol] = nueva
-	if err := canal.SaveSesiones(p.SesPath(), ses); err != nil {
+	if err := p.guardarSesiones(ses, rol); err != nil {
 		return nueva, a, err
 	}
-	_, err = p.avisarUnaVez(ctx, nombre, "arranque-rol", nombre, fmt.Sprintf(arranqueRol, rol, skillDe(rol)), "", gen)
+	_, err = p.avisarUnaVez(ctx, nombre, "arranque-rol", nombre, panel.ID, fmt.Sprintf(arranqueRol, rol, skillDe(rol)), "", gen)
 	return nueva, a, err
 }
 
@@ -121,6 +121,12 @@ func (p Proyecto) Subir(ctx context.Context, pedido config.Agente) (atena string
 		aviso = fmt.Errorf("no se pudo nombrar este panel como %s (%v)", atena, errR)
 	}
 	ses["atena"] = canal.Sesion{Agente: atena, Pane: p.Term.PanelActual(), Desde: p.ahora().UTC().Truncate(time.Second), Gen: 1}
+	if identidad.EsOrq2() {
+		// LanzarRol writes only the role it opens: Atena is written here.
+		if err := p.guardarSesiones(ses, "atena"); err != nil {
+			return atena, canal.Sesion{}, aviso, err
+		}
+	}
 	orq, _, err = p.LanzarRol(ctx, ses, "orquestador", pedido)
 	return atena, orq, aviso, err
 }
