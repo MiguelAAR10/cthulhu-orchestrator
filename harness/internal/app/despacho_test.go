@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"orq/internal/canal"
 	"orq/internal/diario"
 	"orq/internal/plan"
+	"orq/internal/sysinfo"
 )
 
 // planS01 is an S-01-like plan: T1 has no dependencies, T2 and T3 wait for T1.
@@ -126,7 +128,7 @@ func TestDespacharTrasCaidaConAgenteVivo(t *testing.T) {
 		diario.Anotar(p.DiarioPath(), ev)
 	}
 	ds, err := p.DespacharUnaVez(ctx, "claude")
-	if err != nil || len(ds) != 1 || ds[0].Resultado != "ya_estaba" {
+	if err != nil || len(ds) != 1 || ds[0].Resultado != "adoptado" {
 		t.Fatalf("re-run: %v %+v", err, ds)
 	}
 	if c, a, v := len(term.Ops("crear")), len(term.Ops("arrancar")), len(term.Ops("avisar")); c != 1 || a != 1 || v != 2 {
@@ -249,5 +251,98 @@ func TestPendientesNombraUnLanzamientoCortado(t *testing.T) {
 		return x.Tipo == PendCortado && slices.Equal(x.Tareas, []string{"T1"}) && x.Worker == "worker-back-s01"
 	}) {
 		t.Fatalf("%+v", ps)
+	}
+}
+
+// reintentar blocks the slice and opens a new attempt, as `orq slice reintentar` would.
+func reintentar(t *testing.T, p Proyecto, nn string) {
+	t.Helper()
+	ruta := filepath.Join(p.Dir, "slices", nn+".json")
+	raw, err := os.ReadFile(ruta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	json.Unmarshal(raw, &m)
+	m["fase"], m["motivo"] = "BLOQUEADO", "prueba"
+	raw, _ = json.Marshal(m)
+	os.WriteFile(ruta, raw, 0o644)
+	if _, err := p.Slices().Reintentar(nn, "otro enfoque", "worker", false); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// M1: after slice reintentar, a task en_curso from the earlier attempt is neither relaunched nor
+// reported as a cut-short launch: the orchestrator decides what changes; once the plan makes it
+// ready again (plan soltar), despachar launches it.
+func TestDespacharTrasReintentarNoRelanzaLaTareaVieja(t *testing.T) {
+	p, term, e := proyectoDePrueba(t, "")
+	planS01(t, p, e.NN)
+	ctx := context.Background()
+	if _, err := p.DespacharUnaVez(ctx, "claude"); err != nil {
+		t.Fatal(err)
+	}
+	ses, _ := canal.LoadSesiones(p.SesPath())
+	p.CerrarSesiones(ctx, ses, func(k string) bool { return k == "worker-back-s01" })
+	reintentar(t, p, e.NN)
+	ps, err := p.Pendientes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.ContainsFunc(ps, func(x Pendiente) bool { return x.Tipo == PendCortado }) ||
+		!slices.ContainsFunc(ps, func(x Pendiente) bool {
+			return x.Tipo == PendReintento && slices.Equal(x.Tareas, []string{"T1"}) && x.Debe == "orquestador"
+		}) {
+		t.Fatalf("%+v", ps)
+	}
+	if ds, err := p.DespacharUnaVez(ctx, "claude"); err != nil || len(ds) != 0 {
+		t.Fatalf("relaunched an earlier attempt's task: %v %+v", err, ds)
+	}
+	if a := len(term.Ops("arrancar")); a != 1 {
+		t.Fatalf("arrancar=%d", a)
+	}
+	pl, _ := plan.Leer(p.PlanPath(e.NN))
+	plan.Soltar(pl, "T1")
+	plan.Guardar(p.PlanPath(e.NN), pl)
+	ds, err := p.DespacharUnaVez(ctx, "claude")
+	if err != nil || len(ds) != 1 || ds[0].Tarea != "T1" || ds[0].Resultado != "lanzado" || len(term.Ops("arrancar")) != 2 {
+		t.Fatalf("ready again: %v %+v", err, ds)
+	}
+}
+
+// L3: with the machine full, every ready task waits: no intent, no failure, no error.
+func TestDespacharSinCapacidadEspera(t *testing.T) {
+	p, term, e := proyectoDePrueba(t, "")
+	planS01(t, p, e.NN)
+	p.Medir = maquinaDe(sysinfo.Maquina{MemTotalGB: 8, MemDisponibleGB: 0.5, CPUs: 2, Carga1: 1}, 0)
+	ds, err := p.DespacharUnaVez(context.Background(), "claude")
+	if err != nil || len(ds) != 1 || ds[0].Tarea != "T1" || ds[0].Resultado != "espera" || ds[0].Detalle == "" {
+		t.Fatalf("%v %+v", err, ds)
+	}
+	evs, _ := diario.Leer(p.DiarioPath())
+	if slices.ContainsFunc(evs, func(ev diario.Evento) bool { return ev.Tipo == "despacho" }) || len(term.Ops("crear")) != 0 {
+		t.Fatal("a full machine wrote an intent or opened a panel")
+	}
+}
+
+// L4: a live worker that takes a new task gets a new contract, labelled tarea_nueva.
+func TestDespacharTareaNuevaAWorkerVivo(t *testing.T) {
+	p, term, e := proyectoDePrueba(t, "")
+	pl := &plan.Plan{Slice: e.NN, Debatido: true, Tareas: []plan.Tarea{
+		{ID: "T1", Zona: "back", Rutas: []string{"src"}, Dificultad: "baja", Estado: "pendiente"},
+		{ID: "T2", Zona: "back", Rutas: []string{"api"}, DependeDe: []string{"T1"}, Dificultad: "baja", Estado: "pendiente"},
+	}}
+	plan.Guardar(p.PlanPath(e.NN), pl)
+	ctx := context.Background()
+	p.DespacharUnaVez(ctx, "claude")
+	pl, _ = plan.Leer(p.PlanPath(e.NN))
+	plan.Hecha(pl, "T1")
+	plan.Guardar(p.PlanPath(e.NN), pl)
+	ds, err := p.DespacharUnaVez(ctx, "claude")
+	if err != nil || len(ds) != 1 || ds[0].Tarea != "T2" || ds[0].Resultado != "tarea_nueva" {
+		t.Fatalf("%v %+v", err, ds)
+	}
+	if a, v := len(term.Ops("arrancar")), len(term.Ops("avisar")); a != 1 || v != 2 {
+		t.Fatalf("arrancar=%d avisar=%d", a, v)
 	}
 }

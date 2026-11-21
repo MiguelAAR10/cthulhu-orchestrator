@@ -176,3 +176,27 @@ func TestDespacharPideUnaVezYNoEsDeWorkers(t *testing.T) {
 		t.Fatal("refused despachar wrote state")
 	}
 }
+
+// L1: pendientes is strictly read-only: it never creates .orq.
+func TestPendientesNoCreaOrq(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ORQ_ROOT", root)
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	conTerminalFalso(t)
+	out, errs, code := run(t, "pendientes")
+	if code != 0 || !strings.Contains(out, "ninguno") {
+		t.Fatalf("%d %s%s", code, out, errs)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".orq")); err == nil {
+		t.Fatal("pendientes created .orq")
+	}
+}
+
+// L5: the --agente help does not offer codex, which config refuses.
+func TestDespacharAyudaNoOfreceCodex(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	_, errs, _ := run(t, "despachar", "-h")
+	if strings.Contains(errs, "codex") || !strings.Contains(errs, "claude") {
+		t.Fatalf("%s", errs)
+	}
+}
