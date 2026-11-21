@@ -67,7 +67,8 @@ func Evaluate(p Payload, l limits.Limits, env Env) Decision {
 	if p.ToolName == "Bash" {
 		cmd, _ := p.ToolInput["command"].(string)
 		// `orq2 update` replaces the binary that is everyone's gate hook: it is the Owner's alone.
-		if (p.AgentID != "" || wt || os.Getenv("ORQ_ROL") != "") && nombraUpdate(cmd) {
+		// orq2 only: under identity orq the gate stays exactly 1.0.0's.
+		if identidad.EsOrq2() && (p.AgentID != "" || wt || os.Getenv("ORQ_ROL") != "") && nombraUpdate(cmd) {
 			return deny("orq2: `orq2 update` (también --ver, --volver y --registrar) es del Owner, en su terminal; un agente, un worker o un panel de rol no lo corre. Pídeselo al Owner.")
 		}
 		if pushPermitido(cmd, p.Cwd, l.PushRamas) {

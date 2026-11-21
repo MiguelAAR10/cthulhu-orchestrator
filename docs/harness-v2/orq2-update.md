@@ -82,5 +82,6 @@ The real fences are these:
 Anyone who can write the repo's refs can still write a note with plain git, so the Owner reading
 the record before typing the SHA is part of the check.
 
-A project whose hook is the installed orq 1.0.0 (`$HOME/bin/orq gate`) does not get the gate
-deny, because that binary predates it. A worker there is stopped only by the speed bumps above.
+The gate deny exists only under identity orq2, because orq stays byte-identical to 1.0.0.
+Projects hooked with orq (`$HOME/bin/orq gate`) are not covered: a worker there is stopped only
+by the speed bumps above.
