@@ -8,6 +8,7 @@ import (
 )
 
 func TestHistoriaConTresHijos(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	if _, err := r.AbrirHistoria("pagos", "Pagos", t0); err != nil {
 		t.Fatal(err)
@@ -50,6 +51,7 @@ func TestHistoriaConTresHijos(t *testing.T) {
 }
 
 func TestPausaHistoriaYGlobal(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	r.AbrirHistoria("h", "H", t0)
 	e := &Estado{NN: "02", Historia: "h"}
@@ -96,6 +98,7 @@ func TestPausaHistoriaYGlobal(t *testing.T) {
 }
 
 func TestIntegracionBaseAnota(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	e := abrir(t, r)
 	commitEn(t, e.Worktree, "total.txt", "170\n")

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>orq2 · Hallazgos verificados</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna; arriba "ahora mismo", luego el método (pipeline), fase 1 y fase 2 paso a paso, después el bucle tipo Kubernetes y el orden de la v2.1. */
+:root{
+  --paper:#f2f1ed; --pen:#121212; --soft:#5d5b55; --rule:#121212; --tint:#e4e2dc;
+  --alert:#c1121f; --ok:#2f6b3a; --wait:#9a6a00; --shadow:#121212;
+  --f-display:"Pixelify Sans","IBM Plex Mono",monospace;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0a0a09; --pen:#e9e7e1; --soft:#a6a39b; --rule:#e9e7e1; --tint:#1b1a18;
+  --alert:#ff4d5a; --ok:#6cc27a; --wait:#e0b040; --shadow:#e9e7e1; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0a0a09; --pen:#e9e7e1; --soft:#a6a39b; --rule:#e9e7e1; --tint:#1b1a18;
+  --alert:#ff4d5a; --ok:#6cc27a; --wait:#e0b040; --shadow:#e9e7e1; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--pen);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px}
+.wrap{max-width:920px;margin:0 auto;display:grid;gap:44px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,5vw,42px);line-height:1.05}
+h2{font-size:22px;border-bottom:3px solid var(--rule);padding-bottom:6px;margin-bottom:14px}
+h3{font-size:17px}
+p{margin:0;max-width:70ch}
+section{display:grid;gap:12px}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--tint);padding:1px 5px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+.lead{font-size:17px}
+.now{border:3px solid var(--alert);box-shadow:6px 6px 0 var(--shadow);padding:16px 18px;display:grid;gap:10px}
+.now h2{border:0;padding:0;margin:0;color:var(--alert)}
+.now ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:11.5px;padding:1px 7px;border:2px solid currentColor;font-weight:500;white-space:nowrap}
+.pill.red{color:var(--alert)} .pill.ok{color:var(--ok)} .pill.wait{color:var(--wait)} .pill.dim{color:var(--soft)}
+.diagram{border:2px solid var(--rule);padding:12px;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:640px;height:auto}
+svg .box{fill:var(--paper);stroke:var(--pen);stroke-width:2}
+svg .box.hot{stroke:var(--alert);stroke-width:3}
+svg .box.tint{fill:var(--tint)}
+svg text{fill:var(--pen);font-family:var(--f-mono);font-size:13px}
+svg text.t{font-family:var(--f-display);font-size:15px}
+svg text.s{fill:var(--soft);font-size:11.5px}
+svg text.r{fill:var(--alert)}
+svg .ln{stroke:var(--pen);stroke-width:2;fill:none}
+svg .ln.hot{stroke:var(--alert)}
+svg .ln.dash{stroke-dasharray:5 4}
+svg .ah{fill:var(--pen)} svg .ah.hot{fill:var(--alert)}
+.steps{display:grid;gap:0;border-top:2px solid var(--rule)}
+.step{display:grid;grid-template-columns:64px 1fr;gap:14px;padding:14px 0;border-bottom:1px solid var(--tint)}
+.step .n{font-family:var(--f-display);font-size:20px}
+.step .b{display:grid;gap:6px;min-width:0}
+.step .m{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.step .gate{font-size:13.5px;color:var(--soft)} .step .gate b{color:var(--pen)}
+.step pre{margin:0;background:var(--tint);padding:8px 10px;overflow-x:auto;font-family:var(--f-mono);font-size:12.5px;line-height:1.5}
+.tbl{overflow-x:auto;border:2px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:640px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--tint)}
+th{font-family:var(--f-mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;background:var(--tint)}
+tr:last-child td{border-bottom:0}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.rule{border:2px solid var(--rule);padding:12px;display:grid;gap:4px;align-content:start}
+.rule b{font-family:var(--f-display);font-weight:500;font-size:16px}
+.rule span{font-size:13.5px;color:var(--soft)}
+.k8s{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.k8s div{border-left:6px solid var(--pen);background:var(--tint);padding:10px 12px;display:grid;gap:2px}
+.k8s .k{font-family:var(--f-mono);font-size:12px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em}
+@media (max-width:560px){.step{grid-template-columns:44px 1fr}}
+footer{font-size:13px;color:var(--soft)}
+a{color:var(--pen)}
+:focus-visible{outline:3px solid var(--alert);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header style="display:grid;gap:10px">
+  <span class="eyebrow">orq2 · hallazgos verificados · 20 nov 2026 · <a href="orq2-ejecucion.html">plan de ejecución</a> · <a href="orq2-ruta.html">ruta de cierre</a></span>
+  <h1>Qué está roto y en qué orden se arregla</h1>
+  <p class="lead">Un Opus nuevo revisó en el código los 34 hallazgos de Astra y Fable: <b>31 se confirmaron, 3 quedaron parciales y ninguno se descartó</b>. Encontró además 3 problemas que nadie había visto. Lo que dijeron los expertos se sostiene, así que lo seguimos.</p>
+</header>
+
+<section class="now" aria-labelledby="hoy">
+  <h2 id="hoy">Estado ahora</h2>
+  <ol>
+    <li><b>Hecho:</b> carriles ordenados, y <code>v2/build</code> y <code>v2/review-fixes</code> fusionados en <code>harness-v2</code>.</li>
+    <li><b>Revisión Opus de la v2:</b> 1 problema alto. La guía pedía escribir las zonas de la tarjeta en español, pero el código las usa como rutas de archivos. Hay además 3 medios: tamaños de tarjeta que se contradicen, un caso de <code>orq</code> 1.0.0 que cambió y un crash en <code>check --caja</code>. <b>No se instala hasta corregirlos.</b></li>
+    <li><b>En curso:</b> un builder Opus los corrige en <code>v2/review2-fixes</code>, con prueba en rojo primero. En paralelo corre <code>make ci</code>.</li>
+    <li><b>S-01 en pausa:</b> depende de Kapso, WhatsApp y Meta. La primera historia de prueba será la <b>agenda de visitas</b>.</li>
+  </ol>
+</section>
+
+<section aria-labelledby="grupos">
+  <h2 id="grupos">Los arreglos de la v2.0, agrupados</h2>
+  <p>Solo entra a la v2.0 lo que afecta el uso con una historia a la vez y tú decidiendo. Lo que solo importa para el modo autónomo pasa a la v2.1. Se trabaja en dos carriles a la vez y cada grupo es un lote con su prueba en rojo, un Opus que construye, otro Opus que revisa y la CI.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Orden</th><th>Grupo</th><th>Hallazgos</th><th>Qué arregla, en simple</th><th>Carril</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td>Pruebas rápidas</td><td>H33</td><td><code>t.Parallel</code> y <code>make rapido</code>. Cada arreglo siguiente se prueba en menos tiempo</td><td>A</td></tr>
+      <tr><td>1</td><td>No perder nada en silencio</td><td>H2, H17, H27, H7, H13</td><td>Cerrar ya no borra el canal. Un mensaje enviado desde un clon ya no se pierde. Un error al guardar ya no responde "listo". Una línea rota ya no esconde toda la memoria</td><td>A</td></tr>
+      <tr><td>2</td><td>Escrituras que no se pisan</td><td>H3, H4, H5, H8</td><td><code>sesiones.json</code> y el plan con candado y versión. Dos workers que cierran a la vez ya no se saltan la verificación. El contrato se envía una sola vez</td><td>A</td></tr>
+      <tr><td>3</td><td>Aprobar y cerrar recuperables</td><td>H10, H11, H12, H29</td><td>Si algo se cae a mitad, se retoma y da un solo resultado. "Aceptado" solo se anota cuando el commit está en main</td><td>A</td></tr>
+      <tr><td>4</td><td>El examen prueba todo</td><td>H14</td><td>Checks por cada carpeta que toca la historia (Python y tablero), y que se repitan sobre el commit de fusión</td><td>B</td></tr>
+      <tr><td>5</td><td>Memoria con evidencia</td><td>H24, H25, H26</td><td>"Confirmado" lo calcula orq2, no el agente que escribe. Las citas se verifican (<code>v2/memoria</code>). Los reemplazos son formales</td><td>B</td></tr>
+      <tr><td>6</td><td>Nada aprobado se queda quieto</td><td>H1, H30</td><td><code>orq2 pendientes</code> muestra quién debe qué y desde cuándo. <code>despachar --una-vez</code> lanza lo que está listo. Habría evitado las 17 h de S-01</td><td>B</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section aria-labelledby="v21">
+  <h2 id="v21">Para la v2.1 (modo autónomo)</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Hallazgos</th><th>Qué es</th></tr></thead>
+    <tbody>
+      <tr><td>H23, H22, H18</td><td>Despachador residente, eventos con número de orden, proyecto y causa, e identificador de proyecto en los nombres de agentes</td></tr>
+      <tr><td>H6, H9, H16</td><td>Tarea reservada para siempre si algo se cae, acuses que se pierden y cupos que se miden pero no se reservan</td></tr>
+      <tr><td>H19, H20</td><td>Durabilidad: fsync y guarda contra líneas cortadas en el canal y en las escrituras atómicas</td></tr>
+      <tr><td>H31</td><td>La protección de <code>aprobar</code> es débil. Atena podría ejecutarlo. En la v2.1 aprobar pasa a ser una política escrita</td></tr>
+      <tr><td>H34</td><td>La CLI hace trabajo de dominio: se ordena cuando entre el despachador</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:10px"><b>No se hacen:</b> H15 (<code>watch</code> parcial, ya protegido por el gate), H28 (candado durante la compactación) y H32 (canal cuadrático, irrelevante con el tamaño de hoy).</p>
+</section>
+
+<section aria-labelledby="historia">
+  <h2 id="historia">Después de los arreglos: la historia de prueba</h2>
+  <p><b>Agenda de visitas en Real State.</b> El cliente ve los horarios disponibles y reserva una visita al inmueble, y tú las ves en el tablero. No depende de Kapso, WhatsApp ni Meta. Toca Python y el tablero web, así que prueba justo el grupo 4. Se mide todo: tus minutos, los tiempos de cada etapa, RAM, CPU, costo, memoria y si decidiste sin abrir el código. Después sigue el estimador de precio, cuando decidamos de dónde salen los datos de comparables.</p>
+</section>
+
+<footer>Fuentes: <code>docs/harness-v2/research/hallazgos-verificados.md</code> (34 filas con evidencia <code>ruta:línea</code>), <code>reviews/review-v2-integration.md</code>, y los informes de Astra y Fable en <code>research/</code>.</footer>
+</div>
+</body>
+</html>

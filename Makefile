@@ -6,13 +6,34 @@ STATE   ?= $(HOME)/.local/state/orq
 STATICCHECK_VERSION := 2025.1.1
 STATICCHECK ?= $(HOME)/go/bin/staticcheck
 
-.PHONY: build build2 test lint mutation ci install install2 limits status
+.PHONY: build build2 test rapido lint mutation ci install install2 limits status
 
 build:
 	cd harness && $(GO) build -trimpath -o ../dist/orq ./cmd/orq
 
 test:
 	cd harness && $(GO) vet ./... && $(GO) test ./...
+
+# rapido is the inner loop: gofmt, go vet and go test (no -race) only on the Go packages changed
+# against RAPIDO_BASE (committed, staged, unstaged or untracked), or ./... when none is detected.
+# Own temp ORQ_STATE, ORQ_LIMITS, ORQ_WORKTREES and ORQ_CONFIG, like ci. Not a substitute for ci.
+RAPIDO_BASE ?= harness-v2
+rapido:
+	@set -e; tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/orq-rapido.XXXXXX"); trap 'rm -rf "$$tmp"' EXIT; \
+	mkdir -p "$$tmp/state" "$$tmp/wt"; \
+	export ORQ_STATE="$$tmp/state" ORQ_LIMITS="$$tmp/limits.json" ORQ_WORKTREES="$$tmp/wt" ORQ_CONFIG="$$tmp/config.json" ORQ_SIN_DOC=1; \
+	base=$$(git merge-base $(RAPIDO_BASE) HEAD 2>/dev/null || true); pkgs=""; \
+	if [ -n "$$base" ]; then \
+		for d in $$( { git diff --name-only "$$base" -- harness; git ls-files -o --exclude-standard -- harness; } \
+			| grep '\.go$$' | xargs -r -n1 dirname | sort -u); do \
+			p=./$${d#harness}; p=$${p%/}; p=$${p:-.}; p=$$(echo "$$p" | sed 's#^\./*/#./#'); \
+			if ls "$$d"/*.go >/dev/null 2>&1; then pkgs="$$pkgs $$p"; fi; \
+		done; \
+	fi; \
+	[ -n "$$pkgs" ] || pkgs="./..."; echo "== packages:$$pkgs"; \
+	echo "== gofmt"; fmt=$$(gofmt -l harness); if [ -n "$$fmt" ]; then echo "$$fmt"; echo "gofmt: the files above need formatting"; exit 1; fi; \
+	echo "== go vet"; (cd harness && $(GO) vet $$pkgs); \
+	echo "== go test"; (cd harness && $(GO) test $$pkgs)
 
 # lint looks for ignored values and dead branches in the packages that decide what a worker may do.
 lint:

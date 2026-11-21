@@ -36,6 +36,7 @@ var checksVerdes = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types
 
 // Review repro 2: the worker rewrites the test script; the receipt records it and the close asks the Owner.
 func TestDefinicionDeCheckCambiadaPideAlOwner(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "true"}}
 	enRojo(t, r, map[string]string{"package.json": `{"scripts":{"test":"exit 1"},"dependencies":{"a":"1"}}`, "tsconfig.json": `{"strict":true}`})
@@ -63,6 +64,7 @@ func TestDefinicionDeCheckCambiadaPideAlOwner(t *testing.T) {
 }
 
 func TestDefinicionesSoloDependenciasNoCuenta(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	r.Definiciones = []string{"Makefile"}
 	enRojo(t, r, map[string]string{"package.json": `{"scripts":{"test":"exit 1"},"dependencies":{"a":"1"}}`, "Makefile": "test:\n\tgo test\n",
@@ -94,6 +96,7 @@ func mustPunta(t *testing.T, r Repo, e *Estado) string {
 
 // Review repro 3: a project test file removed or renamed by the slice is in the receipt.
 func TestTestsBorradosEnElRecibo(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	enRojo(t, r, map[string]string{"x_test.go": "package x\n", "web/a.spec.ts": "it()\n", "__tests__/b.js": "b\n", "util.go": "package x\n"})
 	e := abrir(t, r)
@@ -114,6 +117,7 @@ func TestTestsBorradosEnElRecibo(t *testing.T) {
 
 // Review repro 4: a suppression added by the slice fails the built-in guardrail with file:line.
 func TestSupresionesGuardiaPorDefecto(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	cfg := config.Config{Checks: map[string]config.Check{"lint": {Cmd: "true"}, "types": {Cmd: "true"}, "tests": {Cmd: "true"}}}
 	r.Checks = cfg.ChecksEnOrden()
@@ -132,6 +136,7 @@ func TestSupresionesGuardiaPorDefecto(t *testing.T) {
 }
 
 func TestSupresionesApagadaOExtendida(t *testing.T) {
+	t.Parallel()
 	r := repoDeJuguete(t)
 	r.Checks = append(slices.Clone(checksVerdes[:2]), config.Check{Nombre: "tests", Cmd: "true"},
 		config.Check{Nombre: config.Supresiones, Patrones: []string{"NOSONAR"}})
@@ -175,6 +180,7 @@ func TestCheckVeLaToolchainDelHome(t *testing.T) {
 
 // Focused tests are suppressions: .only( and the Jasmine fit( / fdescribe(, but not benefit(.
 func TestSupresionesFocused(t *testing.T) {
+	t.Parallel()
 	diff := "+++ b/a.spec.ts\n@@ -0,0 +1,6 @@\n+test.only('a', f)\n+describe.only('b', f)\n+fit('c', f)\n+  fdescribe('d', f)\n+benefit(x)\n+const o = { fit(a) {} }.fit\n"
 	got := SupresionesEn(diff, config.Check{Nombre: config.Supresiones}.Marcas())
 	want := []string{"a.spec.ts:1: test.only('a', f)", "a.spec.ts:2: describe.only('b', f)", "a.spec.ts:3: fit('c', f)", "a.spec.ts:4: fdescribe('d', f)", "a.spec.ts:6: const o = { fit(a) {} }.fit"}
