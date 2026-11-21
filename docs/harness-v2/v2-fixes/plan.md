@@ -90,7 +90,7 @@ by builders; S-01 is paused as is.
   "owner_held": {"RS carpetas.dashboard config": "proposal held; Owner approves when next RS story (agenda de visitas) starts"},
   "cleanup_2026-11-20": "removed clean merged worktrees + branches: v2/review2-fixes 26a0b91, v2/build 5d440fb, v2/review-fixes cb65b9e, v2/g0-rapido d5adfdd. Rule (Owner): close each pane as soon as its agent is done and its worktree clean/removed; free -m before every launch",
   "parked": ["v2/panel", "v2/locks", "v2/memoria (input to G5)", "v2/tui (branch only)"],
-  "attempts": {"G5_review_fix": "2 of 2 in progress", "G2_review_fix": "1 of 2 done", "G0": 1, "G4": "1 + review-fix 1", "G1": "1 + gating round", "G7": "1 + review-fix 1 of 2", "R2_review": 1},
+  "attempts": {"G5_review_fix": "2 of 2 used; round 3 authorized by Owner (option A), final", "G2_review_fix": "1 of 2 done", "G0": 1, "G4": "1 + review-fix 1", "G1": "1 + gating round", "G7": "1 + review-fix 1 of 2", "R2_review": 1},
   "owner_last_update": "2026-11-20 evening: approved all findings, asked for speed",
   "next_action": "review G1 then G4 sequentially with ONE fresh Opus reviewer (machine loaded). Poll A and B every ~10 min; on delivery: diff check, fresh Opus reviewer pane, merge --no-ff into harness-v2, then make ci (one at a time, >=8 GB free); wait for R2 delivery and make ci result from filter"
 }
