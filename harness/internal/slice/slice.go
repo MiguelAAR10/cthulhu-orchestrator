@@ -42,10 +42,19 @@ const (
 // Solo se activa con ORQ_FALLA_EN=<etapa> en pruebas.
 func fallaEn(etapa string) {
 	if os.Getenv("ORQ_FALLA_EN") == etapa {
-		fmt.Fprintf(os.Stderr, "[orq] interrupción simulada en %q\n", etapa)
-		os.Exit(9)
+		morir(etapa)
 	}
 }
+
+// morir ends the process at a simulated interruption. Tests replace it to stop the call in place.
+var morir = func(etapa string) {
+	fmt.Fprintf(os.Stderr, "[orq] interrupción simulada en %q\n", etapa)
+	os.Exit(9)
+}
+
+// tras lets a test act at a named point of a long command (another process writing meanwhile).
+// It does nothing outside tests.
+var tras = func(punto string) {}
 
 // ErrBaseAvanzo: la rama base cambió durante el cierre; hay que integrar de nuevo.
 var ErrBaseAvanzo = errors.New("la base avanzó")
@@ -104,6 +113,16 @@ type Estado struct {
 	Demo          []string `json:"demo,omitempty"`      // hasta 3 pasos para ver el resultado funcionando
 	Tarjeta       *Tarjeta `json:"tarjeta,omitempty"`   // ficha de entendimiento que aprueba el Owner
 	Historia      string   `json:"historia,omitempty"`  // story this slice is a child of
+	// Cierre is the Owner's close decision, recorded before anything is done (orq2 only), so a re-run
+	// after a crash resumes that same decision.
+	Cierre *IntencionCierre `json:"cierre,omitempty"`
+}
+
+// IntencionCierre is a close the Owner asked for: accepted or rejected, why, and when.
+type IntencionCierre struct {
+	Resultado string    `json:"resultado"` // aceptado | rechazado
+	Motivo    string    `json:"motivo,omitempty"`
+	TS        time.Time `json:"ts"`
 }
 
 func (e *Estado) ID() string      { return fmt.Sprintf("S-%s", e.NN) }

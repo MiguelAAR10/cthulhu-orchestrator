@@ -329,6 +329,7 @@ func (r Repo) Verificar(nn string, now time.Time, opc ...VerificarOpc) (*Estado,
 	if err = r.confiable(e); err != nil {
 		return e, "", err
 	}
+	tras("verificar-cargado")
 	in, err := r.puntaDelSlice(e)
 	if err != nil {
 		return e, "", err
