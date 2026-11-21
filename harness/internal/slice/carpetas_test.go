@@ -113,15 +113,31 @@ func TestCarpetaRojaEnElMergeNoIntegra(t *testing.T) {
 		t.Fatal(err)
 	}
 	commitEn(t, r.Root, "dashboard/roto", "x\n") // the base moves and breaks the dashboard on the merge
+	mainAntes, _ := Git(r.Root, "rev-parse", "main")
 	_, _, _, err = r.Cerrar("", true, "", t0)
 	if err == nil || !strings.Contains(err.Error(), "check dashboard/tests falla") {
 		t.Fatalf("integrated a merge with a red dashboard: %v", err)
 	}
-	if st, _ := r.Load(""); st == nil || st.Fase == Cerrando {
-		t.Fatalf("the close should not advance: %+v", st)
+	if st, _ := r.Load(""); st == nil || st.Fase != Integrando || st.Integrado != "" {
+		t.Fatalf("the close should stay in INTEGRANDO with nothing integrated: %+v", st)
+	}
+	if m, _ := Git(r.Root, "rev-parse", "main"); m != mainAntes {
+		t.Fatalf("main moved: %s -> %s", mainAntes, m)
+	}
+	if _, err := Git(r.Root, "rev-parse", "--verify", "-q", refIntegrado("01")); err == nil {
+		t.Fatal("the integrado ref was written for a red merge")
 	}
 	if _, err := os.Stat(filepath.Join(r.Root, "dashboard", "app.ts")); err == nil {
 		t.Fatal("published the red merge")
+	}
+	// Recoverable: once the base is fixed, the same close integrates on the new base.
+	Git(r.Root, "rm", "-q", "dashboard/roto")
+	Git(r.Root, "commit", "-qm", "fix base")
+	if _, _, _, err := r.Cerrar("", true, "", t0); err != nil {
+		t.Fatalf("retry after fixing the base: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(r.Root, "dashboard", "app.ts")); err != nil {
+		t.Fatal("the retry did not publish")
 	}
 }
 
@@ -208,5 +224,26 @@ func TestDependenciasEnCadaCheck(t *testing.T) {
 	commitEn(t, e.Worktree, "total.txt", "170\n")
 	if e, _, err := r.Verificar("", t0); err != nil || e.Fase != Verificado {
 		t.Fatalf("%v", err)
+	}
+}
+
+// Identity orq (Cobertura off) keeps 1.0.0 behaviour: an undeclared folder opens and verifies, and
+// the checks are not re-run on the merge commit.
+func TestSinCoberturaComoAntes(t *testing.T) {
+	r := repoConDashboard(t, "0")
+	r.Cobertura, r.Carpetas = false, nil
+	r.Checks = []config.Check{{Nombre: "lint", Cmd: "true"}, {Nombre: "types", Cmd: "true"}, {Nombre: "tests", Cmd: "test ! -f roto"}}
+	e, err := abrirCon(t, r, "total.txt", "dashboard/app.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, e.Worktree, "dashboard/app.ts", "export const x = 1\n")
+	commitEn(t, e.Worktree, "total.txt", "170\n")
+	if _, _, err := r.Verificar("", t0); err != nil {
+		t.Fatal(err)
+	}
+	commitEn(t, r.Root, "roto", "x\n")
+	if _, _, _, err := r.Cerrar("", true, "", t0); err != nil {
+		t.Fatalf("orq 1.0.0 does not re-run checks on the merge: %v", err)
 	}
 }

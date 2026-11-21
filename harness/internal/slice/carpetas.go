@@ -156,3 +156,27 @@ func (r Repo) checksDeCarpetas(e *Estado, dir string, cs []config.Carpeta) ([]Re
 	}
 	return out, nil
 }
+
+// CarpetasTocadas son las carpetas declaradas con checks que contienen alguna de rutas (archivos,
+// carpetas o patrones de alcance), en el orden de cs. Solo mira las declaradas: es el lazo local del
+// worker, un superconjunto de lo que Verificar correrá (allí una subcarpeta con su propio manifiesto
+// dentro de una declarada es otra dueña).
+func CarpetasTocadas(cs []config.Carpeta, rutas []string) []config.Carpeta {
+	var decl []string
+	for _, ca := range cs {
+		if ca.Ruta != Raiz && len(ca.Lista) > 0 {
+			decl = append(decl, ca.Ruta)
+		}
+	}
+	tocadas := map[string]bool{}
+	for _, p := range rutas {
+		tocadas[duenaDe(limpiarRuta(p), decl)] = true
+	}
+	var out []config.Carpeta
+	for _, ca := range cs {
+		if ca.Ruta != Raiz && len(ca.Lista) > 0 && tocadas[ca.Ruta] {
+			out = append(out, ca)
+		}
+	}
+	return out
+}
