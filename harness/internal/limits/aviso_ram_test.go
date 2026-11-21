@@ -45,3 +45,20 @@ func TestPlantillaOrq2SinMaxWorkers(t *testing.T) {
 		t.Fatalf("orq template must keep max_workers: %v", err)
 	}
 }
+
+// L3: orq2 refuses aviso_ram_gb <= 0; orq refuses the key itself, as 1.0.0 did (it did not know it).
+func TestAvisoRAMValidado(t *testing.T) {
+	t.Setenv("ORQ_NOMBRE", "orq2")
+	for _, v := range []string{"0", "-1"} {
+		p := write(t, strings.Replace(sinMaxWorkers, "{", `{"aviso_ram_gb": `+v+`,`, 1))
+		if _, err := Load(p); err == nil || !strings.Contains(err.Error(), "aviso_ram_gb debe ser mayor que 0") {
+			t.Errorf("orq2 aviso_ram_gb %s: %v", v, err)
+		}
+	}
+	t.Setenv("ORQ_NOMBRE", "")
+	p := write(t, strings.Replace(valid, "{", `{"aviso_ram_gb": 7,`, 1))
+	want := "limits: JSON inválido en " + p + `: json: unknown field "aviso_ram_gb"`
+	if _, err := Load(p); err == nil || err.Error() != want {
+		t.Errorf("orq must refuse aviso_ram_gb as 1.0.0 did: got %v, want %s", err, want)
+	}
+}
