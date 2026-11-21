@@ -28,5 +28,7 @@ Severity: **A** = would stop an autonomous run or let a wrong change in · **B**
 | E18 | 11-21 · S-02 | Agent memory records "fuente owner" for answers relayed by the filter | `orq2 mem add --fuente owner` for each Atena answer | trust risk (K10) | B | source = who typed it; relayed answers say "filtro por delegación" | G5/K10 |
 | E19 | 11-20 | Stale global HALT left from a test | HALT 'x' from the day before | confusion | C | tests never write the real HALT; HALT shows its age and origin | |
 | E20 | 11-21 · S-02 | API stream cut mid-task, no automatic resume | worker and planner "The response stopped arriving"; operator typed "continúa" | 2 nudges | B | Orchestrator detects a stopped session and resumes it once | E02 |
+| E21 | 11-21 · S-02 | `orq2 mem add` without `--imp` saves the line but exits 1 | Atena sees `imp "": usa critica\|alta\|media\|baja` and retries | ~0.5 min each, risk of duplicate memory | B | validate before writing: either refuse and save nothing, or default `media` and exit 0 | |
+| E22 | 11-21 · S-02 | Card draft and stored card diverge after `tarjeta --archivo` | `.orq/card-s02.md` still shows the question open; `orq2 slice tarjeta` shows it answered | 0 min now, risk of a wrong answer later | B | one source: the draft is regenerated from the stored card, or removed after import | |
 
 Not orq2 (operator tooling): the test-day watcher matched agents of another workspace and woke 79 min late (11-21 13:30–14:49).
