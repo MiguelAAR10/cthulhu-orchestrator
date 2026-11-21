@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 )
 
@@ -89,6 +90,24 @@ func (it Item) Validate() error {
 	return nil
 }
 
+// LineasMalas reports memory lines that could not be read. Load still returns every good line:
+// one torn line never hides the rest of the memory.
+type LineasMalas struct {
+	Path   string
+	Lineas []int
+	Errs   []string
+}
+
+func (e *LineasMalas) Error() string {
+	var ls []string
+	for i, n := range e.Lineas {
+		ls = append(ls, fmt.Sprintf("%s:%d (%s)", e.Path, n, e.Errs[i]))
+	}
+	return fmt.Sprintf("memoria: %d línea(s) ilegibles, se omiten y el resto vale; corrígelas o bórralas a mano: %s", len(e.Lineas), strings.Join(ls, "; "))
+}
+
+// Load lee la memoria. Una línea ilegible se salta y se informa con *LineasMalas junto con los
+// ítems buenos; solo un error de lectura del archivo devuelve nil.
 func Load(path string) ([]Item, error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -98,6 +117,7 @@ func Load(path string) ([]Item, error) {
 		return nil, err
 	}
 	var out []Item
+	var malas LineasMalas
 	sc := bufio.NewScanner(bytes.NewReader(raw))
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for n := 1; sc.Scan(); n++ {
@@ -107,11 +127,41 @@ func Load(path string) ([]Item, error) {
 		}
 		var it Item
 		if err := json.Unmarshal([]byte(line), &it); err != nil {
-			return nil, fmt.Errorf("%s:%d: %v", path, n, err)
+			malas.Lineas, malas.Errs = append(malas.Lineas, n), append(malas.Errs, err.Error())
+			continue
 		}
 		out = append(out, it)
 	}
-	return out, sc.Err()
+	if err := sc.Err(); err != nil {
+		return out, err
+	}
+	if len(malas.Lineas) > 0 {
+		malas.Path = path
+		if !identidad.EsOrq2() {
+			return nil, Estricto(&malas) // orq keeps 1.0.0: one bad line fails the whole memory
+		}
+		return out, &malas
+	}
+	return out, nil
+}
+
+// Estricto is orq 1.0.0's reading: the first unreadable line fails the whole memory, with
+// 1.0.0's message. orq (not orq2) keeps it so its output and exit codes do not change.
+func Estricto(err error) error {
+	var malas *LineasMalas
+	if errors.As(err, &malas) {
+		return fmt.Errorf("%s:%d: %s", malas.Path, malas.Lineas[0], malas.Errs[0])
+	}
+	return err
+}
+
+// Legible quita de err el aviso de líneas ilegibles: lo que queda impide confiar en la lectura.
+func Legible(err error) error {
+	var malas *LineasMalas
+	if errors.As(err, &malas) {
+		return nil
+	}
+	return err
 }
 
 func Save(path string, items []Item) error {
@@ -137,8 +187,9 @@ func Add(path string, it Item, now time.Time) (Item, int, error) {
 		return it, 0, err
 	}
 	defer soltar()
+	// Lines nobody can read stay on disk as they are: Add appends and never rewrites the file.
 	items, err := Load(path)
-	if err != nil {
+	if err := Legible(err); err != nil {
 		return it, 0, err
 	}
 	if it.Reemplaza != "" {
@@ -156,8 +207,35 @@ func Add(path string, it Item, now time.Time) (Item, int, error) {
 	}
 	it.TS = now.UTC().Truncate(time.Second)
 	it.ID = nextID(items)
-	items = append(items, it)
-	return it, len(items), Save(path, items)
+	return it, len(items) + 1, agregar(path, it)
+}
+
+// agregar escribe una línea al final; si la última quedó cortada sin salto, primero la cierra.
+func agregar(path string, it Item) error {
+	line, err := json.Marshal(it)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err != nil {
+		return err
+	} else if info.Size() > 0 {
+		last := make([]byte, 1)
+		if _, err := f.ReadAt(last, info.Size()-1); err != nil {
+			return err
+		}
+		if last[0] != '\n' {
+			line = append([]byte{'\n'}, line...)
+		}
+	}
+	if _, err := f.Write(append(line, '\n')); err != nil {
+		return err
+	}
+	return f.Sync()
 }
 
 func nextID(items []Item) string {

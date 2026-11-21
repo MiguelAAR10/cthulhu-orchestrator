@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"orq/internal/canal"
+	"orq/internal/identidad"
 	"orq/internal/memoria"
 	"orq/internal/slice"
 )
@@ -27,6 +28,7 @@ type Relevo struct {
 	Reproducir  string   `json:"reproducir,omitempty"`
 	Siguiente   string   `json:"siguiente"`
 	Pendientes  []string `json:"mensajes_pendientes,omitempty"`
+	Memoria     string   `json:"aviso_memoria,omitempty"` // lo que no se pudo leer de la memoria
 	Referencias []string `json:"referencias"`
 }
 
@@ -43,7 +45,11 @@ func (p Proyecto) DatosRelevo(rol string) Relevo {
 	for _, m := range canal.Pendientes(ms) {
 		rv.Pendientes = append(rv.Pendientes, fmt.Sprintf("%s %s→%s %s", m.ID, m.De, m.Para, m.Tipo))
 	}
-	for _, it := range memoria.Sorted(p.MemVigente()) {
+	vigente, errMem := p.MemVigente()
+	if errMem != nil && identidad.EsOrq2() { // orq keeps 1.0.0: silent
+		rv.Memoria = errMem.Error()
+	}
+	for _, it := range memoria.Sorted(vigente) {
 		switch {
 		case it.Imp == "critica":
 			rv.Restriccion = append(rv.Restriccion, it.Texto)
@@ -112,6 +118,9 @@ func (rv Relevo) Markdown(fecha, ahora string) string {
 	if len(rv.Hipotesis) > 0 {
 		fmt.Fprintf(&b, "## Hipótesis (sin comprobar: no son reglas)\n%s\n\n", lista(rv.Hipotesis, ""))
 	}
+	if rv.Memoria != "" {
+		fmt.Fprintf(&b, "## Memoria incompleta\n- %s\n\n", rv.Memoria)
+	}
 	if len(rv.Pendientes) > 0 {
 		fmt.Fprintf(&b, "## Mensajes sin entrega confirmada\n%s\n- `orq msg reconciliar`\n\n", lista(rv.Pendientes, ""))
 	}
@@ -135,7 +144,8 @@ func (p Proyecto) Contrato(nn, worker, alcance, suite, presupuesto string) (stri
 		worker = Valor(e.Escritor)
 	}
 	var crit []string
-	for _, it := range p.MemVigente() {
+	vigente, _ := p.MemVigente() // its read problem is already in rv.Memoria, written below
+	for _, it := range vigente {
 		if it.Slice == e.ID() && it.Fuente == "scout" {
 			crit = append(crit, fmt.Sprintf("%s %s (%s)", it.ID, it.Texto, it.TipoEfectivo()))
 		}
@@ -172,6 +182,9 @@ func (p Proyecto) Contrato(nn, worker, alcance, suite, presupuesto string) (stri
 	}
 	fmt.Fprintf(&b, "Decisiones vigentes:\n%s\n", lista(rv.Decisiones, "(ninguna)"))
 	fmt.Fprintf(&b, "Criterios de scouts:\n%s\n", lista(crit, "(ninguno)"))
+	if rv.Memoria != "" {
+		fmt.Fprintf(&b, "Aviso: decisiones y criterios pueden faltar. %s\n", rv.Memoria)
+	}
 	if len(rv.Restriccion) > 0 {
 		fmt.Fprintf(&b, "Lo que exige el Owner:\n%s\n", lista(rv.Restriccion, ""))
 	}

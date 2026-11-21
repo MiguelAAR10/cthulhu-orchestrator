@@ -9,11 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
 	"time"
 
+	"orq/internal/identidad"
 	"orq/internal/orqdir"
 )
 
@@ -76,20 +78,18 @@ type evento struct {
 }
 
 // Append guarda el mensaje con un id único bajo candado y lo deja pendiente de entrega.
+// Los ids nunca se reinician: siguen al mayor visto, también al de los canales ya archivados.
 func Append(path string, m *Msg) error {
 	if err := m.Validate(); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o644)
+	f, err := abrirBloqueado(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
 	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-	prev, err := Load(path)
+	prev, base, err := leer(path)
 	if err != nil {
 		return err
 	}
@@ -101,10 +101,116 @@ func Append(path string, m *Msg) error {
 			}
 		}
 	}
-	m.ID, m.Estado = fmt.Sprintf("c%d", len(prev)+1), "pendiente"
+	n := len(prev) // orq keeps 1.0.0: count of messages + 1
+	if identidad.EsOrq2() {
+		n = ultimo(prev, base)
+	}
+	m.ID, m.Estado = fmt.Sprintf("c%d", n+1), "pendiente"
 	line, _ := json.Marshal(m)
 	_, err = f.Write(append(line, '\n'))
 	return err
+}
+
+// abrirBloqueado abre el canal con su flock tomado. Si mientras esperaba el canal se archivó, el
+// archivo abierto ya es el archivo: lo suelta y abre el canal nuevo, así nada cae en el archivo.
+func abrirBloqueado(path string) (*os.File, error) {
+	for {
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o644)
+		if err != nil {
+			return nil, err
+		}
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+			f.Close()
+			return nil, err
+		}
+		a, errA := f.Stat()
+		b, errB := os.Stat(path)
+		if errA == nil && errB == nil && os.SameFile(a, b) {
+			return f, nil
+		}
+		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		f.Close()
+		if errA != nil {
+			return nil, errA
+		}
+	}
+}
+
+// ultimo es el número del mayor id del canal, contando la base que dejó el último archivo.
+func ultimo(ms []Msg, base int) int {
+	n := max(base, len(ms))
+	for _, m := range ms {
+		var k int
+		if _, err := fmt.Sscanf(m.ID, "c%d", &k); err == nil && k > n {
+			n = k
+		}
+	}
+	return n
+}
+
+// Archivar moves the messages archivar selects (all of them if nil) to
+// <dir>/canales/<etiqueta>.jsonl (or -2, -3… if taken) and rewrites the live channel with the
+// rest, plus a base so the next id follows the highest one. Kept messages keep their id and
+// delivery state. The archive is its own file, written before the live channel is swapped: a
+// crash in between leaves the messages in both places, never in neither. Nothing selected
+// archives nothing and returns "".
+func Archivar(path, etiqueta string, archivar func(Msg) bool) (string, error) {
+	f, err := abrirBloqueado(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	ms, base, err := leer(path)
+	if err != nil {
+		return "", err
+	}
+	var van, quedan bytes.Buffer
+	n := 0
+	for _, m := range ms {
+		line, _ := json.Marshal(m)
+		if archivar == nil || archivar(m) {
+			van.Write(append(line, '\n'))
+			n++
+		} else {
+			quedan.Write(append(line, '\n'))
+		}
+	}
+	if n == 0 {
+		return "", nil
+	}
+	dir := filepath.Join(filepath.Dir(path), "canales")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	var arch string
+	var af *os.File
+	for i := 1; ; i++ {
+		arch = filepath.Join(dir, etiqueta+".jsonl")
+		if i > 1 {
+			arch = filepath.Join(dir, fmt.Sprintf("%s-%d.jsonl", etiqueta, i))
+		}
+		af, err = os.OpenFile(arch, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return "", err
+		}
+	}
+	_, err = af.Write(van.Bytes())
+	if err == nil {
+		err = af.Sync()
+	}
+	if errC := af.Close(); err == nil {
+		err = errC
+	}
+	if err != nil {
+		return arch, err
+	}
+	// The new live channel replaces the old one at once: there is never a moment without a channel or a base.
+	line, _ := json.Marshal(evento{ID: fmt.Sprintf("c%d", ultimo(ms, base)), Evento: "base", TS: time.Now().UTC().Truncate(time.Second)})
+	return arch, orqdir.WriteAtomic(path, append(append(line, '\n'), quedan.Bytes()...))
 }
 
 // MarcarEntregado agrega el evento de entrega confirmada.
@@ -131,14 +237,21 @@ func Pendientes(ms []Msg) []Msg {
 }
 
 func Load(path string) ([]Msg, error) {
+	ms, _, err := leer(path)
+	return ms, err
+}
+
+// leer devuelve los mensajes y la base (el último id de los canales archivados antes).
+func leer(path string) ([]Msg, int, error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, 0, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	var out []Msg
+	base := 0
 	sc := bufio.NewScanner(bytes.NewReader(raw))
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	pos := map[string]int{}
@@ -147,6 +260,10 @@ func Load(path string) ([]Msg, error) {
 		if json.Unmarshal(sc.Bytes(), &ev) == nil && ev.Evento != "" {
 			if i, ok := pos[ev.ID]; ok && ev.Evento == "entregado" {
 				out[i].Estado = "entregado"
+			}
+			var k int
+			if _, err := fmt.Sscanf(ev.ID, "c%d", &k); err == nil && ev.Evento == "base" && k > base {
+				base = k
 			}
 			continue
 		}
@@ -159,7 +276,7 @@ func Load(path string) ([]Msg, error) {
 			out = append(out, m)
 		}
 	}
-	return out, sc.Err()
+	return out, base, sc.Err()
 }
 
 // Sesion es el agente de herdr que ocupa un rol.

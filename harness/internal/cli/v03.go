@@ -428,7 +428,10 @@ func runContexto(stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "\n%s\n", strings.TrimSpace(string(raw)))
 		}
 	}
-	items := p.MemVigente()
+	items, errMem := p.MemVigente()
+	if errMem != nil && identidad.EsOrq2() { // orq keeps 1.0.0: silent
+		fmt.Fprintf(stdout, "\naviso: %v\n", errMem)
+	}
 	if len(items) > 0 {
 		lines := strings.Split(strings.TrimSpace(memoria.Render(items, "")), "\n")
 		if len(lines) > 25 {
@@ -533,7 +536,11 @@ func runDoctor(stdout, stderr io.Writer) int {
 			}
 		}
 	}
-	items, _ := memoria.Load(p.MemPath())
+	items, errMem := memoria.Load(p.MemPath())
+	if errMem != nil && identidad.EsOrq2() { // orq keeps 1.0.0: not counted
+		problemas++
+		fmt.Fprintf(stdout, "%v\n", errMem)
+	}
 	if v := len(memoria.Vigentes(items)); v > memoria.Tope {
 		problemas++
 		fmt.Fprintf(stdout, "memoria con %d líneas (tope %d): orq mem compactar\n", v, memoria.Tope)

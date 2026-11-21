@@ -83,7 +83,9 @@ func runMem(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		items, err := memoria.Load(p.MemPath())
 		if err != nil {
 			fmt.Fprintln(stderr, err)
-			return 1
+			if memoria.Legible(err) != nil {
+				return 1
+			}
 		}
 		if len(items) == 0 {
 			fmt.Fprintln(stdout, "memoria vacía")
@@ -365,7 +367,8 @@ func runRelevo(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	est, _ := json.Marshal(rv)
-	ahora, err := p.Escriba().Relevo(rol, memoria.Render(p.MemVigente(), ""), string(est), msgs.String(), lineasRelevo)
+	vigente, _ := p.MemVigente() // its read problem travels in rv.Memoria
+	ahora, err := p.Escriba().Relevo(rol, memoria.Render(vigente, ""), string(est), msgs.String(), lineasRelevo)
 	if err != nil {
 		ahora = ""
 		fmt.Fprintf(stderr, "aviso: sin resumen del escriba (%v); el relevo lleva solo datos comprobados\n", err)
@@ -698,13 +701,46 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 			mem.Texto = app.Recortar(fmt.Sprintf("Rechazo de S-%s: %s", reg.NN, *motivo), memoria.MaxTexto)
 			p.AprenderSolo("El Owner rechazó: "+*motivo, "rechazo", "S-"+reg.NN)
 		}
-		memoria.Add(p.MemPath(), mem, time.Now())
-		os.Remove(p.CanalPath())
-		os.Remove(p.PlanPath(reg.NN))
+		// The slice is already closed: every cleanup step still runs, and each failure is reported.
+		var pendiente []string
+		if _, _, err := memoria.Add(p.MemPath(), mem, time.Now()); err != nil && identidad.EsOrq2() {
+			pendiente = append(pendiente, fmt.Sprintf("la memoria no guardó el cierre (%v): orq mem add --imp %s --cat %s --fuente %s --slice S-%s %q", err, mem.Imp, mem.Cat, mem.Fuente, reg.NN, mem.Texto))
+		}
+		// orq2 archives the story's channel, never deletes it: its message ids stay valid as
+		// evidence, and every cleanup failure is reported. orq keeps 1.0.0: the channel is
+		// deleted and cleanup errors other than the memory one are not reported.
+		orq2 := identidad.EsOrq2()
+		if orq2 {
+			// Only this story's delivered messages leave the live channel; with no other story
+			// open, untagged messages are this story's too. Undelivered ones always stay.
+			// If the open stories cannot be listed, untagged messages stay (fail safe).
+			otros, errOtros := r.Abiertos()
+			soloEsta := errOtros == nil && len(otros) == 0
+			deEsta := func(m canal.Msg) bool {
+				historia, _, _ := strings.Cut(m.Attempt, "/")
+				return m.Estado != "pendiente" && (historia == "S-"+reg.NN || m.Attempt == "" && soloEsta)
+			}
+			if _, err := canal.Archivar(p.CanalPath(), "S-"+reg.NN, deEsta); err != nil {
+				pendiente = append(pendiente, fmt.Sprintf("el canal no se archivó (%v): sigue en %s", err, p.CanalPath()))
+			}
+		} else {
+			os.Remove(p.CanalPath())
+		}
+		if err := os.Remove(p.PlanPath(reg.NN)); orq2 && err != nil && !errors.Is(err, os.ErrNotExist) {
+			pendiente = append(pendiente, fmt.Sprintf("el plan no se borró (%v)", err))
+		}
 		// Higiene: los paneles de los workers de este slice ya no tienen trabajo.
-		if ses, err := canal.LoadSesiones(p.SesPath()); err == nil {
-			if c, _ := p.CerrarSesiones(context.Background(), ses, func(k string) bool { return strings.HasPrefix(k, "worker-") && strings.HasSuffix(k, "-s"+reg.NN) }); len(c) > 0 {
+		ses, err := canal.LoadSesiones(p.SesPath())
+		if err != nil && orq2 {
+			pendiente = append(pendiente, fmt.Sprintf("no se leyeron las sesiones (%v): cierra a mano los paneles worker-*-s%s", err, reg.NN))
+		}
+		if err == nil {
+			c, err := p.CerrarSesiones(context.Background(), ses, func(k string) bool { return strings.HasPrefix(k, "worker-") && strings.HasSuffix(k, "-s"+reg.NN) })
+			if len(c) > 0 {
 				fmt.Fprintf(stdout, "paneles cerrados: %s\n", strings.Join(c, ", "))
+			}
+			if err != nil && orq2 {
+				pendiente = append(pendiente, fmt.Sprintf("paneles de workers sin cerrar (%v)", err))
 			}
 		}
 		if os.Getenv("ORQ_SIN_DOC") != "" {
@@ -714,9 +750,17 @@ func runSlice(args []string, stdout, stderr io.Writer) int {
 		} else {
 			fmt.Fprintf(stdout, "ficha del proyecto actualizada: %s\n", p.FichaPath())
 		}
-		fmt.Fprintf(stdout, "S-%s cerrado como %s. Canal limpio; memoria actualizada.\n", reg.NN, reg.Result)
+		if len(pendiente) > 0 {
+			fmt.Fprintf(stdout, "S-%s cerrado como %s, con pasos de limpieza fallidos.\n", reg.NN, reg.Result)
+		} else {
+			fmt.Fprintf(stdout, "S-%s cerrado como %s. Canal limpio; memoria actualizada.\n", reg.NN, reg.Result)
+		}
 		if !*ok {
 			fmt.Fprintf(stdout, "La rama %s se conserva para revisar.\n", "slice/"+reg.NN)
+		}
+		if len(pendiente) > 0 {
+			fmt.Fprintf(stderr, "orq slice: S-%s quedó cerrado, pero esto falló y no se repite solo:\n  - %s\n", reg.NN, strings.Join(pendiente, "\n  - "))
+			return 1
 		}
 		return 0
 	case "lanzar":

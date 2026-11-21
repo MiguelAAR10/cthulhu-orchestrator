@@ -171,8 +171,9 @@ func (p Proyecto) RolActual() string {
 }
 
 // MemVigente es la memoria que vale hoy: sin reemplazados ni vencidos con slices cerrados.
-func (p Proyecto) MemVigente() []memoria.Item {
-	items, _ := memoria.Load(p.MemPath())
+// err dice qué no se pudo leer (líneas ilegibles o el archivo entero); los ítems legibles vuelven igual.
+func (p Proyecto) MemVigente() ([]memoria.Item, error) {
+	items, err := memoria.Load(p.MemPath())
 	cerrados := map[string]bool{}
 	raw, _ := os.ReadFile(filepath.Join(p.Dir, "slices.jsonl"))
 	for _, l := range strings.Split(string(raw), "\n") {
@@ -181,7 +182,7 @@ func (p Proyecto) MemVigente() []memoria.Item {
 			cerrados["S-"+r.NN] = true
 		}
 	}
-	return memoria.SinVencer(memoria.Vigentes(items), cerrados)
+	return memoria.SinVencer(memoria.Vigentes(items), cerrados), err
 }
 
 // Fijadas son las skills cuya versión revisada quedó guardada.

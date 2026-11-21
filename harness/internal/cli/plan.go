@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"orq/internal/identidad"
 	"orq/internal/plan"
 	"orq/internal/slice"
 )
@@ -112,7 +113,10 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		plan.Guardar(path, pl)
+		if err := plan.Guardar(path, pl); err != nil && identidad.EsOrq2() { // orq keeps 1.0.0
+			fmt.Fprintln(stderr, "orq plan: el plan no se guardó, nada cambió:", err)
+			return 1
+		}
 		listas, _ := plan.Listas(pl)
 		fmt.Fprintf(stdout, "%s hecha (%s). Quedan %d; listas ahora: %s\n", t.ID, t.Worker, pl.Pendientes(), ids(listas))
 		return 0
@@ -131,7 +135,10 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		plan.Guardar(path, pl)
+		if err := plan.Guardar(path, pl); err != nil && identidad.EsOrq2() { // orq keeps 1.0.0
+			fmt.Fprintln(stderr, "orq plan: el plan no se guardó, nada cambió:", err)
+			return 1
+		}
 		fmt.Fprintf(stdout, "%s vuelve a pendiente; relánzala con orq slice lanzar --tarea %s\n", t.ID, t.ID)
 		return 0
 	case "revisar":
@@ -166,7 +173,10 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		pl.Debatido = true
-		plan.Guardar(path, pl)
+		if err := plan.Guardar(path, pl); err != nil && identidad.EsOrq2() { // orq keeps 1.0.0
+			fmt.Fprintln(stderr, "orq plan: el plan no se guardó, nada cambió:", err)
+			return 1
+		}
 		fmt.Fprintln(stdout, "plan marcado como debatido")
 		return 0
 	}

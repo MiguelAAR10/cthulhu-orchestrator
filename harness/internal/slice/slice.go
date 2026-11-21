@@ -284,6 +284,9 @@ func (r Repo) Abiertos() ([]*Estado, error) {
 // ErrVarios: hay más de un slice abierto y no se dijo cuál.
 var ErrVarios = errors.New("hay varios slices abiertos")
 
+// ErrNoAbierto: the slice has no state file, so it is closed or was never opened.
+var ErrNoAbierto = errors.New("no está abierto")
+
 // Load devuelve el slice nn; con nn vacío, el único abierto (nil si no hay ninguno).
 func (r Repo) Load(nn ...string) (*Estado, error) {
 	if len(nn) > 0 && nn[0] != "" {
@@ -292,8 +295,7 @@ func (r Repo) Load(nn ...string) (*Estado, error) {
 		}
 		e, err := leerEstado(r.estadoPath(strings.TrimPrefix(nn[0], "S-")))
 		if errors.Is(err, os.ErrNotExist) {
-			//lint:ignore ST1005 the message starts with the slice ID (S-NN)
-			return nil, fmt.Errorf("S-%s no está abierto", strings.TrimPrefix(nn[0], "S-"))
+			return nil, fmt.Errorf("S-%s %w", strings.TrimPrefix(nn[0], "S-"), ErrNoAbierto)
 		}
 		if err != nil {
 			return nil, err
