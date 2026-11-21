@@ -7,7 +7,17 @@ import (
 // H1: `orq2 update`, in every mode, is the Owner's. The gate denies it to a subagent, a worker
 // (worktree or clone) and any panel orq opened (ORQ_ROL), however it is wrapped.
 func TestGateNiegaOrq2UpdateAAgentes(t *testing.T) {
-	for _, nombre := range []string{"orq2", "orq"} {
+	// Under identity orq the gate stays 1.0.0's: none of these is denied for naming update.
+	t.Setenv("ORQ_NOMBRE", "orq")
+	t.Setenv("ORQ_ROL", "orquestador")
+	for _, c := range []string{"orq2 update", "script -qec 'orq2 update' /dev/null"} {
+		p := bash(c)
+		p.AgentID = "sub-1"
+		if d := Evaluate(p, baseLimits(), fakes{}.env(t, t.TempDir())); !d.Allow {
+			t.Errorf("orq: %q denied, 1.0.0 allowed it: %s", c, d.Reason)
+		}
+	}
+	for _, nombre := range []string{"orq2"} {
 		t.Setenv("ORQ_NOMBRE", nombre)
 		cmds := []string{
 			"orq2 update",
