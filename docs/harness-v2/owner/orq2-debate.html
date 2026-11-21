@@ -159,11 +159,27 @@ a{color:var(--pen)}
   <p style="margin-top:10px"><b>Cuidado (Fable):</b> hoy <code>gh</code> busca con la cuenta del empleador, así que las búsquedas no deben incluir nombres de tus proyectos ni de clientes. Y una skill ajena es texto que dirige a tus agentes: se instala fijada por su huella, con tu visto bueno y evaluada antes.</p>
 </section>
 
+<section class="now" aria-labelledby="owner">
+  <h2 id="owner">Tu respuesta al debate (Owner, 22:40)</h2>
+  <p><b>Estás de acuerdo en cerrar la v2.0 y en no sumarle más.</b> Pero el debate midió orq2 casi solo con tus minutos por historia, y para ti el valor está en otro lado: <b>evitar los fallos que sufre cualquiera que desarrolla con IA.</b> Eso ninguna de las dos lo puso en el centro.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Miedo</th><th>Lo que el debate dejó afuera</th><th>Prueba nueva para el día de pruebas</th></tr></thead>
+    <tbody>
+      <tr><td>F2 · Hace lo que no se pidió o entiende otra cosa</td><td>Ninguna prueba mide si se desvía del alcance</td><td><b>P6:</b> una historia con una exclusión clara. Cuenta como fallo cada archivo o comportamiento fuera de la tarjeta. Gana la vía que no se desvía, o que lo detecta sola</td></tr>
+      <tr><td>F3 · Una palabra cambia el rumbo</td><td>No se probó si el sistema repregunta</td><td><b>P7:</b> el mismo pedido dos veces, una con una palabra ambigua ("visita" en vez de "interés"). Gana la vía que repregunta antes de construir, en vez de construir lo equivocado</td></tr>
+      <tr><td>F1 · Refactor y verificación eternos</td><td>No se contaron las vueltas</td><td><b>P8:</b> en P1–P7 se cuentan las rondas de arreglo y verificación hasta llegar a main. Sobre 3 rondas, se cuenta como fallo</td></tr>
+      <tr><td>Pruebas débiles</td><td>No se habló de qué tan duras son las pruebas</td><td><b>P9:</b> mutation tests sobre la lógica de la historia: ¿cuántos errores sembrados atrapa el examen de cada vía?</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:10px"><b>Métrica ajustada:</b> tus minutos <b>más</b> los desvíos de alcance, las vueltas de arreglo y los errores sembrados que no se atraparon. Una historia rápida pero desviada cuenta como fallo.</p>
+  <p><b>Sobre las skills:</b> el debate dijo "no rehacer lo que las skills ya hacen". De acuerdo, pero orq2 sí debe <b>elegir y sugerir</b> la skill correcta según el proyecto y la etapa (D5). Esa parte ya existe a medias en el módulo <code>perfil</code> de orq2.</p>
+</section>
+
 <section aria-labelledby="mia">
   <h2 id="mia">Mi recomendación (filtro)</h2>
   <ol>
     <li><b>Hoy:</b> terminar G3 y G5, instalar, y parar el desarrollo del arnés.</li>
-    <li><b>Mañana:</b> perfil por carpeta (D1, nivel 1) y las pruebas P1–P5 en un día. Antes de correrlas, eliges la regla de parada: la de Fable o la de Astra.</li>
+    <li><b>Mañana:</b> perfil por carpeta (D1, nivel 1) y las pruebas P1–P9 en un día (P6–P9 salen de tu respuesta). Antes de correrlas, eliges la regla de parada: la de Fable o la de Astra.</li>
     <li><b>Después:</b> la agenda de visitas por las dos vías, midiendo tus minutos.</li>
     <li><b>La v2.1 solo se construye para la ventaja que se haya medido.</b></li>
   </ol>
