@@ -3,9 +3,12 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"orq/internal/identidad"
+	"orq/internal/orqdir"
 	"orq/internal/plan"
 	"orq/internal/slice"
 )
@@ -63,6 +66,21 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		pl.Slice = e.NN
+		soltarPlan := func() {}
+		defer func() { soltarPlan() }()
+		if identidad.EsOrq2() {
+			// The old plan is read and replaced under its lock: a task taken meanwhile is kept.
+			err := os.MkdirAll(filepath.Dir(p.PlanPath(e.NN)), 0o755) // the first plan: planes/ does not exist yet
+			var soltar func()
+			if err == nil {
+				soltar, err = orqdir.Candado(p.PlanPath(e.NN))
+			}
+			if err != nil {
+				fmt.Fprintln(stderr, "orq plan:", err)
+				return 1
+			}
+			soltarPlan = soltar
+		}
 		var kept []string
 		if viejo, err := plan.Leer(p.PlanPath(e.NN)); err == nil {
 			kept = plan.Conservar(pl, viejo)
@@ -75,6 +93,8 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
+		soltarPlan() // the plan lock is a leaf: it is not held while the slice lock is taken below
+		soltarPlan = func() {}
 		listas, _ := plan.Listas(pl)
 		fmt.Fprintf(stdout, "S-%s: plan de %d tareas guardado; %d listas para despachar: orq slice lanzar --tarea ID\n", e.NN, len(pl.Tareas), len(listas))
 		if len(kept) > 0 {
@@ -108,12 +128,12 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		t, err := plan.Hecha(pl, args[1])
-		if err != nil {
+		t, err := cambiarPlan(path, &pl, func(f *plan.Plan) (*plan.Tarea, error) { return plan.Hecha(f, args[1]) })
+		if t == nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		if err := plan.Guardar(path, pl); err != nil && identidad.EsOrq2() { // orq keeps 1.0.0
+		if err != nil {
 			fmt.Fprintln(stderr, "orq plan: el plan no se guardó, nada cambió:", err)
 			return 1
 		}
@@ -130,12 +150,12 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		t, err := plan.Soltar(pl, args[1])
-		if err != nil {
+		t, err := cambiarPlan(path, &pl, func(f *plan.Plan) (*plan.Tarea, error) { return plan.Soltar(f, args[1]) })
+		if t == nil {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		if err := plan.Guardar(path, pl); err != nil && identidad.EsOrq2() { // orq keeps 1.0.0
+		if err != nil {
 			fmt.Fprintln(stderr, "orq plan: el plan no se guardó, nada cambió:", err)
 			return 1
 		}
@@ -172,8 +192,11 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "orq plan:", err)
 			return 1
 		}
-		pl.Debatido = true
-		if err := plan.Guardar(path, pl); err != nil && identidad.EsOrq2() { // orq keeps 1.0.0
+		_, err = cambiarPlan(path, &pl, func(f *plan.Plan) (*plan.Tarea, error) {
+			f.Debatido = true
+			return &plan.Tarea{}, nil
+		})
+		if err != nil {
 			fmt.Fprintln(stderr, "orq plan: el plan no se guardó, nada cambió:", err)
 			return 1
 		}
@@ -182,6 +205,35 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stderr, uso)
 	return 1
+}
+
+// cambiarPlan applies cambio and saves. It returns a nil task when cambio refused (err says why)
+// and a non-nil task with an error when the plan did not change on disk. orq changes the plan it read and saves it
+// whole, ignoring a failed save, as 1.0.0 did; orq2 changes the plan on disk under its lock, so a
+// change made meanwhile by a launch or another command is not lost, and *pl is that plan.
+func cambiarPlan(path string, pl **plan.Plan, cambio func(*plan.Plan) (*plan.Tarea, error)) (*plan.Tarea, error) {
+	if !identidad.EsOrq2() {
+		t, err := cambio(*pl)
+		if err != nil {
+			return nil, err
+		}
+		plan.Guardar(path, *pl) // orq keeps 1.0.0
+		return t, nil
+	}
+	var t *plan.Tarea
+	var errC error
+	f, err := plan.Actualizar(path, func(f *plan.Plan) error {
+		t, errC = cambio(f)
+		return errC
+	})
+	if errC != nil {
+		return nil, errC
+	}
+	if err != nil {
+		return &plan.Tarea{}, err // lock, read or save failed: nothing changed
+	}
+	*pl = f
+	return t, nil
 }
 
 func ids(ts []plan.Tarea) string {

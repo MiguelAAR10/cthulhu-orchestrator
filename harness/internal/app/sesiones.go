@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"orq/internal/canal"
 	"orq/internal/diario"
+	"orq/internal/identidad"
+	"orq/internal/orqdir"
 	"orq/internal/terminal"
 )
 
@@ -136,7 +140,17 @@ func def(s, d string) string {
 
 // avisarUnaVez entrega un texto ligado a una operación (el arranque de un rol, el contrato de un worker)
 // solo si el diario no dice que ya se entregó. Un envío sin respuesta queda como desconocido y no se repite solo.
-func (p Proyecto) avisarUnaVez(ctx context.Context, actor, paso, destino, texto string, slice string, intento int) (yaEstaba bool, err error) {
+// In orq2 the delivery belongs to the pane it went to: a worker relaunched in a new pane gets its own
+// contract, and two deliveries at once take the same lock, so the second sees the first.
+func (p Proyecto) avisarUnaVez(ctx context.Context, actor, paso, destino, panel, texto string, slice string, intento int) (yaEstaba bool, err error) {
+	orq2 := identidad.EsOrq2()
+	if orq2 {
+		soltar, err := orqdir.Candado(filepath.Join(p.Dir, "avisos"))
+		if err != nil {
+			return false, err
+		}
+		defer soltar()
+	}
 	evs, err := diario.Leer(p.DiarioPath())
 	if err != nil {
 		return false, err
@@ -144,6 +158,21 @@ func (p Proyecto) avisarUnaVez(ctx context.Context, actor, paso, destino, texto 
 	mismo := func(e diario.Evento) bool {
 		return e.Tipo == "lanzamiento" && e.Actor == actor &&
 			(e.Paso == paso && e.Slice == slice && e.Intento == intento || e.Paso == "reenviar")
+	}
+	if orq2 {
+		mismo = func(e diario.Evento) bool {
+			if e.Tipo != "lanzamiento" || e.Actor != actor || e.Slice != slice || e.Intento != intento || !mismoPanel(e, panel) {
+				return false
+			}
+			return e.Paso == paso || e.Paso == "reenviar" && e.Datos["paso"] == paso
+		}
+		mismoOrq2 := mismo
+		mismo = func(e diario.Evento) bool {
+			if _, conPaso := e.Datos["paso"]; e.Tipo == "lanzamiento" && e.Actor == actor && e.Paso == "reenviar" && !conPaso {
+				return true // written by orq 1.0.0: keyed by actor alone, as it was then
+			}
+			return mismoOrq2(e)
+		}
 	}
 	if u, ok := diario.Ultimo(evs, mismo); ok {
 		switch u.Resultado {
@@ -155,20 +184,83 @@ func (p Proyecto) avisarUnaVez(ctx context.Context, actor, paso, destino, texto 
 	}
 	errEnvio := p.Term.Avisar(ctx, destino, texto)
 	ev := diario.Evento{Tipo: "lanzamiento", Paso: paso, Actor: actor, Slice: slice, Intento: intento, Resultado: resultadoDe(errEnvio)}
+	if orq2 {
+		ev.Datos = map[string]any{"panel": panel}
+	}
 	if errEnvio != nil {
 		ev.Detalle = errEnvio.Error()
 	}
 	return false, errors.Join(errEnvio, p.anotar(ev))
 }
 
+// mismoPanel: the event went to this pane. A row written before deliveries carried their pane
+// counts for any pane, so an upgrade never re-sends a contract to a live worker.
+func mismoPanel(e diario.Evento, panel string) bool {
+	v, ok := e.Datos["panel"]
+	return !ok || v == panel
+}
+
+// pasosDeLanzamiento son los pasos del arranque; los demás son entregas (contrato, arranque del rol).
+var pasosDeLanzamiento = map[string]bool{"intento": true, "panel": true, "arranque": true, "reenviar": true}
+
 // Reenviar olvida un envío desconocido para que el próximo comando lo repita. Lo decide quien miró el panel.
+// In orq2 it forgets only the actor's last delivery, not every step the actor ever had.
 func (p Proyecto) Reenviar(actor string) error {
-	return p.anotar(diario.Evento{Tipo: "lanzamiento", Paso: "reenviar", Actor: actor, Resultado: "reenviar"})
+	if !identidad.EsOrq2() {
+		return p.anotar(diario.Evento{Tipo: "lanzamiento", Paso: "reenviar", Actor: actor, Resultado: "reenviar"})
+	}
+	soltar, err := orqdir.Candado(filepath.Join(p.Dir, "avisos"))
+	if err != nil {
+		return err
+	}
+	defer soltar()
+	evs, err := diario.Leer(p.DiarioPath())
+	if err != nil {
+		return err
+	}
+	u, ok := diario.Ultimo(evs, func(e diario.Evento) bool {
+		return e.Tipo == "lanzamiento" && e.Actor == actor && !pasosDeLanzamiento[e.Paso]
+	})
+	if !ok {
+		return fmt.Errorf("%s no tiene ningún envío que repetir", actor)
+	}
+	datos := map[string]any{"paso": u.Paso}
+	if v, ok := u.Datos["panel"]; ok {
+		datos["panel"] = v
+	}
+	return p.anotar(diario.Evento{Tipo: "lanzamiento", Paso: "reenviar", Actor: actor, Slice: u.Slice, Intento: u.Intento, Resultado: "reenviar", Datos: datos})
+}
+
+// guardarSesiones applies the change made to ses for the given keys. orq saves the whole map, as
+// 1.0.0 did; orq2 writes only those keys, under the lock, on what is on disk now (a key missing from
+// ses is deleted), so another writer's sessions are never lost.
+func (p Proyecto) guardarSesiones(ses map[string]canal.Sesion, claves ...string) error {
+	if !identidad.EsOrq2() {
+		return canal.SaveSesiones(p.SesPath(), ses) // orq keeps 1.0.0
+	}
+	return canal.ActualizarSesiones(p.SesPath(), func(m map[string]canal.Sesion) {
+		for _, k := range claves {
+			if s, ok := ses[k]; ok {
+				m[k] = s
+			} else {
+				delete(m, k)
+			}
+		}
+	})
 }
 
 // CerrarSesiones cierra los paneles que cumplen el filtro y los quita del registro. Atena es del
 // Owner y el Orquestador se releva, no se cierra: nunca entran aquí.
 func (p Proyecto) CerrarSesiones(ctx context.Context, ses map[string]canal.Sesion, sirve func(string) bool) ([]string, error) {
+	if identidad.EsOrq2() {
+		// Decide on what is registered now, not on a map read before a long verification.
+		fresco, err := canal.LoadSesiones(p.SesPath())
+		if err != nil {
+			return nil, err
+		}
+		clear(ses)
+		maps.Copy(ses, fresco)
+	}
 	var cerradas []string
 	for k, s := range ses {
 		if k == "atena" || k == "orquestador" || !sirve(k) {
@@ -177,14 +269,14 @@ func (p Proyecto) CerrarSesiones(ctx context.Context, ses map[string]canal.Sesio
 		if s.Pane != "" && p.Term.Dentro() {
 			if err := p.Term.Cerrar(ctx, s.Pane); err != nil {
 				sort.Strings(cerradas)
-				return cerradas, errors.Join(fmt.Errorf("%s: %w", k, err), canal.SaveSesiones(p.SesPath(), ses))
+				return cerradas, errors.Join(fmt.Errorf("%s: %w", k, err), p.guardarSesiones(ses, cerradas...))
 			}
 		}
 		delete(ses, k)
 		cerradas = append(cerradas, k)
 	}
 	sort.Strings(cerradas)
-	return cerradas, canal.SaveSesiones(p.SesPath(), ses)
+	return cerradas, p.guardarSesiones(ses, cerradas...)
 }
 
 // PanelDelSlice da un panel ya abierto de ese slice: los workers comparten la pestaña «S-NN · P».

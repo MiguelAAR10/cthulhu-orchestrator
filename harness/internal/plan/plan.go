@@ -71,6 +71,27 @@ func Guardar(path string, p *Plan) error {
 	return orqdir.WriteAtomic(path, raw)
 }
 
+// Actualizar changes the plan under its lock, on what is on disk now: two writers never lose each
+// other's change. If cambio fails nothing is saved.
+func Actualizar(path string, cambio func(*Plan) error) (*Plan, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	soltar, err := orqdir.Candado(path)
+	if err != nil {
+		return nil, err
+	}
+	defer soltar()
+	p, err := Leer(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := cambio(p); err != nil {
+		return p, err
+	}
+	return p, Guardar(path, p)
+}
+
 func dentro(ruta string, permitidas []string) bool {
 	ruta = filepath.Clean(ruta)
 	for _, p := range permitidas {
