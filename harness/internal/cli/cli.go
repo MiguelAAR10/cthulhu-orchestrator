@@ -40,10 +40,19 @@ func version() string {
 // uso is the usage text; under orq2 its header names orq2 and VersionOrq2.
 func uso() string {
 	if identidad.EsOrq2() {
-		return strings.Replace(usage, "orq "+Version+" ·", "orq2 "+VersionOrq2+" ·", 1)
+		u := strings.Replace(usage, "orq "+Version+" ·", "orq2 "+VersionOrq2+" ·", 1)
+		return strings.Replace(u, "  orq version\n", usoUpdateOrq2+"  orq version\n", 1)
 	}
 	return usage
 }
+
+// usoUpdateOrq2 is the usage of `orq2 update`, shown only under orq2: orq's usage is 1.0.0's.
+const usoUpdateOrq2 = `  orq2 update [--ver | --volver]   el Owner, en su terminal: instala la punta harness-v2 de Cthulhu solo si
+                                 ese SHA tiene registro de puerta (revisión sin High y make ci exit 0) y
+                                 ningún slice se verifica ni se cierra; guarda la anterior para --volver;
+                                 --ver solo informa
+  orq2 update --registrar SHA --revisor QUIEN --veredicto sin-high --ci-exit 0 --ci-log REF   el integrador
+`
 
 const usage = `orq ` + Version + ` · harness de orquestador-2
 

@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"testing"
 
+	"orq/internal/app"
 	"orq/internal/orqdir"
 )
 
@@ -194,7 +195,7 @@ func TestUpdateRegistroDeOtroSHASeNiega(t *testing.T) {
 	f.binIntacto(t)
 	falso, _ := json.Marshal(map[string]any{"esquema": 1, "sha": f.viejo, "fecha": "2026-11-20T00:00:00Z",
 		"revision": map[string]string{"veredicto": "sin-high", "revisor": "x"}, "ci": map[string]any{"comando": "make ci", "exit": 0, "log": "x"}})
-	gitT(t, f.repo, "notes", "--ref="+refPuerta, "add", "-m", string(falso), f.punta)
+	gitT(t, f.repo, "notes", "--ref="+app.RefPuerta, "add", "-m", string(falso), f.punta)
 	if _, errs, code := runIn(t, "update"); code == 0 || !strings.Contains(errs, f.viejo[:12]) {
 		t.Fatalf("record naming another SHA accepted: %d\n%s", code, errs)
 	}
@@ -217,13 +218,13 @@ func TestUpdateRegistrarSoloPuertaVerde(t *testing.T) {
 	if _, errs, code := runIn(t, "update", "--registrar", strings.Repeat("ab", 20), "--revisor", "r", "--veredicto", "sin-high", "--ci-exit", "0", "--ci-log", "l"); code == 0 {
 		t.Fatalf("unknown SHA recorded: %s", errs)
 	}
-	if out, _ := exec.Command("git", "-C", f.repo, "notes", "--ref="+refPuerta, "list").Output(); len(out) != 0 {
+	if out, _ := exec.Command("git", "-C", f.repo, "notes", "--ref="+app.RefPuerta, "list").Output(); len(out) != 0 {
 		t.Fatalf("records written: %s", out)
 	}
 	if _, errs, code := runIn(t, "update", "--registrar", f.punta[:10], "--revisor", "r", "--veredicto", "sin-high", "--ci-exit", "0", "--ci-log", "l"); code != 0 {
 		t.Fatalf("short SHA not resolved: %s", errs)
 	}
-	nota := gitT(t, f.repo, "notes", "--ref="+refPuerta, "show", f.punta)
+	nota := gitT(t, f.repo, "notes", "--ref="+app.RefPuerta, "show", f.punta)
 	if !strings.Contains(nota, `"sha": "`+f.punta+`"`) || !strings.Contains(nota, `"esquema": 1`) {
 		t.Fatalf("record:\n%s", nota)
 	}
@@ -326,6 +327,19 @@ func TestUpdateSoloOwnerDesdeTTY(t *testing.T) {
 	// The real stdin of `go test` is not a terminal either.
 	if esTerminalReal(strings.NewReader("")) {
 		t.Fatal("a strings.Reader counts as a terminal")
+	}
+	// /dev/null is a character device, not a terminal (`orq2 update </dev/null` is refused).
+	if dn, err := os.Open(os.DevNull); err == nil {
+		if esTerminalReal(dn) {
+			t.Fatal("/dev/null counts as a terminal")
+		}
+		dn.Close()
+	}
+	if f, err := os.Open(filepath.Join(f.root, "bin", "orq2")); err == nil {
+		if esTerminalReal(f) {
+			t.Fatal("a regular file counts as a terminal")
+		}
+		f.Close()
 	}
 	f.binIntacto(t)
 }
