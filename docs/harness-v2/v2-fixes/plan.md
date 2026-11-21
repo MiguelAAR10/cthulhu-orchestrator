@@ -55,13 +55,14 @@ by builders; S-01 is paused as is.
   "phase": "D",
   "integration_branch": "harness-v2",
   "integration_owner": "orchestrator pane w47:p3B (since 2026-11-20); filter session w47:p9 relays Owner",
-  "harness_v2_tip": "5f25823 (merge of R2 26a0b91, --no-ff)",
+  "harness_v2_tip": "299d02d (docs-only commit on 5f25823 = R2 merge)",
   "installed": "~/bin/orq2 = see install2 / installed_version; rollback = rollback_binary",
   "in_flight": {
     "R2": "integrated 5f25823. Independent Opus review of 309addf..bdf40db: VERDICT no High, no Medium; Lows for v2.1 notes: (a) aviso_ram_gb 0 now invalidates limits.json under orq2 and blocks all Bash (fails closed, release note) (b) card preamble gives one error per line under orq2 (c) lines in duplicate/unknown sections not checked in same pass (d) literal caps in cli.go:93 usage are orq 1.0.0 text, keep. Reviewer pane closed, review worktree removed. Next: make ci on 5f25823, clone proof, tell filter before install2",
     "clone_proof_5f25823": "PASS (throwaway RS clone + copied .orq/.venv in session scratchpad, isolated ORQ_*): version 2.0.0-pilot rev 5f25823 modified=false; doctor lists only 3 RS sessions that really no longer exist (S-01 paused; correct report, no harness defect); check --caja exit 0 (lint/types/tests run in box; first run failed only because the copied .venv kept shebangs to the live path, rewritten in the copy); over-cap card: orq2 lists all 3 violations in one run, orq name returns only the first (1.0.0)",
     "make_ci_on_5f25823": "PASS exit 0, 14m54s: lint, gofmt, vet, go test -race 24 pkgs ok (internal/slice 302s), e2e-v05 and aislamiento 14/0/0 (orchestrator-run; modified=true only from untracked docs copied by ci)",
     "install2": "Owner GO 2026-11-20 (via filter) for 5f25823 code; built from the docs-only commit on top of it so modified=false; result recorded below after install",
+    "installed_version": "~/bin/orq2 = 2.0.0-pilot revision=299d02d2031635d8ff38fef8974a73e69284c2a6 modified=false (installed 2026-11-20 after Owner GO); ~/bin/orq untouched (1.0.0)",
     "rollback_binary": "~/.local/share/orq2-rollback/orq2-24f2438 (copy of previous ~/bin/orq2, reports 1.0.0 revision=24f2438 modified=false); restore: cp -p it to ~/bin/.orq2.new && mv -f ~/bin/.orq2.new ~/bin/orq2",
     "make_ci_on_309addf": "PASS exit 0, e2e + aislamiento green, 19m19s (filter-run, relayed 2026-11-20); internal/slice 319s under contention",
     "309addf_installable": "NO: fresh Opus review found 1 High (H1 Zonas) + 3 Medium, all in R2 scope"
