@@ -77,6 +77,7 @@ by builders; S-01 is paused as is.
   "briefs": "session scratchpad brief-g0.md / brief-g4.md (also re-derivable from this plan's rows)",
   "queued": {},
   "owner_held": {"RS carpetas.dashboard config": "proposal held; Owner approves when next RS story (agenda de visitas) starts"},
+  "cleanup_2026-11-20": "removed clean merged worktrees + branches: v2/review2-fixes 26a0b91, v2/build 5d440fb, v2/review-fixes cb65b9e, v2/g0-rapido d5adfdd. Rule (Owner): close each pane as soon as its agent is done and its worktree clean/removed; free -m before every launch",
   "parked": ["v2/panel", "v2/locks", "v2/memoria (input to G5)", "v2/tui (branch only)"],
   "attempts": {"G0": 1, "G4": 1, "G1": 1, "R2_review": 1},
   "owner_last_update": "2026-11-20 evening: approved all findings, asked for speed",
