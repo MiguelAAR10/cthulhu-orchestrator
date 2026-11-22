@@ -135,3 +135,25 @@ New or sharper for orq2:
    before spawning fixes, so the root cause is fixed once (same idea as D32 scorers + ledger).
 6. **Skills shrink to workflow:** with current models, drop implementation detail from skills; keep steps.
 Not now: outer-loop triggers from Slack/X/email and 24/7 self-merging — need earned trust and spare tokens.
+
+## Reference: AI LABS video on Google's agent-distraction write-up (2026-11-17, read 2026-11-21) — D34
+Second-hand source (sponsored channel, the skill itself is paywalled); figures are Google's as relayed [U until the
+original post is read]: ~1 in 7 sessions met a stale code note; >4 of 5 agent follow-ups were unasked ("side
+quests"); 41% chased already-fixed bugs, 57% fixed open bugs nobody asked for; side-quest sessions took +70% actions,
++77% tokens, >2× time. A stale CLAUDE.md beat the code ~9 of 10 times until a "code is the source of truth" rule.
+This is the Owner's fear F2 (unasked work) and F4 (wrong text becomes truth), measured.
+For orq2:
+1. **Policy rules (E2 policy file + E3 worker contract):** code is the source of truth, report plan/code mismatch;
+   leave alone anything not asked (orq2 zones already enforce files, the rule covers intent); a new request is
+   checked against existing plans and conflicts are asked before building (D10); fresh session per task (orq2
+   already does this for workers).
+2. **Status on every plan item** (not started / in progress / done / dropped), so a dropped feature is not rebuilt.
+   orq2 slices have states; the Owner docs (D-table, lean items) need the same tag.
+3. **A `sweep` skill (cheap, report-only):** finds stale notes, plans, docs and memories; checks each against the
+   current code and git history; an independent checker gets only the claims, not the suspicion (same as D2,
+   read-only reviewers); disagreements with no proof are listed as conflicts for the Owner; approved items move to
+   `archivo/`, and a hook blocks agents from reading the archive. Fits E6 (constraints over rules) and is the
+   maintenance line of D31.
+4. **Dogfood first:** our own v2.1 folder already has overlapping documents (decisions, gaps, rumbo, lean plan,
+   definition) and the memory index has a conflict (Codex rule vs Astra sessions run with Owner permission). One
+   sweep over `docs/harness-v2/` and the memory before resuming is the cheapest test.

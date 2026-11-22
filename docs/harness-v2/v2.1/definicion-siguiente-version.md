@@ -168,3 +168,10 @@ Si el agente nuevo no logra verificar solo, no se avanza a E2: se arregla E1.
 - Posponer el re-sello (E23–E25 son gravedad A): si una feature vuelve a tropezar ahí, se adelanta y sale E6.
 - Mis tamaños no están medidos y no leí por dentro `init`, `contexto` ni la caja; E3 es el que más puede crecer.
 - El script de E1 puede envejecer y todos le creerán: el preflight de E3 es lo que lo mantiene honesto.
+
+## Addendum (filter, 2026-11-21, after D34)
+- E2's policy file gains four lines: code is the source of truth; leave alone what was not asked; check new requests
+  against existing plans; fresh session per task.
+- E6 gains a report-only `sweep` (stale docs, plans and memories vs code and git history, independent checker,
+  archive + read-blocking hook). **Step 0 before §6:** one Haiku sweep over `docs/harness-v2/` and the memory index,
+  Owner approves what gets archived (~0.1–0.2 M tokens [U]).
