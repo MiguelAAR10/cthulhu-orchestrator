@@ -94,3 +94,23 @@ New for orq2:
   code freshness from git history (feeds the index revision dates of D24). Less code = less for agents to read and
   review. Run on demand; scheduled runs only when tokens allow (recurring cost).
 Not adopted: Antigravity/Gemini tooling.
+
+## Reference: Zach Lloyd (Warp), two talks on self-improving software factories (read 2026-11-21) — D32
+Definition worth keeping: **a code-defined, closed-loop system for continuously measuring and improving coding
+agents.** Confirms: spec-driven work plus user-level verification evidence to cut review burden (= card + sealed
+exam + screenshots); models and harnesses as swappable choices (orq2 already sets agent and model per role);
+self-improvement proposed by agents as a change to the factory definition (= D26, with Owner approval).
+New for orq2, in order of value for a solo Owner with a tight token budget:
+1. **Factory as code:** one versioned folder that defines the factory — roles and their model, routes, skills per
+   stack, expert agents (D30), policies (D31), checks. Today it is spread over `.orq/config.json`, global skills and
+   the Go defaults. Gains: rollback, compare two configurations, agents propose a diff to it.
+2. **Record every run** (conversation pointer, artifacts, screenshots, receipts, route, model, duration) somewhere
+   durable, not in git-excluded `.orq/`. It is the raw material for scorers and benchmarks (closes the proof gap).
+3. **Scorers (online evals):** after each story a cheap judge (Haiku) scores the run on named failure modes —
+   redundant tests, out-of-scope files, unverified claims, environment loops. Turns the hand-made ledger
+   (`orq2-defects.md`) into automatic detection; patterns that repeat feed D26.
+4. **Benchmarks on our own stories:** S-01 and S-02 become replayable tasks to compare models/configurations on
+   cost vs quality (e.g. are Sonnet workers enough for medium tasks?). Valuable but spends tokens: only when spare.
+5. **Metrics:** cycle time, human interactions per story, cost per story and share spent on verification.
+Not adopted now: cloud sandboxes, team-wide live view, Slack/Linear intake, AI-sovereignty infra — the speaker
+himself says this is overkill below ~10 engineers.
