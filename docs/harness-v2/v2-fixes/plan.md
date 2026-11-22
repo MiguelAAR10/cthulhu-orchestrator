@@ -88,8 +88,8 @@ Final v2.0 state, 2026-11-20 23:45. Earlier checkpoint history is in Git (`git l
   "branches_not_merged": "v2/g5-memoria (K10), v2/panel (K11), v2/tui (K12), v2/locks (K13), v2/memoria (K14); each has a backlog line",
   "v2_1_notes": "orq2 update installs the tip while docs commits move past the gated SHA; G7 Lows; G2 L1/L3/L5 and relevo; G6 L2/L6; G4 L2/L3 and e2e per folder; G3 L-3/L-4 and --revoca-rechazo has no gate raw-text rule; K10 G5 resume plan",
   "attempts": "G3 review-fix 2 of 2 used; G5 option A final round used (parked)",
-  "owner_last_update": "2026-11-21: still PAUSED; owner-vision-gaps.md now D14-D29 and rumbo.md (restart direction, Fable+Astra synthesis), docs/owner-pages f767426 merged",
-  "next_action": "next = rumbo.md restart order step 1 (docs/harness-v2/v2.1/rumbo.md); no v2.1 work before the Owner restarts",
+  "owner_last_update": "2026-11-21: still PAUSED; Owner definition of the next version docs/harness-v2/v2.1/definicion-siguiente-version.md and D30-D33 in rumbo.md (docs/owner-pages 38d54c4, merged)",
+  "next_action": "definicion-siguiente-version.md §6: one Sonnet session, E1 verification skill in the RS test clone, measure tokens and minutes",
   "s02": {
     "stages": "~/cthulhu-evidence/2026-11-21/agenda/etapas.csv",
     "stalls": "agenda/estancamientos.log",
