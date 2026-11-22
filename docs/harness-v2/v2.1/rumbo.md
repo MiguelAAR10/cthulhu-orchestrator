@@ -114,3 +114,24 @@ New for orq2, in order of value for a solo Owner with a tight token budget:
 5. **Metrics:** cycle time, human interactions per story, cost per story and share spent on verification.
 Not adopted now: cloud sandboxes, team-wide live view, Slack/Linear intake, AI-sovereignty infra — the speaker
 himself says this is overkill below ~10 engineers.
+
+## Reference: Lauren Tan (Poteto) with Matt Pocock, live, 2026-10-02 (read 2026-11-21) — D33
+Confirms: trust is climbed with verification plus environment, not granted; "context, not control"; the engineer's
+new job is the kitchen (skills, tools, constraints); domain expertise and precise words are the bottleneck (a
+compressed word like "tautological tests" carries intent; grilling draws those words out).
+New or sharper for orq2:
+1. **A verification skill per project, with hands and eyes:** the agent runs the app and uses it like a user
+   (clicks, traces, screenshots), and the deterministic parts live in a small script/CLI inside the skill so every
+   agent reuses it instead of "rebuilding the world each time" — exactly the S-02 environment loops (D23).
+2. **Every repeated agent mistake becomes a constraint in the environment** (lint rule, type, directory
+   convention, registry) so it is impossible, not remembered. Conventional structure ("one feature, one directory")
+   doubles as the index of D24.
+3. **Mine past transcripts for interventions:** each time the Owner (or the filter) had to correct an agent is a
+   candidate skill or lint rule. Cheap first step for D26: one Haiku pass over today's sessions.
+4. **Autonomy by door type:** two-way doors (revertible, verifiable) can merge on autopilot and be reviewed by
+   sampling after landing; one-way doors (data loss, payments, irreversible) keep a human gate. This is how D16's
+   autonomy level should be decided, per change, not only per project.
+5. **A buffer before fixing:** scanners append findings to a queue; a coordinator (or the Owner) looks for patterns
+   before spawning fixes, so the root cause is fixed once (same idea as D32 scorers + ledger).
+6. **Skills shrink to workflow:** with current models, drop implementation detail from skills; keep steps.
+Not now: outer-loop triggers from Slack/X/email and 24/7 self-merging — need earned trust and spare tokens.
