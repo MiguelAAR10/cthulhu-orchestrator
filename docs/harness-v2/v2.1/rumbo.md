@@ -80,3 +80,17 @@ independent judgment or for research that would bloat the caller's context.**
 - Kept only if it catches something real within N stories; otherwise removed (avoid agent sprawl and token cost).
 Evidence it pays: in S-02 the missing session check on `/api/properties` was found by chance by the Orchestrator;
 a security expert triggered by "new API route" makes that routine.
+
+## Reference: "software factory that doesn't produce AI slop" (Antigravity talk, read 2026-11-21) — D31
+Confirms: factory lines as markdown subagents invoked by the main agent from an ambiguous request (= router + D30);
+isolated context windows in parallel to avoid compaction; the human as floor manager who can stop, steer or
+message a worker; a `/learn` step that refines workers after each run (= D26); a final report of how each
+subagent and skill performed (= proof page + `orq2 skill eval`).
+New for orq2:
+- **Project policy file** read by every agent: support targets (browser/runtime versions), quality bar, finish level
+  (= D27 made concrete, one short file).
+- **Read-only tools for reviewers and auditors** by definition, not by instruction (fixes E16).
+- **Maintenance line ("trailing edge")**: remove dead code, polyfills and deprecated APIs, report dependency and
+  code freshness from git history (feeds the index revision dates of D24). Less code = less for agents to read and
+  review. Run on demand; scheduled runs only when tokens allow (recurring cost).
+Not adopted: Antigravity/Gemini tooling.
